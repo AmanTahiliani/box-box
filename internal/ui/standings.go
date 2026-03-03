@@ -23,15 +23,17 @@ type StandingsModel struct {
 
 	driverStandings []models.ChampionshipDriver
 	teamStandings   []models.ChampionshipTeam
-	drivers         map[int]models.Driver // driver_number → Driver
+	drivers         map[int]models.Driver // driver_number -> Driver
 
 	view    standingsView
 	loading bool
 	err     error
 	spinner spinner.Model
 
-	year   int
 	cursor int
+	scroll int
+
+	year   int
 	width  int
 	height int
 }
@@ -40,6 +42,7 @@ func NewStandingsModel(client *api.OpenF1Client, year int) StandingsModel {
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red))
+
 	return StandingsModel{
 		client:  client,
 		view:    standingsViewDriver,
@@ -80,7 +83,13 @@ func fetchStandingsDrivers(client *api.OpenF1Client, sessionKey int) tea.Cmd {
 }
 
 func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 	case spinner.TickMsg:
 		if m.loading {
 			var cmd tea.Cmd
@@ -95,7 +104,6 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 			return m, nil
 		}
 		m.driverStandings = msg.standings
-		// Phase 2: fetch drivers to join names
 		if len(msg.standings) > 0 {
 			return m, fetchStandingsDrivers(m.client, msg.standings[0].SessionKey)
 		}
@@ -121,47 +129,116 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch {
+		case matchKey(msg, GlobalKeys.Retry):
+			if m.err != nil {
+				m.err = nil
+				m.loading = true
+				return m, m.Init()
+			}
 		case matchKey(msg, StandingsKeys.DriverView):
 			m.view = standingsViewDriver
 			m.cursor = 0
+			m.scroll = 0
 		case matchKey(msg, StandingsKeys.ConstructorView):
 			m.view = standingsViewConstructor
 			m.cursor = 0
+			m.scroll = 0
 		case matchKey(msg, GlobalKeys.Up):
 			if m.cursor > 0 {
 				m.cursor--
+				if m.cursor < m.scroll {
+					m.scroll = m.cursor
+				}
 			}
 		case matchKey(msg, GlobalKeys.Down):
-			m.cursor++
+			maxIdx := m.itemCount() - 1
+			if m.cursor < maxIdx {
+				m.cursor++
+				visibleRows := m.visibleRows()
+				if m.cursor >= m.scroll+visibleRows {
+					m.scroll = m.cursor - visibleRows + 1
+				}
+			}
+		case matchKey(msg, GlobalKeys.GoTop):
+			m.cursor = 0
+			m.scroll = 0
+		case matchKey(msg, GlobalKeys.GoBottom):
+			maxIdx := m.itemCount() - 1
+			if maxIdx >= 0 {
+				m.cursor = maxIdx
+				visibleRows := m.visibleRows()
+				if m.cursor >= visibleRows {
+					m.scroll = m.cursor - visibleRows + 1
+				}
+			}
+		case matchKey(msg, GlobalKeys.HalfUp):
+			half := m.visibleRows() / 2
+			m.cursor -= half
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			if m.cursor < m.scroll {
+				m.scroll = m.cursor
+			}
+		case matchKey(msg, GlobalKeys.HalfDown):
+			half := m.visibleRows() / 2
+			maxIdx := m.itemCount() - 1
+			m.cursor += half
+			if m.cursor > maxIdx {
+				m.cursor = maxIdx
+			}
+			visibleRows := m.visibleRows()
+			if m.cursor >= m.scroll+visibleRows {
+				m.scroll = m.cursor - visibleRows + 1
+			}
 		}
 	}
-	return m, nil
+	return m, tea.Batch(cmds...)
+}
+
+func (m StandingsModel) itemCount() int {
+	if m.view == standingsViewDriver {
+		return len(m.driverStandings)
+	}
+	return len(m.teamStandings)
+}
+
+func (m StandingsModel) visibleRows() int {
+	rows := m.height - 12 // header + toggle + help + padding
+	if rows < 5 {
+		rows = 5
+	}
+	return rows
 }
 
 func (m StandingsModel) View() string {
 	if m.loading {
-		return fmt.Sprintf("\n  %s  Loading %d championship standings…", m.spinner.View(), m.year)
+		return fmt.Sprintf("\n  %s  Loading %d championship standings...", m.spinner.View(), m.year)
 	}
 	if m.err != nil {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v", m.err))
+		return styleError.Render(fmt.Sprintf("\n  Error: %v\n\n", m.err)) +
+			helpBar("r retry", "q quit")
 	}
 
 	var sb strings.Builder
 
-	// Year indicator
-	sb.WriteString(styleBold.Render(fmt.Sprintf(" Season: %d", m.year)) + "\n\n")
+	// Title row with year and toggle
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(colorF1Red)).
+		Render(fmt.Sprintf("  FORMULA 1 %d CHAMPIONSHIP", m.year))
+
+	sb.WriteString(title + "\n\n")
 
 	// Toggle bar
-	dStyle, cStyle := styleInactiveTab, styleInactiveTab
+	dLabel, cLabel := "  d Drivers  ", "  c Constructors  "
 	if m.view == standingsViewDriver {
-		dStyle = styleActiveTab
+		sb.WriteString(styleActiveTab.Render(dLabel))
+		sb.WriteString(styleInactiveTab.Render(cLabel))
 	} else {
-		cStyle = styleActiveTab
+		sb.WriteString(styleInactiveTab.Render(dLabel))
+		sb.WriteString(styleActiveTab.Render(cLabel))
 	}
-	sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
-		dStyle.Render("d Drivers"),
-		cStyle.Render("c Constructors"),
-	))
 	sb.WriteString("\n\n")
 
 	if m.view == standingsViewDriver {
@@ -171,122 +248,206 @@ func (m StandingsModel) View() string {
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(helpBar("y season", "d drivers", "c constructors", "j/k navigate", "q quit"))
+	sb.WriteString(helpBar("y season", "d drivers", "c constructors", "j/k navigate", "g/G top/bottom", "^d/^u page", "q quit"))
 	return sb.String()
 }
 
 func (m StandingsModel) renderDriverStandings() string {
 	if len(m.driverStandings) == 0 {
-		return styleMuted.Render("  No standings data available.")
+		return styleMuted.Render("  No standings data available.\n")
 	}
 
-	// Column widths
-	const (
-		wPos     = 4
-		wAcronym = 5
-		wName    = 22
-		wTeam    = 22
-		wPoints  = 8
-		wDelta   = 5
-	)
-
-	header := styleBold.Render(
-		padRight("Pos", wPos) + " " +
-			padRight("DRV", wAcronym) + " " +
-			padRight("Name", wName) + " " +
-			padRight("Team", wTeam) + " " +
-			padLeft("Pts", wPoints) + " " +
-			padLeft("Δ", wDelta),
-	)
-
-	var rows []string
-	rows = append(rows, header)
-
-	maxCursor := len(m.driverStandings) - 1
-	if m.cursor > maxCursor {
-		_ = maxCursor // cursor clamping happens in Update
+	var sb strings.Builder
+	maxPoints := m.driverStandings[0].PointsCurrent
+	w := m.width
+	if w < 40 {
+		w = 40
 	}
 
-	for i, s := range m.driverStandings {
+	// Responsive column widths
+	compact := w < 80
+	nameWidth := 20
+	teamWidth := 20
+	barWidth := 20
+	if w >= 130 {
+		nameWidth = 24
+		teamWidth = 24
+		barWidth = 35
+	} else if w >= 100 {
+		barWidth = 25
+	} else if compact {
+		nameWidth = 0 // hide full name in compact mode
+		teamWidth = 14
+		barWidth = 12
+	}
+
+	visible := m.visibleRows()
+	endIdx := m.scroll + visible
+	if endIdx > len(m.driverStandings) {
+		endIdx = len(m.driverStandings)
+	}
+
+	// Header
+	var header string
+	if compact {
+		header = fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+			padRight("POS", 3),
+			padRight("", 2),
+			padRight("", 1),
+			padRight("DRV", 4),
+			padRight("TEAM", teamWidth),
+			padLeft("PTS", 5),
+		)
+	} else {
+		header = fmt.Sprintf("  %s  %s  %s  %s  %s  %s  %s  %s",
+			padRight("POS", 4),
+			padRight("", 2),
+			padRight("", 1),
+			padRight("DRV", 4),
+			padRight("DRIVER", nameWidth),
+			padRight("TEAM", teamWidth),
+			padLeft("PTS", 6),
+			padRight("", barWidth),
+		)
+	}
+	sb.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorMuted)).
+		Bold(true).
+		Render(header) + "\n")
+	sb.WriteString("  " + divider(min(w-6, lipgloss.Width(header))) + "\n")
+
+	for i := m.scroll; i < endIdx; i++ {
+		s := m.driverStandings[i]
 		d, ok := m.drivers[s.DriverNumber]
-		acronym, name, team, teamColor := "---", "Unknown Driver", "Unknown Team", ""
+		acronym, name, team, teamColor := "---", "Unknown", "Unknown", colorMuted
 		if ok {
 			acronym = d.NameAcronym
 			name = d.FullName
 			team = d.TeamName
-			teamColor = d.TeamColour
+			if d.TeamColour != "" {
+				teamColor = "#" + d.TeamColour
+			} else {
+				teamColor = teamColorFromName(d.TeamName)
+			}
 		}
 
 		delta := renderDelta(s.PositionCurrent, s.PositionStart)
+		pos := renderPosition(s.PositionCurrent)
+		colorBar := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
+		pointsBar := renderPointsBar(s.PointsCurrent, maxPoints, barWidth, teamColor)
 
-		teamStr := hexToStyle(teamColor).Render(truncate(team, wTeam))
-		// Pad team to width (lipgloss rendering may shift widths, so use padRight on plain string then style)
-		teamPlain := padRight(truncate(team, wTeam), wTeam)
-		teamStr = hexToStyle(teamColor).Render(teamPlain)
-
-		row := fmt.Sprintf("%s %s %s %s %s %s",
-			padLeft(fmt.Sprintf("%d", s.PositionCurrent), wPos),
-			padRight(acronym, wAcronym),
-			padRight(truncate(name, wName), wName),
-			teamStr,
-			padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), wPoints),
-			delta,
-		)
+		var row string
+		if compact {
+			row = fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+				padRightVisible(pos, 3),
+				delta,
+				colorBar,
+				padRight(acronym, 4),
+				padRight(truncate(team, teamWidth), teamWidth),
+				padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), 5),
+			)
+		} else {
+			row = fmt.Sprintf("  %s  %s  %s  %s  %s  %s  %s  %s",
+				padRightVisible(pos, 4),
+				delta,
+				colorBar,
+				padRight(acronym, 4),
+				padRight(truncate(name, nameWidth), nameWidth),
+				padRight(truncate(team, teamWidth), teamWidth),
+				padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), 6),
+				pointsBar,
+			)
+		}
 
 		if i == m.cursor {
 			row = styleSelected.Render(row)
 		}
-		rows = append(rows, row)
+
+		sb.WriteString(row + "\n")
 	}
 
-	return strings.Join(rows, "\n")
+	// Scroll indicator
+	if len(m.driverStandings) > visible {
+		sb.WriteString(styleMuted.Render(fmt.Sprintf("  Showing %d-%d of %d", m.scroll+1, endIdx, len(m.driverStandings))) + "\n")
+	}
+
+	return sb.String()
 }
 
 func (m StandingsModel) renderTeamStandings() string {
 	if len(m.teamStandings) == 0 {
-		return styleMuted.Render("  No constructor standings available.")
+		return styleMuted.Render("  No standings data available.\n")
 	}
 
-	const (
-		wPos    = 4
-		wTeam   = 30
-		wPoints = 8
-		wDelta  = 5
+	var sb strings.Builder
+	maxPoints := m.teamStandings[0].PointsCurrent
+	w := m.width
+	if w < 40 {
+		w = 40
+	}
+
+	// Responsive
+	compact := w < 80
+	teamWidth := 28
+	barWidth := 30
+	if w >= 130 {
+		barWidth = 50
+	} else if w >= 100 {
+		barWidth = 40
+	} else if compact {
+		teamWidth = 18
+		barWidth = 15
+	}
+
+	visible := m.visibleRows()
+	endIdx := m.scroll + visible
+	if endIdx > len(m.teamStandings) {
+		endIdx = len(m.teamStandings)
+	}
+
+	// Header
+	header := fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+		padRight("POS", 4),
+		padRight("", 2),
+		padRight("", 1),
+		padRight("CONSTRUCTOR", teamWidth),
+		padLeft("PTS", 6),
+		padRight("", barWidth),
 	)
+	sb.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorMuted)).
+		Bold(true).
+		Render(header) + "\n")
+	sb.WriteString("  " + divider(min(w-6, lipgloss.Width(header))) + "\n")
 
-	header := styleBold.Render(
-		padRight("Pos", wPos) + " " +
-			padRight("Constructor", wTeam) + " " +
-			padLeft("Pts", wPoints) + " " +
-			padLeft("Δ", wDelta),
-	)
+	for i := m.scroll; i < endIdx; i++ {
+		s := m.teamStandings[i]
+		teamColor := teamColorFromName(s.TeamName)
 
-	var rows []string
-	rows = append(rows, header)
-
-	for i, s := range m.teamStandings {
 		delta := renderDelta(s.PositionCurrent, s.PositionStart)
-		row := fmt.Sprintf("%s %s %s %s",
-			padLeft(fmt.Sprintf("%d", s.PositionCurrent), wPos),
-			padRight(truncate(s.TeamName, wTeam), wTeam),
-			padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), wPoints),
+		pos := renderPosition(s.PositionCurrent)
+		colorBar := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
+		pointsBar := renderPointsBar(s.PointsCurrent, maxPoints, barWidth, teamColor)
+
+		row := fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+			padRightVisible(pos, 4),
 			delta,
+			colorBar,
+			padRight(truncate(s.TeamName, teamWidth), teamWidth),
+			padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), 6),
+			pointsBar,
 		)
+
 		if i == m.cursor {
 			row = styleSelected.Render(row)
 		}
-		rows = append(rows, row)
+
+		sb.WriteString(row + "\n")
 	}
 
-	return strings.Join(rows, "\n")
-}
-
-// matchKey checks if a KeyMsg matches a binding.
-func matchKey(msg tea.KeyMsg, binding interface{ Keys() []string }) bool {
-	for _, k := range binding.Keys() {
-		if msg.String() == k {
-			return true
-		}
+	if len(m.teamStandings) > visible {
+		sb.WriteString(styleMuted.Render(fmt.Sprintf("  Showing %d-%d of %d", m.scroll+1, endIdx, len(m.teamStandings))) + "\n")
 	}
-	return false
+
+	return sb.String()
 }

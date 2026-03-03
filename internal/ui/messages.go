@@ -80,6 +80,24 @@ type driverPitsLoadedMsg struct {
 	err  error
 }
 
+// driverPositionsLoadedMsg carries position history for a selected driver.
+type driverPositionsLoadedMsg struct {
+	positions []models.Position
+	err       error
+}
+
+// driverTeamRadioLoadedMsg carries team radio messages for a selected driver.
+type driverTeamRadioLoadedMsg struct {
+	radios []models.TeamRadio
+	err    error
+}
+
+// overtakesLoadedMsg carries overtake data for a session.
+type overtakesLoadedMsg struct {
+	overtakes []models.Overtake
+	err       error
+}
+
 // meetingSelectedMsg is emitted when the user selects a meeting in the calendar.
 type meetingSelectedMsg struct {
 	meeting models.Meeting

@@ -18,16 +18,19 @@ type CalendarModel struct {
 	loading  bool
 	err      error
 	spinner  spinner.Model
-	cursor   int
 	year     int
 	width    int
 	height   int
+
+	cursor int
+	scroll int
 }
 
 func NewCalendarModel(client *api.OpenF1Client, year int) CalendarModel {
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red))
+
 	return CalendarModel{
 		client:  client,
 		loading: true,
@@ -51,7 +54,13 @@ func (m CalendarModel) Init() tea.Cmd {
 }
 
 func (m CalendarModel) Update(msg tea.Msg) (CalendarModel, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 	case spinner.TickMsg:
 		if m.loading {
 			var cmd tea.Cmd
@@ -69,26 +78,75 @@ func (m CalendarModel) Update(msg tea.Msg) (CalendarModel, tea.Cmd) {
 		m.loading = false
 		// Auto-scroll to next upcoming race
 		m.cursor = m.findNextRaceIndex()
+		m.ensureCursorVisible()
 
 	case tea.KeyMsg:
 		switch {
+		case matchKey(msg, GlobalKeys.Retry):
+			if m.err != nil {
+				m.err = nil
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, fetchMeetings(m.client, m.year))
+			}
 		case matchKey(msg, GlobalKeys.Up):
 			if m.cursor > 0 {
 				m.cursor--
+				m.ensureCursorVisible()
 			}
 		case matchKey(msg, GlobalKeys.Down):
 			if m.cursor < len(m.meetings)-1 {
 				m.cursor++
+				m.ensureCursorVisible()
 			}
+		case matchKey(msg, GlobalKeys.GoTop):
+			m.cursor = 0
+			m.scroll = 0
+		case matchKey(msg, GlobalKeys.GoBottom):
+			if len(m.meetings) > 0 {
+				m.cursor = len(m.meetings) - 1
+				m.ensureCursorVisible()
+			}
+		case matchKey(msg, GlobalKeys.HalfUp):
+			half := m.visibleRows() / 2
+			m.cursor -= half
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.ensureCursorVisible()
+		case matchKey(msg, GlobalKeys.HalfDown):
+			half := m.visibleRows() / 2
+			m.cursor += half
+			if m.cursor >= len(m.meetings) {
+				m.cursor = len(m.meetings) - 1
+			}
+			m.ensureCursorVisible()
 		case matchKey(msg, GlobalKeys.Enter):
-			if len(m.meetings) > 0 && m.cursor < len(m.meetings) {
+			if len(m.meetings) > 0 && m.cursor >= 0 && m.cursor < len(m.meetings) {
 				return m, func() tea.Msg {
 					return meetingSelectedMsg{meeting: m.meetings[m.cursor]}
 				}
 			}
 		}
 	}
-	return m, nil
+	return m, tea.Batch(cmds...)
+}
+
+func (m CalendarModel) visibleRows() int {
+	rows := m.height - 10
+	if rows < 5 {
+		rows = 5
+	}
+	return rows
+}
+
+func (m *CalendarModel) ensureCursorVisible() {
+	visible := m.visibleRows()
+	if m.cursor < m.scroll {
+		m.scroll = m.cursor
+	}
+	if m.cursor >= m.scroll+visible {
+		m.scroll = m.cursor - visible + 1
+	}
 }
 
 func (m CalendarModel) findNextRaceIndex() int {
@@ -110,81 +168,145 @@ func (m CalendarModel) findNextRaceIndex() int {
 
 func (m CalendarModel) View() string {
 	if m.loading {
-		return fmt.Sprintf("\n  %s  Loading %d calendar…", m.spinner.View(), m.year)
+		return fmt.Sprintf("\n  %s  Loading %d calendar...", m.spinner.View(), m.year)
 	}
 	if m.err != nil {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v", m.err))
+		return styleError.Render(fmt.Sprintf("\n  Error: %v\n\n", m.err)) +
+			helpBar("r retry", "q quit")
 	}
 	if len(m.meetings) == 0 {
-		return styleMuted.Render(fmt.Sprintf("\n  No meetings found for %d.", m.year))
-	}
-
-	const (
-		wRound   = 3
-		wName    = 28
-		wCircuit = 20
-		wCountry = 16
-		wDates   = 20
-		wStatus  = 3
-	)
-
-	header := styleBold.Render(
-		padRight("Rd", wRound) + " " +
-			padRight("Grand Prix", wName) + " " +
-			padRight("Circuit", wCircuit) + " " +
-			padRight("Country", wCountry) + " " +
-			padRight("Dates", wDates) + " " +
-			padRight("", wStatus),
-	)
-
-	var rows []string
-	rows = append(rows, header)
-
-	now := time.Now()
-	nextIdx := m.findNextRaceIndex()
-
-	for i, meeting := range m.meetings {
-		isNext := (i == nextIdx)
-		status := meetingStatus(meeting, now, isNext)
-
-		dates := formatMeetingDates(meeting)
-		flag := countryFlag(meeting.CountryCode)
-
-		country := flag + " " + truncate(meeting.CountryName, wCountry-3)
-
-		row := fmt.Sprintf("%s %s %s %s %s %s",
-			padLeft(fmt.Sprintf("%d", i+1), wRound),
-			padRight(truncate(meeting.MeetingName, wName), wName),
-			padRight(truncate(meeting.CircuitShortName, wCircuit), wCircuit),
-			padRight(country, wCountry),
-			padRight(dates, wDates),
-			status,
-		)
-
-		if i == m.cursor {
-			row = styleSelected.Render(row)
-		} else if isNext {
-			row = styleNext.Render(row)
-		} else {
-			// Mute past races
-			end, err := time.Parse(time.RFC3339, meeting.DateEnd)
-			if err != nil {
-				end, _ = time.Parse("2006-01-02", meeting.DateEnd[:min(len(meeting.DateEnd), 10)])
-				end = end.Add(24 * time.Hour)
-			}
-			if end.Before(now) && i != m.cursor {
-				row = stylePast.Render(row)
-			}
-		}
-
-		rows = append(rows, row)
+		return styleMuted.Render(fmt.Sprintf("\n  No meetings found for %d.\n", m.year))
 	}
 
 	var sb strings.Builder
-	sb.WriteString(styleBold.Render(fmt.Sprintf(" Season: %d", m.year)) + "\n\n")
-	sb.WriteString(strings.Join(rows, "\n"))
-	sb.WriteString("\n\n")
-	sb.WriteString(helpBar("y season", "j/k navigate", "enter select race", "q quit"))
+
+	// Title
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(colorF1Red)).
+		Render(fmt.Sprintf("  FORMULA 1 %d RACE CALENDAR", m.year))
+	sb.WriteString(title + "\n\n")
+
+	// Custom rendered list (no bubbles/table - gives us more control)
+	now := time.Now()
+	nextIdx := m.findNextRaceIndex()
+	visible := m.visibleRows()
+
+	endIdx := m.scroll + visible
+	if endIdx > len(m.meetings) {
+		endIdx = len(m.meetings)
+	}
+
+	w := m.width
+	if w < 40 {
+		w = 40
+	}
+	compact := w < 90
+	wide := w >= 120
+
+	// Responsive column widths
+	gpWidth := 30
+	circuitWidth := 22
+	countryWidth := 18
+	if compact {
+		gpWidth = min(24, w-30)
+		circuitWidth = 0 // hide circuit in compact mode
+		countryWidth = 14
+	} else if wide {
+		gpWidth = 34
+		circuitWidth = 26
+	}
+
+	// Header
+	var header string
+	if compact {
+		header = fmt.Sprintf("  %s  %s  %s  %s  %s",
+			padRight("RD", 3),
+			padRight("S", 1),
+			padRight("GRAND PRIX", gpWidth),
+			padRight("COUNTRY", countryWidth),
+			padRight("DATES", 14),
+		)
+	} else {
+		header = fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+			padRight("RD", 3),
+			padRight("S", 1),
+			padRight("GRAND PRIX", gpWidth),
+			padRight("CIRCUIT", circuitWidth),
+			padRight("COUNTRY", countryWidth),
+			padRight("DATES", 14),
+		)
+	}
+	sb.WriteString(lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorMuted)).
+		Bold(true).
+		Render(header) + "\n")
+	sb.WriteString("  " + divider(min(w-6, lipgloss.Width(header))) + "\n")
+
+	for i := m.scroll; i < endIdx; i++ {
+		meeting := m.meetings[i]
+		isNext := (i == nextIdx)
+		status := meetingStatus(meeting, now, isNext)
+		dates := formatMeetingDates(meeting)
+		flag := countryFlag(meeting.CountryCode)
+
+		// Round number with special styling
+		roundNum := fmt.Sprintf("R%d", i+1)
+		if i+1 < 10 {
+			roundNum = fmt.Sprintf("R%d ", i+1)
+		}
+
+		// Style round number based on status
+		var roundStyle lipgloss.Style
+		if isNext {
+			roundStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red)).Bold(true)
+		} else {
+			roundStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
+		}
+
+		// flag is 2 regional-indicator runes but renders as 2 terminal columns (double-width).
+		// Reserve 3 columns for "🇬🇧 " (2 cols for emoji + 1 for space) so country name width
+		// is countryWidth-3 runes, keeping the whole field at countryWidth visible columns.
+		countryField := padRight(flag+" "+truncate(meeting.CountryName, countryWidth-3), countryWidth)
+
+		var row string
+		if compact {
+			row = fmt.Sprintf("  %s  %s  %s  %s  %s",
+				roundStyle.Render(padRight(roundNum, 3)),
+				padRightVisible(status, 1), // status icon is 1 visible column; no extra padding needed
+				padRight(truncate(meeting.MeetingName, gpWidth), gpWidth),
+				countryField,
+				styleMuted.Render(dates),
+			)
+		} else {
+			row = fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
+				roundStyle.Render(padRight(roundNum, 3)),
+				padRightVisible(status, 1), // status icon is 1 visible column; no extra padding needed
+				padRight(truncate(meeting.MeetingName, gpWidth), gpWidth),
+				padRight(truncate(meeting.CircuitShortName, circuitWidth), circuitWidth),
+				countryField,
+				styleMuted.Render(dates),
+			)
+		}
+
+		if i == m.cursor {
+			// Highlight the entire row
+			row = styleSelected.Render(row)
+		} else if isNext {
+			// Subtle highlight for next race
+			row = lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Bold(true).Render(row)
+		}
+
+		sb.WriteString(row + "\n")
+	}
+
+	// Scroll indicator
+	if len(m.meetings) > visible {
+		sb.WriteString(styleMuted.Render(fmt.Sprintf("\n  Showing %d-%d of %d races", m.scroll+1, endIdx, len(m.meetings))) + "\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(helpBar("y season", "j/k navigate", "g/G top/bottom", "^d/^u page", "enter select", "q quit"))
 	return sb.String()
 }
 
@@ -203,7 +325,7 @@ func formatMeetingDates(m models.Meeting) string {
 	}
 
 	if start.Month() == end.Month() {
-		return fmt.Sprintf("%s %d–%d", start.Format("Jan"), start.Day(), end.Day())
+		return fmt.Sprintf("%s %d-%d", start.Format("Jan"), start.Day(), end.Day())
 	}
-	return fmt.Sprintf("%s %d – %s %d", start.Format("Jan"), start.Day(), end.Format("Jan"), end.Day())
+	return fmt.Sprintf("%s %d - %s %d", start.Format("Jan"), start.Day(), end.Format("Jan"), end.Day())
 }
