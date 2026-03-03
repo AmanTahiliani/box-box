@@ -115,35 +115,41 @@ func (c *OpenF1Client) GetTeamChampionship(sessionKey int) ([]models.Championshi
 	return result, nil
 }
 
-// GetLatestDriverChampionship returns championship standings for the most recent
-// race session. Note: requires the caller to supply a recent race session_key;
-// the OpenF1 API does not support a "latest" shortcut for this endpoint.
-func (c *OpenF1Client) GetLatestDriverChampionship() ([]models.ChampionshipDriver, error) {
-	body, err := c.get(fmt.Sprintf("%s/v1/championship_drivers?session_key=latest", c.url))
+// getLatestRaceSessionKey returns the session_key of the most recent Race session
+// by fetching sessions filtered to session_name=Race and returning the last one.
+func (c *OpenF1Client) getLatestRaceSessionKey() (int, error) {
+	body, err := c.get(fmt.Sprintf("%s/v1/sessions?session_name=Race", c.url))
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer body.Close()
 
-	var result []models.ChampionshipDriver
-	if err := json.NewDecoder(body).Decode(&result); err != nil {
-		return nil, err
+	var sessions []models.Session
+	if err := json.NewDecoder(body).Decode(&sessions); err != nil {
+		return 0, err
 	}
-	return result, nil
+	if len(sessions) == 0 {
+		return 0, errors.New("no Race sessions found")
+	}
+	return sessions[len(sessions)-1].SessionKey, nil
+}
+
+// GetLatestDriverChampionship returns championship standings for the most recent
+// Race session. It resolves the latest session key automatically.
+func (c *OpenF1Client) GetLatestDriverChampionship() ([]models.ChampionshipDriver, error) {
+	sessionKey, err := c.getLatestRaceSessionKey()
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve latest race session: %w", err)
+	}
+	return c.GetDriverChampionship(sessionKey)
 }
 
 func (c *OpenF1Client) GetLatestTeamChampionship() ([]models.ChampionshipTeam, error) {
-	body, err := c.get(fmt.Sprintf("%s/v1/championship_teams?session_key=latest", c.url))
+	sessionKey, err := c.getLatestRaceSessionKey()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not resolve latest race session: %w", err)
 	}
-	defer body.Close()
-
-	var result []models.ChampionshipTeam
-	if err := json.NewDecoder(body).Decode(&result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return c.GetTeamChampionship(sessionKey)
 }
 
 func (c *OpenF1Client) GetSessionResult(sessionKey int) ([]models.SessionResult, error) {
