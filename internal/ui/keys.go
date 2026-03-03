@@ -13,6 +13,7 @@ type GlobalKeyMap struct {
 	Down  key.Binding
 	Enter key.Binding
 	Back  key.Binding
+	Year  key.Binding
 }
 
 // GlobalKeys is the singleton global key map.
@@ -52,6 +53,10 @@ var GlobalKeys = GlobalKeyMap{
 	Back: key.NewBinding(
 		key.WithKeys("b"),
 		key.WithHelp("b", "back"),
+	),
+	Year: key.NewBinding(
+		key.WithKeys("y"),
+		key.WithHelp("y", "switch year"),
 	),
 }
 

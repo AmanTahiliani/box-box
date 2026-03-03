@@ -19,11 +19,12 @@ type CalendarModel struct {
 	err      error
 	spinner  spinner.Model
 	cursor   int
+	year     int
 	width    int
 	height   int
 }
 
-func NewCalendarModel(client *api.OpenF1Client) CalendarModel {
+func NewCalendarModel(client *api.OpenF1Client, year int) CalendarModel {
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red))
@@ -31,6 +32,7 @@ func NewCalendarModel(client *api.OpenF1Client) CalendarModel {
 		client:  client,
 		loading: true,
 		spinner: s,
+		year:    year,
 	}
 }
 
@@ -44,7 +46,7 @@ func fetchMeetings(client *api.OpenF1Client, year int) tea.Cmd {
 func (m CalendarModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
-		fetchMeetings(m.client, 2025),
+		fetchMeetings(m.client, m.year),
 	)
 }
 
@@ -108,13 +110,13 @@ func (m CalendarModel) findNextRaceIndex() int {
 
 func (m CalendarModel) View() string {
 	if m.loading {
-		return fmt.Sprintf("\n  %s  Loading 2025 calendar…", m.spinner.View())
+		return fmt.Sprintf("\n  %s  Loading %d calendar…", m.spinner.View(), m.year)
 	}
 	if m.err != nil {
 		return styleError.Render(fmt.Sprintf("\n  Error: %v", m.err))
 	}
 	if len(m.meetings) == 0 {
-		return styleMuted.Render("\n  No meetings found for 2025.")
+		return styleMuted.Render(fmt.Sprintf("\n  No meetings found for %d.", m.year))
 	}
 
 	const (
@@ -179,9 +181,10 @@ func (m CalendarModel) View() string {
 	}
 
 	var sb strings.Builder
+	sb.WriteString(styleBold.Render(fmt.Sprintf(" Season: %d", m.year)) + "\n\n")
 	sb.WriteString(strings.Join(rows, "\n"))
 	sb.WriteString("\n\n")
-	sb.WriteString(helpBar("j/k navigate", "enter select race", "q quit"))
+	sb.WriteString(helpBar("y season", "j/k navigate", "enter select race", "q quit"))
 	return sb.String()
 }
 

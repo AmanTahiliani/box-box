@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,17 +13,31 @@ import (
 )
 
 // get performs a GET request and returns the response body, or an error if the
-// status code is not 200 OK.
+// status code is not 200 OK. It checks a local file cache before making the request.
 func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
+	if cachedData, ok := c.cache.Get(url); ok {
+		return io.NopCloser(bytes.NewReader(cachedData)), nil
+	}
+
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
 		return nil, fmt.Errorf("openf1 API returned status %d for %s", resp.StatusCode, url)
 	}
-	return resp.Body, nil
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save to cache (ignoring errors as cache is not critical)
+	_ = c.cache.Set(url, data)
+
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 func (c *OpenF1Client) GetMeetingsForYear(year int) ([]models.Meeting, error) {
@@ -134,6 +149,29 @@ func (c *OpenF1Client) getLatestRaceSessionKey() (int, error) {
 	return sessions[len(sessions)-1].SessionKey, nil
 }
 
+// getLatestRaceSessionKeyForYear returns the session_key of the most recent Race session
+// for a specific year.
+func (c *OpenF1Client) getLatestRaceSessionKeyForYear(year int) (int, error) {
+	// The OpenF1 API doesn't support a direct year filter on sessions yet (verified by docs/common patterns)
+	// so we'll fetch meetings for that year first, then find the latest session.
+	// Actually, session endpoint does support year filter according to some versions of docs.
+	// Let's try year filter first as it's more efficient.
+	body, err := c.get(fmt.Sprintf("%s/v1/sessions?session_name=Race&year=%d", c.url, year))
+	if err != nil {
+		return 0, err
+	}
+	defer body.Close()
+
+	var sessions []models.Session
+	if err := json.NewDecoder(body).Decode(&sessions); err != nil {
+		return 0, err
+	}
+	if len(sessions) == 0 {
+		return 0, fmt.Errorf("no Race sessions found for year %d", year)
+	}
+	return sessions[len(sessions)-1].SessionKey, nil
+}
+
 // GetLatestDriverChampionship returns championship standings for the most recent
 // Race session. It resolves the latest session key automatically.
 func (c *OpenF1Client) GetLatestDriverChampionship() ([]models.ChampionshipDriver, error) {
@@ -144,10 +182,26 @@ func (c *OpenF1Client) GetLatestDriverChampionship() ([]models.ChampionshipDrive
 	return c.GetDriverChampionship(sessionKey)
 }
 
+func (c *OpenF1Client) GetDriverChampionshipForYear(year int) ([]models.ChampionshipDriver, error) {
+	sessionKey, err := c.getLatestRaceSessionKeyForYear(year)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve latest race session for year %d: %w", year, err)
+	}
+	return c.GetDriverChampionship(sessionKey)
+}
+
 func (c *OpenF1Client) GetLatestTeamChampionship() ([]models.ChampionshipTeam, error) {
 	sessionKey, err := c.getLatestRaceSessionKey()
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve latest race session: %w", err)
+	}
+	return c.GetTeamChampionship(sessionKey)
+}
+
+func (c *OpenF1Client) GetTeamChampionshipForYear(year int) ([]models.ChampionshipTeam, error) {
+	sessionKey, err := c.getLatestRaceSessionKeyForYear(year)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve latest race session for year %d: %w", year, err)
 	}
 	return c.GetTeamChampionship(sessionKey)
 }

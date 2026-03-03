@@ -26,6 +26,7 @@ type AppModel struct {
 	client *api.OpenF1Client
 
 	activeTab tabIndex
+	year      int
 	width     int
 	height    int
 
@@ -37,11 +38,13 @@ type AppModel struct {
 
 // NewAppModel creates the root model and wires sub-models.
 func NewAppModel(client *api.OpenF1Client) AppModel {
+	year := 2025
 	return AppModel{
 		client:     client,
 		activeTab:  tabStandings,
-		standings:  NewStandingsModel(client),
-		calendar:   NewCalendarModel(client),
+		year:       year,
+		standings:  NewStandingsModel(client, year),
+		calendar:   NewCalendarModel(client, year),
 		raceDetail: NewRaceDetailModel(client),
 		driver:     NewDriverModel(client),
 	}
@@ -95,6 +98,23 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeTab = tabCalendar
 				return m, nil
 			}
+		case "y":
+			// Cycle years: 2025 -> 2023 -> 2024 -> 2025
+			if m.year == 2025 {
+				m.year = 2023
+			} else {
+				m.year++
+			}
+			// Update sub-models and re-trigger fetches
+			m.calendar.year = m.year
+			m.calendar.loading = true
+			m.standings.year = m.year
+			m.standings.loading = true
+
+			return m, tea.Batch(
+				m.calendar.Init(),
+				m.standings.Init(),
+			)
 		}
 
 	case meetingSelectedMsg:

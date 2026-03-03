@@ -30,12 +30,13 @@ type StandingsModel struct {
 	err     error
 	spinner spinner.Model
 
+	year   int
 	cursor int
 	width  int
 	height int
 }
 
-func NewStandingsModel(client *api.OpenF1Client) StandingsModel {
+func NewStandingsModel(client *api.OpenF1Client, year int) StandingsModel {
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red))
@@ -45,27 +46,28 @@ func NewStandingsModel(client *api.OpenF1Client) StandingsModel {
 		loading: true,
 		spinner: s,
 		drivers: make(map[int]models.Driver),
+		year:    year,
 	}
 }
 
 func (m StandingsModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
-		fetchDriverChampionship(m.client),
-		fetchTeamChampionship(m.client),
+		fetchDriverChampionship(m.client, m.year),
+		fetchTeamChampionship(m.client, m.year),
 	)
 }
 
-func fetchDriverChampionship(client *api.OpenF1Client) tea.Cmd {
+func fetchDriverChampionship(client *api.OpenF1Client, year int) tea.Cmd {
 	return func() tea.Msg {
-		standings, err := client.GetLatestDriverChampionship()
+		standings, err := client.GetDriverChampionshipForYear(year)
 		return driverChampionshipLoadedMsg{standings: standings, err: err}
 	}
 }
 
-func fetchTeamChampionship(client *api.OpenF1Client) tea.Cmd {
+func fetchTeamChampionship(client *api.OpenF1Client, year int) tea.Cmd {
 	return func() tea.Msg {
-		standings, err := client.GetLatestTeamChampionship()
+		standings, err := client.GetTeamChampionshipForYear(year)
 		return teamChampionshipLoadedMsg{standings: standings, err: err}
 	}
 }
@@ -138,13 +140,16 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 
 func (m StandingsModel) View() string {
 	if m.loading {
-		return fmt.Sprintf("\n  %s  Loading championship standings…", m.spinner.View())
+		return fmt.Sprintf("\n  %s  Loading %d championship standings…", m.spinner.View(), m.year)
 	}
 	if m.err != nil {
 		return styleError.Render(fmt.Sprintf("\n  Error: %v", m.err))
 	}
 
 	var sb strings.Builder
+
+	// Year indicator
+	sb.WriteString(styleBold.Render(fmt.Sprintf(" Season: %d", m.year)) + "\n\n")
 
 	// Toggle bar
 	dStyle, cStyle := styleInactiveTab, styleInactiveTab
@@ -166,7 +171,7 @@ func (m StandingsModel) View() string {
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(helpBar("d drivers", "c constructors", "j/k navigate", "q quit"))
+	sb.WriteString(helpBar("y season", "d drivers", "c constructors", "j/k navigate", "q quit"))
 	return sb.String()
 }
 
