@@ -414,7 +414,7 @@ func (m RaceDetailModel) renderSessionPills() string {
 		if len(sess.DateStart) >= 10 {
 			t, err := time.Parse(time.RFC3339, sess.DateStart)
 			if err == nil {
-				dateStr = t.Format("Mon 2")
+				dateStr = t.Local().Format("Mon 2")
 			} else {
 				dateStr = sess.DateStart[:10]
 			}

@@ -305,7 +305,11 @@ func (c *OpenF1Client) GetOvertakesForSession(sessionKey int) ([]models.Overtake
 }
 
 func (c *OpenF1Client) GetPositions(sessionKey, driverNumber int) ([]models.Position, error) {
-	body, err := c.get(fmt.Sprintf("%s/v1/position?session_key=%d&driver_number=%d", c.url, sessionKey, driverNumber))
+	url := fmt.Sprintf("%s/v1/position?session_key=%d", c.url, sessionKey)
+	if driverNumber != 0 {
+		url += fmt.Sprintf("&driver_number=%d", driverNumber)
+	}
+	body, err := c.get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +323,11 @@ func (c *OpenF1Client) GetPositions(sessionKey, driverNumber int) ([]models.Posi
 }
 
 func (c *OpenF1Client) GetIntervals(sessionKey, driverNumber int) ([]models.Interval, error) {
-	body, err := c.get(fmt.Sprintf("%s/v1/intervals?session_key=%d&driver_number=%d", c.url, sessionKey, driverNumber))
+	url := fmt.Sprintf("%s/v1/intervals?session_key=%d", c.url, sessionKey)
+	if driverNumber != 0 {
+		url += fmt.Sprintf("&driver_number=%d", driverNumber)
+	}
+	body, err := c.get(url)
 	if err != nil {
 		return nil, err
 	}

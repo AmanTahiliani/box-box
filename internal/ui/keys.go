@@ -8,6 +8,8 @@ type GlobalKeyMap struct {
 	Tab2     key.Binding
 	Tab3     key.Binding
 	Tab4     key.Binding
+	Tab5     key.Binding
+	Tab6     key.Binding
 	NextTab  key.Binding
 	PrevTab  key.Binding
 	Quit     key.Binding
@@ -27,19 +29,27 @@ type GlobalKeyMap struct {
 var GlobalKeys = GlobalKeyMap{
 	Tab1: key.NewBinding(
 		key.WithKeys("1"),
-		key.WithHelp("1", "standings"),
+		key.WithHelp("1", "home"),
 	),
 	Tab2: key.NewBinding(
 		key.WithKeys("2"),
-		key.WithHelp("2", "calendar"),
+		key.WithHelp("2", "standings"),
 	),
 	Tab3: key.NewBinding(
 		key.WithKeys("3"),
-		key.WithHelp("3", "race detail"),
+		key.WithHelp("3", "calendar"),
 	),
 	Tab4: key.NewBinding(
 		key.WithKeys("4"),
-		key.WithHelp("4", "drivers"),
+		key.WithHelp("4", "race detail"),
+	),
+	Tab5: key.NewBinding(
+		key.WithKeys("5"),
+		key.WithHelp("5", "drivers"),
+	),
+	Tab6: key.NewBinding(
+		key.WithKeys("6"),
+		key.WithHelp("6", "live"),
 	),
 	NextTab: key.NewBinding(
 		key.WithKeys("tab", "right"),

@@ -92,6 +92,12 @@ type driverTeamRadioLoadedMsg struct {
 	err    error
 }
 
+// driverRaceControlLoadedMsg carries race control messages for a selected driver.
+type driverRaceControlLoadedMsg struct {
+	messages []models.RaceControl
+	err      error
+}
+
 // overtakesLoadedMsg carries overtake data for a session.
 type overtakesLoadedMsg struct {
 	overtakes []models.Overtake

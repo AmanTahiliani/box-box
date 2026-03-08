@@ -34,6 +34,7 @@ type DriverModel struct {
 	pits            []models.Pit
 	positions       []models.Position
 	teamRadios      []models.TeamRadio
+	raceControl     []models.RaceControl
 
 	view    driverView
 	loading bool
@@ -44,7 +45,6 @@ type DriverModel struct {
 	scroll int
 	input  textinput.Model
 
-	// Detail view viewport
 	detailView      viewport.Model
 	detailViewReady bool
 
@@ -884,11 +884,10 @@ func (m DriverModel) renderTeamRadio() string {
 
 	var sb strings.Builder
 
-	countStr := styleMuted.Render(fmt.Sprintf("  %d messages during session", len(m.teamRadios)))
+	countStr := styleMuted.Render(fmt.Sprintf("  %d audio messages (open URL in browser to listen)", len(m.teamRadios)))
 	sb.WriteString(countStr + "\n")
 
 	for i, radio := range m.teamRadios {
-		// Parse timestamp
 		t := "--:--:--"
 		if len(radio.Date) >= 19 {
 			pt, err := time.Parse(time.RFC3339, radio.Date)
@@ -909,7 +908,6 @@ func (m DriverModel) renderTeamRadio() string {
 
 		sb.WriteString(fmt.Sprintf("  %s %s  %s\n", icon, timeStr, urlStyled))
 
-		// Limit display to 15 entries
 		if i >= 14 && i < len(m.teamRadios)-1 {
 			remaining := len(m.teamRadios) - i - 1
 			sb.WriteString(styleMuted.Render(fmt.Sprintf("  ... and %d more messages\n", remaining)))

@@ -317,11 +317,15 @@ func formatMeetingDates(m models.Meeting) string {
 		if len(m.DateStart) >= 10 {
 			start, _ = time.Parse("2006-01-02", m.DateStart[:10])
 		}
+	} else {
+		start = start.Local()
 	}
 	if err2 != nil {
 		if len(m.DateEnd) >= 10 {
 			end, _ = time.Parse("2006-01-02", m.DateEnd[:10])
 		}
+	} else {
+		end = end.Local()
 	}
 
 	if start.Month() == end.Month() {

@@ -15,14 +15,16 @@ import (
 type tabIndex int
 
 const (
-	tabStandings  tabIndex = 0
-	tabCalendar   tabIndex = 1
-	tabRaceDetail tabIndex = 2
-	tabDriver     tabIndex = 3
+	tabDashboard  tabIndex = 0
+	tabStandings  tabIndex = 1
+	tabCalendar   tabIndex = 2
+	tabRaceDetail tabIndex = 3
+	tabDriver     tabIndex = 4
+	tabLive       tabIndex = 5
 )
 
-var tabNames = []string{"Standings", "Calendar", "Race", "Drivers"}
-var tabIcons = []string{"🏆", "📅", "🏁", "👤"}
+var tabNames = []string{"Home", "Standings", "Calendar", "Race", "Drivers", "Live"}
+var tabIcons = []string{"🏠", "🏆", "📅", "🏁", "👤", "🔴"}
 
 // splashDoneMsg is sent after the splash screen duration has elapsed.
 type splashDoneMsg struct{}
@@ -40,6 +42,8 @@ type AppModel struct {
 	calendar   CalendarModel
 	raceDetail RaceDetailModel
 	driver     DriverModel
+	dashboard  DashboardModel
+	live       OfficialLiveModel
 
 	meetings []models.Meeting
 
@@ -49,7 +53,7 @@ type AppModel struct {
 }
 
 func NewAppModel(client *api.OpenF1Client) AppModel {
-	year := 2025
+	year := time.Now().Year()
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Points
@@ -57,12 +61,14 @@ func NewAppModel(client *api.OpenF1Client) AppModel {
 
 	return AppModel{
 		client:        client,
-		activeTab:     tabStandings,
+		activeTab:     tabDashboard,
 		year:          year,
 		standings:     NewStandingsModel(client, year),
 		calendar:      NewCalendarModel(client, year),
 		raceDetail:    NewRaceDetailModel(client),
 		driver:        NewDriverModel(client),
+		dashboard:     NewDashboardModel(client, year),
+		live:          NewOfficialLiveModel(),
 		showSplash:    true,
 		splashSpinner: sp,
 	}
@@ -76,6 +82,8 @@ func splashTimer() tea.Cmd {
 
 func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
+		m.dashboard.Init(),
+		m.live.Init(),
 		m.standings.Init(),
 		m.calendar.Init(),
 		m.raceDetail.Init(),
@@ -94,12 +102,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		contentHeight := m.height - 5 // tab bar(2) + status bar + help + spacing
 		m.raceDetail.SetSize(m.width-4, contentHeight)
-		var cmd1, cmd2, cmd3, cmd4 tea.Cmd
-		m.standings, cmd1 = m.standings.Update(msg)
-		m.calendar, cmd2 = m.calendar.Update(msg)
-		m.raceDetail, cmd3 = m.raceDetail.Update(msg)
-		m.driver, cmd4 = m.driver.Update(msg)
-		return m, tea.Batch(cmd1, cmd2, cmd3, cmd4)
+		var cmd1, cmd2, cmd3, cmd4, cmd5, cmd6 tea.Cmd
+		m.dashboard, cmd1 = m.dashboard.Update(msg)
+		m.live, cmd2 = m.live.Update(msg)
+		m.standings, cmd3 = m.standings.Update(msg)
+		m.calendar, cmd4 = m.calendar.Update(msg)
+		m.raceDetail, cmd5 = m.raceDetail.Update(msg)
+		m.driver, cmd6 = m.driver.Update(msg)
+		return m, tea.Batch(cmd1, cmd2, cmd3, cmd4, cmd5, cmd6)
 
 	case splashDoneMsg:
 		m.showSplash = false
@@ -119,22 +129,28 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Tab switching
 		switch {
 		case matchKey(msg, GlobalKeys.Tab1):
-			m.activeTab = tabStandings
+			m.activeTab = tabDashboard
 			return m, nil
 		case matchKey(msg, GlobalKeys.Tab2):
-			m.activeTab = tabCalendar
+			m.activeTab = tabStandings
 			return m, nil
 		case matchKey(msg, GlobalKeys.Tab3):
-			m.activeTab = tabRaceDetail
+			m.activeTab = tabCalendar
 			return m, nil
 		case matchKey(msg, GlobalKeys.Tab4):
+			m.activeTab = tabRaceDetail
+			return m, nil
+		case matchKey(msg, GlobalKeys.Tab5):
 			m.activeTab = tabDriver
 			var cmd tea.Cmd
 			m.driver, cmd = m.driver.TriggerLoad()
 			cmds = append(cmds, cmd)
 			return m, tea.Batch(cmds...)
+		case matchKey(msg, GlobalKeys.Tab6):
+			m.activeTab = tabLive
+			return m, nil
 		case matchKey(msg, GlobalKeys.NextTab):
-			m.activeTab = (m.activeTab + 1) % 4
+			m.activeTab = (m.activeTab + 1) % 6
 			if m.activeTab == tabDriver {
 				var cmd tea.Cmd
 				m.driver, cmd = m.driver.TriggerLoad()
@@ -142,7 +158,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		case matchKey(msg, GlobalKeys.PrevTab):
-			m.activeTab = (m.activeTab - 1 + 4) % 4
+			m.activeTab = (m.activeTab - 1 + 6) % 6
 			if m.activeTab == tabDriver {
 				var cmd tea.Cmd
 				m.driver, cmd = m.driver.TriggerLoad()
@@ -156,8 +172,8 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case matchKey(msg, GlobalKeys.Year):
-			// Cycle years: 2025 -> 2023 -> 2024 -> 2025
-			if m.year == 2025 {
+			// Cycle years: up to current year, wrap to 2023
+			if m.year >= time.Now().Year() {
 				m.year = 2023
 			} else {
 				m.year++
@@ -281,6 +297,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
 
+	case wsDataMsg:
+		var cmd tea.Cmd
+		m.live, cmd = m.live.Update(msg)
+		cmds = append(cmds, cmd)
+		return m, tea.Batch(cmds...)
+
 	case spinner.TickMsg:
 		if m.showSplash {
 			var cmd tea.Cmd
@@ -298,6 +320,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Route keyboard input to active tab
 	switch m.activeTab {
+	case tabDashboard:
+		var cmd tea.Cmd
+		m.dashboard, cmd = m.dashboard.Update(msg)
+		cmds = append(cmds, cmd)
+	case tabLive:
+		var cmd tea.Cmd
+		m.live, cmd = m.live.Update(msg)
+		cmds = append(cmds, cmd)
 	case tabStandings:
 		var cmd tea.Cmd
 		m.standings, cmd = m.standings.Update(msg)
@@ -338,6 +368,10 @@ func (m AppModel) View() string {
 	// Content area
 	var content string
 	switch m.activeTab {
+	case tabDashboard:
+		content = m.dashboard.View()
+	case tabLive:
+		content = m.live.View()
 	case tabStandings:
 		content = m.standings.View()
 	case tabCalendar:
