@@ -122,6 +122,43 @@ var StandingsKeys = StandingsKeyMap{
 	),
 }
 
+// LiveKeyMap holds keybindings specific to the live timing tab.
+type LiveKeyMap struct {
+	ToggleSectors key.Binding
+	ToggleRC      key.Binding
+	ScrollRCUp    key.Binding
+	ScrollRCDown  key.Binding
+	ExpandDriver  key.Binding
+	Collapse      key.Binding
+}
+
+var LiveKeys = LiveKeyMap{
+	ToggleSectors: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "toggle sectors"),
+	),
+	ToggleRC: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "toggle RC panel"),
+	),
+	ScrollRCUp: key.NewBinding(
+		key.WithKeys("K"),
+		key.WithHelp("K", "scroll RC up"),
+	),
+	ScrollRCDown: key.NewBinding(
+		key.WithKeys("J"),
+		key.WithHelp("J", "scroll RC down"),
+	),
+	ExpandDriver: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "driver detail"),
+	),
+	Collapse: key.NewBinding(
+		key.WithKeys("esc", "b"),
+		key.WithHelp("esc/b", "collapse"),
+	),
+}
+
 // RaceDetailKeyMap holds keybindings for the race detail tab.
 type RaceDetailKeyMap struct {
 	ScrollUp    key.Binding

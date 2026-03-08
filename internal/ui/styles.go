@@ -13,6 +13,7 @@ const (
 	colorYellow  = "#FFD700"
 	colorOrange  = "#FF8700"
 	colorCyan    = "#00BFFF"
+	colorPurple  = "#A855F7"
 
 	// Surfaces
 	colorSurface0 = "#1B1B2F"
@@ -256,6 +257,11 @@ var (
 
 	styleDry = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorGreen))
+
+	// Purple for overall session best
+	stylePurple = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorPurple)).
+			Bold(true)
 )
 
 // DefaultTableStyles returns a base style map for bubbles/table.

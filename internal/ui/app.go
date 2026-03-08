@@ -102,6 +102,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		contentHeight := m.height - 5 // tab bar(2) + status bar + help + spacing
 		m.raceDetail.SetSize(m.width-4, contentHeight)
+		m.live.SetSize(m.width, contentHeight)
 		var cmd1, cmd2, cmd3, cmd4, cmd5, cmd6 tea.Cmd
 		m.dashboard, cmd1 = m.dashboard.Update(msg)
 		m.live, cmd2 = m.live.Update(msg)
@@ -490,7 +491,7 @@ func (m AppModel) renderStatusBar(width int) string {
 	// Right side: cache stats + navigation hints
 	cacheStats := m.client.CacheStats()
 	cacheInfo := styleMuted.Render(fmt.Sprintf("cache %d/%d", cacheStats.Hits, cacheStats.Hits+cacheStats.Misses))
-	right := cacheInfo + "  " + styleMuted.Render("1-4 tabs · y year · q quit")
+	right := cacheInfo + "  " + styleMuted.Render("1-6 tabs · y year · q quit")
 
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(right)
