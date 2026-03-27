@@ -27,6 +27,7 @@ type StandingsModel struct {
 
 	view    standingsView
 	loading bool
+	stale   bool
 	err     error
 	spinner spinner.Model
 
@@ -104,6 +105,9 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 			return m, nil
 		}
 		m.driverStandings = msg.standings
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 		if len(msg.standings) > 0 {
 			return m, fetchStandingsDrivers(m.client, msg.standings[0].SessionKey)
 		}
@@ -115,6 +119,9 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 			return m, nil
 		}
 		m.teamStandings = msg.standings
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 
 	case standingsDriversLoadedMsg:
 		if msg.err != nil {
@@ -132,6 +139,7 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 		case matchKey(msg, GlobalKeys.Retry):
 			if m.err != nil {
 				m.err = nil
+				m.stale = false
 				m.loading = true
 				return m, m.Init()
 			}
@@ -220,6 +228,10 @@ func (m StandingsModel) View() string {
 	}
 
 	var sb strings.Builder
+
+	if m.stale {
+		sb.WriteString(renderStaleBanner())
+	}
 
 	// Title row with year and toggle
 	title := lipgloss.NewStyle().

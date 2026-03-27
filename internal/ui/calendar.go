@@ -16,6 +16,7 @@ type CalendarModel struct {
 	client   *api.OpenF1Client
 	meetings []models.Meeting
 	loading  bool
+	stale    bool
 	err      error
 	spinner  spinner.Model
 	year     int
@@ -76,6 +77,9 @@ func (m CalendarModel) Update(msg tea.Msg) (CalendarModel, tea.Cmd) {
 		}
 		m.meetings = msg.meetings
 		m.loading = false
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 		// Auto-scroll to next upcoming race
 		m.cursor = m.findNextRaceIndex()
 		m.ensureCursorVisible()
@@ -85,6 +89,7 @@ func (m CalendarModel) Update(msg tea.Msg) (CalendarModel, tea.Cmd) {
 		case matchKey(msg, GlobalKeys.Retry):
 			if m.err != nil {
 				m.err = nil
+				m.stale = false
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, fetchMeetings(m.client, m.year))
 			}
@@ -196,6 +201,10 @@ func (m CalendarModel) View() string {
 	}
 
 	var sb strings.Builder
+
+	if m.stale {
+		sb.WriteString(renderStaleBanner())
+	}
 
 	// Title
 	title := lipgloss.NewStyle().

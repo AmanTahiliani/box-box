@@ -32,6 +32,11 @@ var tabIcons = []string{"🏠", "🏆", "📅", "🏁", "👤", "🔴", "🗺"}
 // splashDoneMsg is sent after the splash screen duration has elapsed.
 type splashDoneMsg struct{}
 
+// trackPrefetchDoneMsg is sent (and silently ignored) when the background
+// track-outline pre-fetch finishes. It carries no data — its only purpose is
+// to satisfy the tea.Cmd contract.
+type trackPrefetchDoneMsg struct{}
+
 // AppModel is the root Bubble Tea model.
 type AppModel struct {
 	client *api.OpenF1Client
@@ -85,6 +90,21 @@ func splashTimer() tea.Cmd {
 	})
 }
 
+// prefetchTrackOutlines fetches the season calendar and then pre-populates
+// the track outline cache for every circuit. This runs as a background command
+// so the UI is never blocked. Errors are silently discarded — this is a
+// best-effort operation.
+func prefetchTrackOutlines(client *api.OpenF1Client, year int) tea.Cmd {
+	return func() tea.Msg {
+		meetings, err := client.GetMeetingsForYear(year)
+		if err != nil || len(meetings) == 0 {
+			return trackPrefetchDoneMsg{}
+		}
+		client.PrefetchTrackOutlines(meetings)
+		return trackPrefetchDoneMsg{}
+	}
+}
+
 func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.dashboard.Init(),
@@ -96,6 +116,9 @@ func (m AppModel) Init() tea.Cmd {
 		m.trackMap.Init(),
 		m.splashSpinner.Tick,
 		splashTimer(),
+		// Background: pre-fetch track outlines for all circuits this season
+		// so the track map works during live sessions when the API is locked.
+		prefetchTrackOutlines(m.client, m.year),
 	)
 }
 
@@ -121,6 +144,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case splashDoneMsg:
 		m.showSplash = false
+		return m, nil
+
+	case trackPrefetchDoneMsg:
+		// Background track pre-fetch finished — nothing to display.
 		return m, nil
 
 	case tea.KeyMsg:

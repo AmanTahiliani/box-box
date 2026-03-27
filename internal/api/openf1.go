@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
@@ -26,15 +27,24 @@ func IsLiveSessionError(err error) bool {
 }
 
 // get performs a GET request and returns the response body, or an error if the
-// status code is not 200 OK. It checks a local file cache before making the request.
+// status code is not 200 OK. It checks the SQLite cache before making a
+// network request.
+//
+// Stale fallback: if the live request fails for any reason (network error,
+// 401 lockout during a live session, etc.) and the cache contains an expired
+// entry for this URL, that stale entry is returned instead of propagating the
+// error.  The client's staleFlag is set so the UI can show a disclaimer.
 func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
+	// 1. Check the cache for a fresh (non-expired) entry.
 	if cachedData, ok := c.cache.Get(url); ok {
 		return io.NopCloser(bytes.NewReader(cachedData)), nil
 	}
 
+	// 2. Attempt a live network request.
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		// Even a request-construction failure warrants a stale fallback.
+		return c.tryStale(url, err)
 	}
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
@@ -42,7 +52,7 @@ func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return c.tryStale(url, err)
 	}
 	defer resp.Body.Close()
 
@@ -56,23 +66,38 @@ func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
 			if json.Unmarshal(body, &apiErr) == nil && apiErr.Detail != "" {
 				detail := strings.ToLower(apiErr.Detail)
 				if strings.Contains(detail, "live") && strings.Contains(detail, "session") {
-					return nil, fmt.Errorf("%w", ErrLiveSessionLocked)
+					liveErr := fmt.Errorf("%w", ErrLiveSessionLocked)
+					return c.tryStale(url, liveErr)
 				}
-				return nil, fmt.Errorf("openf1 API: %s", apiErr.Detail)
+				apiErrFmt := fmt.Errorf("openf1 API: %s", apiErr.Detail)
+				return c.tryStale(url, apiErrFmt)
 			}
 		}
-		return nil, fmt.Errorf("openf1 API returned status %d for %s", resp.StatusCode, url)
+		statusErr := fmt.Errorf("openf1 API returned status %d for %s", resp.StatusCode, url)
+		return c.tryStale(url, statusErr)
 	}
 
+	// 3. Success — read the body, store in cache, return.
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return c.tryStale(url, err)
 	}
 
-	// Save to cache (ignoring errors as cache is not critical)
+	// Store fresh data in cache (non-critical; ignore errors).
 	_ = c.cache.Set(url, data)
 
 	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+// tryStale attempts to return stale cached data when a live request has failed.
+// If stale data exists it sets the client's stale flag and returns the data.
+// Otherwise it returns the original error unchanged so callers can handle it.
+func (c *OpenF1Client) tryStale(url string, originalErr error) (io.ReadCloser, error) {
+	if staleData, ok := c.cache.GetStale(url); ok {
+		c.setStale()
+		return io.NopCloser(bytes.NewReader(staleData)), nil
+	}
+	return nil, originalErr
 }
 
 func (c *OpenF1Client) GetMeetingsForYear(year int) ([]models.Meeting, error) {
@@ -477,4 +502,101 @@ func (c *OpenF1Client) GetTeamRadio(sessionKey, driverNumber int) ([]models.Team
 		return nil, err
 	}
 	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Track outline pre-fetch
+// ---------------------------------------------------------------------------
+
+// candidateDrivers is the ordered list of driver numbers we try when looking
+// for location data to build a track outline.  We try well-known numbers first
+// to maximise the chance of finding data quickly.
+var candidateDrivers = []int{1, 11, 44, 16, 55, 4, 14, 63, 81, 24}
+
+// PrefetchTrackOutlines fetches GPS location data for every circuit in the
+// provided meeting list and stores it in the cache so the track map tab can
+// render during live sessions when the free-tier API is locked.
+//
+// Each meeting is processed concurrently (up to maxWorkers goroutines).
+// Circuits that already have a stored outline for this year are skipped.
+// Errors per-circuit are silently ignored — this is a best-effort operation
+// and must never block or crash the main UI.
+func (c *OpenF1Client) PrefetchTrackOutlines(meetings []models.Meeting) {
+	const maxWorkers = 3
+
+	year := time.Now().Year()
+
+	// Filter to meetings that need fetching.
+	var pending []models.Meeting
+	for _, m := range meetings {
+		if m.CircuitKey == 0 {
+			continue
+		}
+		if _, ok := c.cache.GetTrackOutline(m.CircuitKey, year); ok {
+			continue // already cached for this season
+		}
+		pending = append(pending, m)
+	}
+
+	if len(pending) == 0 {
+		return
+	}
+
+	sem := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	for _, mtg := range pending {
+		mtg := mtg // capture
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			c.prefetchCircuit(mtg, year)
+		}()
+	}
+
+	wg.Wait()
+}
+
+// prefetchCircuit fetches the track outline for a single meeting and stores it.
+// It prefers completed sessions (past date_end) so the data is full and stable.
+func (c *OpenF1Client) prefetchCircuit(mtg models.Meeting, year int) {
+	sessions, err := c.GetSessionsForMeeting(int(mtg.MeetingKey))
+	if err != nil || len(sessions) == 0 {
+		return
+	}
+
+	// Pick the best session: prefer a completed race, then any session with
+	// a past end time, then fall back to the most recent session.
+	now := time.Now()
+	var bestSession *models.Session
+	for i := range sessions {
+		s := &sessions[i]
+		if s.DateEnd == "" {
+			continue
+		}
+		endTime, err := time.Parse(time.RFC3339, s.DateEnd)
+		if err != nil || endTime.After(now) {
+			continue
+		}
+		// Prefer Race sessions; otherwise take any completed session.
+		if bestSession == nil || s.SessionName == "Race" {
+			bestSession = s
+		}
+	}
+	if bestSession == nil {
+		return
+	}
+
+	// Try candidate drivers in order until we find one with enough points.
+	for _, dn := range candidateDrivers {
+		locs, err := c.GetLocation(bestSession.SessionKey, dn)
+		if err != nil || len(locs) < 50 {
+			continue
+		}
+		// Store under the circuit key for this year and stop.
+		_ = c.cache.SetTrackOutline(mtg.CircuitKey, year, locs)
+		return
+	}
 }

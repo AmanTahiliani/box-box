@@ -1,89 +1,116 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-**box-box** is a Formula 1 Terminal User Interface (TUI) application written in Go. It displays F1 standings, race calendar, results, and driver data sourced from the [OpenF1 API](https://openf1.org) (free, no auth required).
-
 ## Commands
 
 ```bash
-# Build
-go build ./cmd
-
-# Run
-go run ./cmd/main.go
-
-# Run all tests
-go test ./...
-
-# Run tests with output
-go test -v ./internal/api
-
-# Install dependencies (not yet done)
-go get github.com/charmbracelet/bubbletea
-go get github.com/charmbracelet/lipgloss
-go get github.com/charmbracelet/bubbles
+go build -o box-box ./cmd/main.go   # Build binary
+go run cmd/main.go                   # Run directly
+go test ./...                        # All tests
+go test -v ./internal/api            # API integration tests (requires internet, rate-limit aware)
+OPENF1_API_KEY=key go run cmd/main.go  # Run with paid tier (enables live session access)
 ```
 
-Tests in `internal/api/openf1_test.go` are integration tests hitting the real OpenF1 API — they include rate-limit-aware skipping logic.
+## Project Overview
+
+**box-box** is an F1 Terminal UI (TUI) dashboard built in Go with Bubble Tea. It shows live timing, standings, race calendar, driver telemetry, track maps, and race replay — all sourced from the OpenF1 API.
+
+**Status**: Pre-beta, actively developed. All layers (API, models, UI) are fully implemented.
+
+## Tech Stack
+
+- **Bubble Tea** — TUI framework (Elm architecture: Model -> Update -> View)
+- **Lipgloss** — Terminal styling
+- **Bubbles** — TUI components (spinner, viewport, table)
+- **OpenF1 API** — F1 data at `https://api.openf1.org`
+- **gorilla/websocket** — Official F1 SignalR live feed
+- **modernc.org/sqlite** — HTTP response caching with TTL
+
+## File Map
+
+```
+cmd/main.go                  Entry point (package main). Inits client, launches TUI.
+
+internal/api/
+  client.go                  OpenF1Client: HTTP client, 15s timeout, optional Bearer auth
+  cache.go                   SQLite cache (~/.cache/box-box/cache.db), TTL-based, stale fallback
+  openf1.go                  37 API endpoint methods
+  openf1_test.go             Integration tests (real API, rate-limit skip)
+
+internal/models/
+  types.go                   All data structs (Meeting, Session, Driver, Lap, Stint, etc.)
+
+internal/ui/
+  app.go                     Root AppModel. 7 tabs, message routing, splash screen
+  messages.go                All tea.Msg types for async data loading
+  styles.go                  Lipgloss styles, F1 color palette, team colors
+  keys.go                    key.Binding definitions for all keybindings
+  util.go                    Helpers: formatSeconds, sparkline, matchKey, country flags
+  dashboard.go               Tab 0: Next race countdown + session schedule
+  standings.go               Tab 1: Driver/constructor championship tables
+  calendar.go                Tab 2: Season meeting list, select -> race detail
+  racedetail.go              Tab 3: Session results, grid, sectors, RC, weather, overtakes
+  driver.go                  Tab 4: Driver list + per-driver telemetry (stints, laps, pits)
+  official_live.go           Tab 5: Real-time timing via F1 SignalR WebSocket
+  live.go                    Legacy/alternate live timing implementation
+  trackmap.go                Tab 6: ASCII track outline with live car positions
+  battles.go                 Sub-view: Auto-detected on-track battles with gap sparkline
+  pitwindow.go               Sub-view: Pit stop rejoin position calculator
+  replay.go                  Sub-view: Lap-by-lap race replay scrubber
+```
 
 ## Architecture
 
-### Tech Stack
+### Bubble Tea Pattern
 
-| Tool | Purpose |
-|---|---|
-| **Bubble Tea** | TUI framework using Elm architecture (Model → Update → View) |
-| **Lipgloss** | Terminal styling — colors, borders, layout |
-| **Bubbles** | Pre-built TUI components (tables, spinners, viewports) |
-| **OpenF1 API** | F1 data source at `https://api.openf1.org/v1/` |
+Each tab is a sub-model with `Init()`, `Update(msg)`, `View()`. The root `AppModel` in `app.go` holds all sub-models and routes messages by type. All state changes are message-driven — no direct mutation.
 
-### Elm Architecture (Bubble Tea)
+Async work (API calls, WebSocket) returns `tea.Cmd` that emits typed messages back to Update. Use `tea.Batch()` for parallel fetches.
 
-All UI follows the unidirectional flow: `event → Update → View`
+### Key Patterns
 
-- **Model** — app state (active tab, loaded data, loading flags)
-- **Update(msg)** — handles keypresses and API response messages, returns new model + optional `tea.Cmd`
-- **View()** — renders model to a string printed to terminal
-- **Cmd** — async work (API calls) that runs outside the Update loop and sends a `Msg` back when done
+- **Two-phase standings load**: `GetLatestDriverChampionship()` -> extract SessionKey -> `GetDriversForSession(sessionKey)` -> join by DriverNumber for names/colors
+- **Driver tab lazy load**: Drivers loaded on first Tab 4 focus via `TriggerLoad()`
+- **Stale data fallback**: When API errors, client returns expired cache data + sets atomic flag for UI disclaimer banner
+- **Cache TTL tiers**: 15min (live telemetry), 1hr (standings), 24hr (recent), forever (historical 2023/2024)
+- **Track outline pre-fetch**: Background fetch of circuit GPS data during app init
+- **`matchKey` helper**: Renamed from `key` to avoid collision with `bubbles/key` package import
 
-Each tab (standings, calendar, results, driver) is its own Bubble Tea sub-model. The root `app.go` holds all tabs and delegates input to the active one.
+### Keybindings
 
-### Package Structure
+Global: `1-7` tabs, `tab`/`shift+tab` cycle, `j/k` navigate, `enter` select, `b`/`esc` back, `y` cycle year, `g`/`G` top/bottom, `ctrl+u`/`ctrl+d` half-page, `q` quit
 
-```
-cmd/main.go              # Entry point — wire up and launch the TUI
-internal/
-  api/
-    client.go            # OpenF1Client: HTTP wrapper with 10s timeout
-    openf1.go            # 23 endpoint methods (meetings, drivers, results, telemetry, etc.)
-    openf1_test.go       # Integration tests for API layer
-  models/
-    types.go             # 18 data structs: Circuit, Meeting, Session, Driver, Lap, Stint, etc.
-  ui/
-    app.go               # (planned) Root model, tab switching
-    standings.go         # (planned) Championship standings tab
-    calendar.go          # (planned) Race calendar tab
-    results.go           # (planned) Race results tab
-    driver.go            # (planned) Driver lookup tab
-```
+Standings: `d` driver view, `c` constructor view
 
-### Current Status
+Race Detail: `[`/`]` prev/next session, `r` replay mode, `K`/`J` scroll RC
 
-- **API layer**: Complete — all 23 OpenF1 endpoints implemented
-- **Data models**: Complete — 18 structs covering all F1 entities
-- **UI layer**: Not yet implemented — `internal/ui/` is empty, `cmd/main.go` is a stub
-- **Dependencies**: Not yet installed — `go.mod` has no direct deps yet
+Live: `s` sectors, `r` race control, `b` battles, `p` pit window, `K`/`J` scroll RC
 
-### API Layer
+Replay: `h`/`l` or arrows scrub laps
 
-`OpenF1Client` in `internal/api/client.go` wraps a standard `http.Client`. All methods in `openf1.go` follow the pattern: build query params → GET from `https://api.openf1.org/v1/{endpoint}` → decode JSON into model types.
+### API Endpoint Groups
 
-Key endpoint groups:
-- **Session context**: `GetMeetings`, `GetSessions`
-- **Standings**: `GetDriverChampionship`, `GetTeamChampionship`
-- **Race data**: `GetSessionResults`, `GetStartingGrid`, `GetLaps`, `GetStints`, `GetPits`
-- **Live telemetry**: `GetPositions`, `GetIntervals`, `GetCarData`, `GetLocations`
-- **Race events**: `GetRaceControl`, `GetOvertakes`, `GetWeather`, `GetTeamRadio`
+- **Season**: `GetMeetingsForYear`, `GetSessionsForMeeting`
+- **Championship**: `GetDriverChampionshipForYear`, `GetTeamChampionshipForYear`, `GetLatest*`
+- **Results**: `GetSessionResult`, `GetStartingGrid`, `GetStintsForSession`
+- **Telemetry**: `GetLapsForDriver`, `GetPitStopsForSession`, `GetPositions`, `GetIntervals`
+- **Live**: `GetCarData`, `GetLocation` (GPS), `GetTeamRadio`
+- **Events**: `GetRaceControl`, `GetOvertakes`, `GetWeather`
+- **Track**: `PrefetchTrackOutlines`
+
+## How To Extend
+
+- **New tab**: Create model in `internal/ui/`, add to `AppModel` struct in `app.go`, add tab constant, implement `Init/Update/View`, handle message routing in `app.go Update()`
+- **New API endpoint**: Add method to `openf1.go`, add response struct to `types.go`, set cache TTL in the method
+- **New message type**: Define in `messages.go`, handle in relevant model's `Update()`
+- **New keybinding**: Define in `keys.go`, handle in relevant model's `Update()`
+- **New styles**: Add to `styles.go`, reference F1 palette constants
+
+## Testing
+
+Tests in `openf1_test.go` hit the real OpenF1 API. They use `skipOnRateLimit(t, err)` to gracefully skip on HTTP 429. Require internet.
+
+## Environment
+
+- `OPENF1_API_KEY` — Optional Bearer token for paid tier (live session WebSocket access)
+- Logs go to `box-box.log` in project root (prevents TUI pollution)
+- Cache at `~/.cache/box-box/cache.db` (SQLite WAL mode, auto-created)

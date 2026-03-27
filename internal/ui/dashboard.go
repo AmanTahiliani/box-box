@@ -19,6 +19,7 @@ type DashboardModel struct {
 	width    int
 	height   int
 	loading  bool
+	stale    bool
 	spinner  spinner.Model
 	meetings []models.Meeting
 	next     *models.Meeting
@@ -108,6 +109,9 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 			return m, nil
 		}
 		m.meetings = msg.meetings
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 		now := time.Now()
 
 		// First priority: find a meeting that has already started but not yet ended
@@ -144,6 +148,9 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 		m.loading = false
 		if msg.err == nil {
 			m.sessions = msg.sessions
+			if m.client.LastResponseWasStale() {
+				m.stale = true
+			}
 		}
 		return m, nil
 
@@ -152,6 +159,7 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 	case tea.KeyMsg:
 		if matchKey(msg, GlobalKeys.Retry) && m.err != nil {
 			m.err = nil
+			m.stale = false
 			m.loading = true
 			return m, m.Init()
 		}
@@ -175,6 +183,10 @@ func (m DashboardModel) View() string {
 	w := m.width
 	if w < 40 {
 		w = 40
+	}
+
+	if m.stale {
+		sb.WriteString(renderStaleBanner())
 	}
 
 	titleStyle := lipgloss.NewStyle().

@@ -531,6 +531,19 @@ func teamColorBar(teamColor string) string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
 }
 
+// renderStaleBanner returns a yellow warning banner indicating that the
+// displayed data was served from an expired cache (stale fallback).
+// Shown at the top of any tab whose data came from stale cache during a live
+// session lockout.
+func renderStaleBanner() string {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(colorYellow)).
+		Foreground(lipgloss.Color(colorF1Black)).
+		Bold(true).
+		Padding(0, 1).
+		Render("  ⚠  STALE DATA — served from cache (live session in progress)  ") + "\n\n"
+}
+
 // renderErrorView returns a formatted error view. If the error is the OpenF1
 // live-session lockout, it shows a special informational banner instead of a
 // raw error string.

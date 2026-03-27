@@ -32,6 +32,7 @@ type RaceDetailModel struct {
 
 	loadingSessions  bool
 	loadingResults   bool
+	stale            bool
 	driversLoaded    bool
 	secondaryLoading bool
 	errSessions      error
@@ -149,6 +150,7 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 		m.resultsScroll = 0
 		m.loadingSessions = true
 		m.loadingResults = false
+		m.stale = false
 		m.driversLoaded = false
 		m.secondaryLoading = false
 		m.errSessions = nil
@@ -163,6 +165,9 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			return m, nil
 		}
 		m.sessions = msg.sessions
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 
 		// Auto-select the best session to show:
 		// 1. The last session that has already started (ongoing or completed).
@@ -207,6 +212,9 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 		m.results = msg.results
 		m.resultsCursor = 0
 		m.resultsScroll = 0
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 		if cmd := m.checkPrimaryLoaded(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -467,6 +475,10 @@ func (m RaceDetailModel) View() string {
 	compact := w < 100
 
 	var sb strings.Builder
+
+	if m.stale {
+		sb.WriteString(renderStaleBanner())
+	}
 
 	// Race title header
 	flag := countryFlag(m.meeting.CountryCode)

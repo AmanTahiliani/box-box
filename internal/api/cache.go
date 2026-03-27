@@ -2,12 +2,14 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/AmanTahiliani/box-box/internal/models"
 	_ "modernc.org/sqlite"
 )
 
@@ -54,7 +56,7 @@ func NewCache() *Cache {
 	// Limit connections — SQLite is single-writer.
 	db.SetMaxOpenConns(1)
 
-	// Create the table if it doesn't exist.
+	// Create the HTTP response cache table if it doesn't exist.
 	_, _ = db.Exec(`
 		CREATE TABLE IF NOT EXISTS cache (
 			key        TEXT PRIMARY KEY,
@@ -65,6 +67,19 @@ func NewCache() *Cache {
 
 	// Create an index on created_at for efficient expiry cleanup.
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_cache_created_at ON cache(created_at)`)
+
+	// Create the track outlines table — stores pre-fetched GPS location data
+	// keyed by (circuit_key, year) so the track map works during live sessions
+	// when the free-tier API is locked.
+	_, _ = db.Exec(`
+		CREATE TABLE IF NOT EXISTS track_outlines (
+			circuit_key INTEGER NOT NULL,
+			year        INTEGER NOT NULL,
+			data        BLOB NOT NULL,
+			fetched_at  INTEGER NOT NULL,
+			PRIMARY KEY (circuit_key, year)
+		)
+	`)
 
 	return &Cache{db: db}
 }
@@ -134,6 +149,24 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 	return data, true
 }
 
+// GetStale retrieves data from the cache regardless of TTL expiry. This is
+// used as a last-resort fallback when the API is unreachable (e.g. during a
+// live session lockout on the free tier). The entry is NOT deleted even if it
+// has expired — it remains available for future stale reads.
+// Returns nil, false only when the key is not in the cache at all.
+func (c *Cache) GetStale(key string) ([]byte, bool) {
+	var data []byte
+
+	err := c.db.QueryRow(
+		`SELECT data FROM cache WHERE key = ?`, key,
+	).Scan(&data)
+
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
 // Set stores data in the cache, replacing any existing entry for the same key.
 func (c *Cache) Set(key string, data []byte) error {
 	_, err := c.db.Exec(
@@ -186,6 +219,45 @@ func (c *Cache) Close() error {
 		return c.db.Close()
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Track outline persistence
+// ---------------------------------------------------------------------------
+
+// GetTrackOutline retrieves pre-fetched GPS location data for a circuit in a
+// given season year. Returns the locations and true if a record exists for
+// that (circuit_key, year) pair, otherwise nil and false.
+func (c *Cache) GetTrackOutline(circuitKey, year int) ([]models.Location, bool) {
+	var raw []byte
+	err := c.db.QueryRow(
+		`SELECT data FROM track_outlines WHERE circuit_key = ? AND year = ?`,
+		circuitKey, year,
+	).Scan(&raw)
+	if err != nil {
+		return nil, false
+	}
+
+	var locs []models.Location
+	if err := json.Unmarshal(raw, &locs); err != nil {
+		return nil, false
+	}
+	return locs, true
+}
+
+// SetTrackOutline persists GPS location data for a circuit in a given season
+// year. The data is stored as a JSON blob and keyed by (circuit_key, year).
+// Calling this again for the same key overwrites the existing record.
+func (c *Cache) SetTrackOutline(circuitKey, year int, locs []models.Location) error {
+	raw, err := json.Marshal(locs)
+	if err != nil {
+		return err
+	}
+	_, err = c.db.Exec(
+		`INSERT OR REPLACE INTO track_outlines (circuit_key, year, data, fetched_at) VALUES (?, ?, ?, ?)`,
+		circuitKey, year, raw, time.Now().Unix(),
+	)
+	return err
 }
 
 // CleanupOldFileCache removes the old file-based cache directory. Since file

@@ -30,8 +30,11 @@ type TrackMapModel struct {
 	width  int
 	height int
 
-	// Resolved session key used to fetch location data
+	// Resolved session key used to fetch live location data.
 	sessionKey int
+	// circuitKey identifies the physical circuit for cached track outline lookups.
+	// It is stable across sessions and years for the same track.
+	circuitKey int
 
 	// Track outline (normalized points from driver 1's path)
 	outline []trackPoint
@@ -123,12 +126,16 @@ func (m *TrackMapModel) fetchActiveSession(client *api.OpenF1Client, year int) t
 			return trackOutlineLoadedMsg{err: fmt.Errorf("no active session found")}
 		}
 
-		return sessionKeyMsg{sessionKey: activeSess.SessionKey}
+		return sessionKeyMsg{
+			sessionKey: activeSess.SessionKey,
+			circuitKey: currentMtg.CircuitKey,
+		}
 	}
 }
 
 type sessionKeyMsg struct {
 	sessionKey int
+	circuitKey int
 }
 
 // ---------------------------------------------------------------------------
@@ -152,13 +159,30 @@ type trackCarsLoadedMsg struct {
 // fetchTrackOutline downloads location data for a single reference driver
 // (driver 1 by convention, then any driver if 1 is absent) to build the
 // track outline for the given session.
-func fetchTrackOutline(client *api.OpenF1Client, sessionKey int) tea.Cmd {
+//
+// It first checks the persistent track outline cache keyed by circuitKey.
+// If a stored outline exists for this season it is used directly, which means
+// the track map works even during a live-session API lockout on the free tier.
+func fetchTrackOutline(client *api.OpenF1Client, sessionKey, circuitKey int) tea.Cmd {
 	return func() tea.Msg {
-		// Try a set of likely driver numbers to find one with location data.
+		year := time.Now().Year()
+
+		// Check the pre-fetched outline cache before hitting the API.
+		if circuitKey != 0 {
+			if locs, ok := client.Cache().GetTrackOutline(circuitKey, year); ok && len(locs) >= 50 {
+				return trackOutlineLoadedMsg{locations: locs}
+			}
+		}
+
+		// Fall back to a live API fetch.
 		candidates := []int{1, 11, 44, 16, 55, 4, 14, 63, 81, 24}
 		for _, dn := range candidates {
 			locs, err := client.GetLocation(sessionKey, dn)
 			if err == nil && len(locs) > 50 {
+				// Opportunistically save to the track outline cache for next time.
+				if circuitKey != 0 {
+					_ = client.Cache().SetTrackOutline(circuitKey, year, locs)
+				}
 				return trackOutlineLoadedMsg{locations: locs}
 			}
 		}
@@ -198,17 +222,19 @@ func (m TrackMapModel) Init() tea.Cmd {
 
 // SetSessionKey wires the track map to a specific session. If the session
 // differs from the one already loaded, it triggers a fresh outline fetch.
-func (m TrackMapModel) SetSessionKey(sessionKey int) (TrackMapModel, tea.Cmd) {
+// circuitKey is used to look up the pre-cached track outline for this circuit.
+func (m TrackMapModel) SetSessionKey(sessionKey, circuitKey int) (TrackMapModel, tea.Cmd) {
 	if sessionKey == m.sessionKey && m.outlineReady {
 		return m, nil
 	}
 	m.sessionKey = sessionKey
+	m.circuitKey = circuitKey
 	m.loadingOutline = true
 	m.outlineReady = false
 	m.outline = nil
 	m.carPositions = make(map[int]models.Location)
 	m.err = nil
-	return m, tea.Batch(fetchTrackOutline(m.client, sessionKey), m.spinner.Tick)
+	return m, tea.Batch(fetchTrackOutline(m.client, sessionKey, circuitKey), m.spinner.Tick)
 }
 
 // InjectDriverInfo forwards the latest DriverInfo map from OfficialLiveModel
@@ -263,14 +289,15 @@ func (m TrackMapModel) Update(msg tea.Msg) (TrackMapModel, tea.Cmd) {
 
 	case sessionKeyMsg:
 		m.loadingSession = false
-		if msg.sessionKey != m.sessionKey {
+		if msg.sessionKey != m.sessionKey || msg.circuitKey != m.circuitKey {
 			m.sessionKey = msg.sessionKey
+			m.circuitKey = msg.circuitKey
 			m.loadingOutline = true
 			m.outlineReady = false
 			m.outline = nil
 			m.carPositions = make(map[int]models.Location)
 			m.err = nil
-			return m, tea.Batch(fetchTrackOutline(m.client, msg.sessionKey), m.spinner.Tick)
+			return m, tea.Batch(fetchTrackOutline(m.client, msg.sessionKey, msg.circuitKey), m.spinner.Tick)
 		}
 		return m, nil
 

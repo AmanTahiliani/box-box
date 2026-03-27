@@ -38,6 +38,7 @@ type DriverModel struct {
 
 	view    driverView
 	loading bool
+	stale   bool
 	err     error
 	spinner spinner.Model
 
@@ -168,6 +169,9 @@ func (m DriverModel) Update(msg tea.Msg) (DriverModel, tea.Cmd) {
 			return m, nil
 		}
 		m.drivers = msg.drivers
+		if m.client.LastResponseWasStale() {
+			m.stale = true
+		}
 		m.filterDrivers()
 
 	case driverStintsLoadedMsg:
@@ -222,6 +226,7 @@ func (m DriverModel) Update(msg tea.Msg) (DriverModel, tea.Cmd) {
 			case matchKey(msg, GlobalKeys.Retry):
 				if m.err != nil {
 					m.err = nil
+					m.stale = false
 					m.loading = true
 					var cmd tea.Cmd
 					m, cmd = m.TriggerLoad()
@@ -391,11 +396,17 @@ func (m DriverModel) View() string {
 		return renderErrorView(m.err)
 	}
 
+	// Prepend stale banner when showing the list or detail view
+	prefix := ""
+	if m.stale {
+		prefix = renderStaleBanner()
+	}
+
 	switch m.view {
 	case driverViewList:
-		return m.renderDriverList()
+		return prefix + m.renderDriverList()
 	case driverViewDetail:
-		return m.renderDriverDetail()
+		return prefix + m.renderDriverDetail()
 	}
 	return ""
 }
