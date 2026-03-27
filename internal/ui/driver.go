@@ -388,8 +388,7 @@ func (m DriverModel) View() string {
 		return fmt.Sprintf("\n  %s  Loading drivers...", m.spinner.View())
 	}
 	if m.err != nil {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v\n\n", m.err)) +
-			helpBar("r retry", "q quit")
+		return renderErrorView(m.err)
 	}
 
 	switch m.view {

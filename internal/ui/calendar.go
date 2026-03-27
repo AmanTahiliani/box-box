@@ -171,8 +171,7 @@ func (m CalendarModel) View() string {
 		return fmt.Sprintf("\n  %s  Loading %d calendar...", m.spinner.View(), m.year)
 	}
 	if m.err != nil {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v\n\n", m.err)) +
-			helpBar("r retry", "q quit")
+		return renderErrorView(m.err)
 	}
 	if len(m.meetings) == 0 {
 		return styleMuted.Render(fmt.Sprintf("\n  No meetings found for %d.\n", m.year))

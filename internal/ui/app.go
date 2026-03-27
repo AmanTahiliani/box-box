@@ -262,6 +262,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
 
+	case loadSecondaryDataMsg:
+		var cmd tea.Cmd
+		m.raceDetail, cmd = m.raceDetail.Update(msg)
+		cmds = append(cmds, cmd)
+		return m, tea.Batch(cmds...)
+
 	case driverListLoadedMsg:
 		var cmd tea.Cmd
 		m.driver, cmd = m.driver.Update(msg)

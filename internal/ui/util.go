@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/AmanTahiliani/box-box/internal/api"
 	"github.com/AmanTahiliani/box-box/internal/models"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -458,4 +459,30 @@ func teamColorBar(teamColor string) string {
 		teamColor = "#" + teamColor
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
+}
+
+// renderErrorView returns a formatted error view. If the error is the OpenF1
+// live-session lockout, it shows a special informational banner instead of a
+// raw error string.
+func renderErrorView(err error) string {
+	if api.IsLiveSessionError(err) {
+		title := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorF1Red)).
+			Bold(true).
+			Render("  LIVE SESSION IN PROGRESS")
+
+		body := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorWhite)).
+			Render("  The OpenF1 API restricts all access (including historical data)\n  during live F1 sessions. This applies to the free tier.")
+
+		hint := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorMuted)).
+			Render("  Access will be restored ~30 minutes after the session ends.\n  Set OPENF1_API_KEY to bypass this restriction (paid tier).")
+
+		return fmt.Sprintf("\n%s\n\n%s\n\n%s\n\n", title, body, hint) +
+			helpBar("r retry", "q quit")
+	}
+
+	return styleError.Render(fmt.Sprintf("\n  Error: %v\n\n", err)) +
+		helpBar("r retry", "q quit")
 }

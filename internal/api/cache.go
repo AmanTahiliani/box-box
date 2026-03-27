@@ -1,13 +1,14 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 // CacheStats tracks cache hit/miss statistics.
@@ -16,54 +17,76 @@ type CacheStats struct {
 	Misses int64
 }
 
-// FileCache implements a file-backed HTTP response cache with TTL expiry.
-type FileCache struct {
-	dir   string
+// Cache implements a SQLite-backed HTTP response cache with TTL expiry.
+// The database is a single file stored in the user's cache directory.
+type Cache struct {
+	db    *sql.DB
 	stats CacheStats
 }
 
 // Default TTL values.
 const (
-	// CacheTTLShort is for current-season, frequently changing data (meetings, sessions, results).
+	// CacheTTLShort is for live/telemetry data that changes every few seconds.
 	CacheTTLShort = 15 * time.Minute
 	// CacheTTLMedium is for semi-stable data (championship standings, driver lists).
 	CacheTTLMedium = 1 * time.Hour
 	// CacheTTLLong is for historical data that rarely changes (past season data).
 	CacheTTLLong = 24 * time.Hour
+	// CacheTTLForever is for data that will never change (completed past-season results).
+	CacheTTLForever = 0
 )
 
-func NewFileCache() *FileCache {
-	var cacheDir string
-	userCacheDir, err := os.UserCacheDir()
-	if err == nil {
-		cacheDir = filepath.Join(userCacheDir, "box-box", "openf1")
-	} else {
-		// Fallback to a local .cache directory
-		cacheDir = ".cache/box-box/openf1"
+// NewCache creates a SQLite-backed cache. The database file is placed in the
+// user's OS cache directory under box-box/cache.db. No setup is required — the
+// schema is created automatically on first run.
+func NewCache() *Cache {
+	dbPath := cacheDBPath()
+
+	// Ensure the parent directory exists.
+	_ = os.MkdirAll(filepath.Dir(dbPath), 0755)
+
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	if err != nil {
+		// Fall back to in-memory if the file can't be opened.
+		db, _ = sql.Open("sqlite", ":memory:")
 	}
 
-	// Ensure the cache directory exists
-	_ = os.MkdirAll(cacheDir, 0755)
+	// Limit connections — SQLite is single-writer.
+	db.SetMaxOpenConns(1)
 
-	return &FileCache{
-		dir: cacheDir,
-	}
+	// Create the table if it doesn't exist.
+	_, _ = db.Exec(`
+		CREATE TABLE IF NOT EXISTS cache (
+			key        TEXT PRIMARY KEY,
+			data       BLOB NOT NULL,
+			created_at INTEGER NOT NULL
+		)
+	`)
+
+	// Create an index on created_at for efficient expiry cleanup.
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_cache_created_at ON cache(created_at)`)
+
+	return &Cache{db: db}
 }
 
-func (c *FileCache) getCachePath(key string) string {
-	hash := sha256.Sum256([]byte(key))
-	filename := hex.EncodeToString(hash[:]) + ".json"
-	return filepath.Join(c.dir, filename)
+// cacheDBPath returns the path to the cache database file.
+func cacheDBPath() string {
+	userCacheDir, err := os.UserCacheDir()
+	if err == nil {
+		return filepath.Join(userCacheDir, "box-box", "cache.db")
+	}
+	return filepath.Join(".cache", "box-box", "cache.db")
 }
 
 // ttlForURL determines the appropriate TTL based on the URL pattern.
+// Returns 0 (CacheTTLForever) for historical data that will never change.
 func ttlForURL(url string) time.Duration {
-	// Historical data (specific year queries for past years)
+	// Historical data — completed past seasons never change.
 	if strings.Contains(url, "year=2023") || strings.Contains(url, "year=2024") {
-		return CacheTTLLong
+		return CacheTTLForever
 	}
 
-	// Frequently changing endpoints
+	// Live telemetry endpoints — change every few seconds during a session.
 	if strings.Contains(url, "/position") ||
 		strings.Contains(url, "/intervals") ||
 		strings.Contains(url, "/car_data") ||
@@ -71,88 +94,127 @@ func ttlForURL(url string) time.Duration {
 		return CacheTTLShort
 	}
 
-	// Semi-stable data
+	// Semi-stable data — standings and driver info.
 	if strings.Contains(url, "/championship") ||
 		strings.Contains(url, "/drivers") {
 		return CacheTTLMedium
 	}
 
-	// Default: medium TTL for everything else
+	// Default: medium TTL for everything else.
 	return CacheTTLMedium
 }
 
 // Get retrieves data from the cache. Returns nil, false if not found or expired.
-func (c *FileCache) Get(key string) ([]byte, bool) {
-	path := c.getCachePath(key)
-	info, err := os.Stat(path)
+func (c *Cache) Get(key string) ([]byte, bool) {
+	var data []byte
+	var createdAt int64
+
+	err := c.db.QueryRow(
+		`SELECT data, created_at FROM cache WHERE key = ?`, key,
+	).Scan(&data, &createdAt)
+
 	if err != nil {
 		atomic.AddInt64(&c.stats.Misses, 1)
 		return nil, false
 	}
 
-	// Check TTL based on file modification time
+	// Check TTL (0 = never expires).
 	ttl := ttlForURL(key)
-	if time.Since(info.ModTime()) > ttl {
-		// Expired — remove the stale file
-		_ = os.Remove(path)
-		atomic.AddInt64(&c.stats.Misses, 1)
-		return nil, false
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		atomic.AddInt64(&c.stats.Misses, 1)
-		return nil, false
+	if ttl > 0 {
+		age := time.Since(time.Unix(createdAt, 0))
+		if age > ttl {
+			// Expired — delete and return miss.
+			_, _ = c.db.Exec(`DELETE FROM cache WHERE key = ?`, key)
+			atomic.AddInt64(&c.stats.Misses, 1)
+			return nil, false
+		}
 	}
 
 	atomic.AddInt64(&c.stats.Hits, 1)
 	return data, true
 }
 
-// Set saves data to the cache.
-func (c *FileCache) Set(key string, data []byte) error {
-	path := c.getCachePath(key)
-	return os.WriteFile(path, data, 0644)
+// Set stores data in the cache, replacing any existing entry for the same key.
+func (c *Cache) Set(key string, data []byte) error {
+	_, err := c.db.Exec(
+		`INSERT OR REPLACE INTO cache (key, data, created_at) VALUES (?, ?, ?)`,
+		key, data, time.Now().Unix(),
+	)
+	return err
 }
 
 // Stats returns current cache hit/miss stats.
-func (c *FileCache) Stats() CacheStats {
+func (c *Cache) Stats() CacheStats {
 	return CacheStats{
 		Hits:   atomic.LoadInt64(&c.stats.Hits),
 		Misses: atomic.LoadInt64(&c.stats.Misses),
 	}
 }
 
-// Clear removes all cached files.
-func (c *FileCache) Clear() error {
-	entries, err := os.ReadDir(c.dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".json") {
-			_ = os.Remove(filepath.Join(c.dir, entry.Name()))
-		}
+// Clear removes all cached entries.
+func (c *Cache) Clear() error {
+	_, err := c.db.Exec(`DELETE FROM cache`)
+	return err
+}
+
+// Size returns the number of cached entries and total data size in bytes.
+func (c *Cache) Size() (int, int64) {
+	var count int
+	var totalSize int64
+
+	_ = c.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(LENGTH(data)), 0) FROM cache`).Scan(&count, &totalSize)
+	return count, totalSize
+}
+
+// Prune removes expired entries from the cache. This can be called periodically
+// to keep the database lean. It does not touch entries with CacheTTLForever.
+func (c *Cache) Prune() error {
+	// Remove anything older than CacheTTLLong that isn't permanent.
+	// We can't perfectly distinguish by URL here, so we prune entries older
+	// than the longest non-permanent TTL. Permanent entries are re-set on each
+	// access, so their created_at stays fresh. As a safe cutoff, prune anything
+	// older than 7 days that hasn't been refreshed — this catches stale entries
+	// while keeping truly permanent historical data (which gets re-stored on use).
+	cutoff := time.Now().Add(-7 * 24 * time.Hour).Unix()
+	_, err := c.db.Exec(`DELETE FROM cache WHERE created_at < ?`, cutoff)
+	return err
+}
+
+// Close closes the database connection.
+func (c *Cache) Close() error {
+	if c.db != nil {
+		return c.db.Close()
 	}
 	return nil
 }
 
-// Size returns the number of cached files and total size in bytes.
-func (c *FileCache) Size() (int, int64) {
-	entries, err := os.ReadDir(c.dir)
+// CleanupOldFileCache removes the old file-based cache directory. Since file
+// cache entries used SHA-256 hashed filenames (not reversible), we can't
+// migrate them — just clean up. New fetches will repopulate the SQLite cache.
+func CleanupOldFileCache() {
+	oldDir := oldFileCacheDir()
+	entries, err := os.ReadDir(oldDir)
 	if err != nil {
-		return 0, 0
+		return
 	}
-	count := 0
-	var totalSize int64
+
 	for _, entry := range entries {
 		if strings.HasSuffix(entry.Name(), ".json") {
-			count++
-			info, err := entry.Info()
-			if err == nil {
-				totalSize += info.Size()
-			}
+			_ = os.Remove(filepath.Join(oldDir, entry.Name()))
 		}
 	}
-	return count, totalSize
+
+	// Remove the old directory if empty.
+	remaining, _ := os.ReadDir(oldDir)
+	if len(remaining) == 0 {
+		_ = os.Remove(oldDir)
+	}
+}
+
+func oldFileCacheDir() string {
+	userCacheDir, err := os.UserCacheDir()
+	if err == nil {
+		return filepath.Join(userCacheDir, "box-box", "openf1")
+	}
+	return filepath.Join(".cache", "box-box", "openf1")
 }

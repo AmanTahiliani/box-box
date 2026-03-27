@@ -216,8 +216,7 @@ func (m StandingsModel) View() string {
 		return fmt.Sprintf("\n  %s  Loading %d championship standings...", m.spinner.View(), m.year)
 	}
 	if m.err != nil {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v\n\n", m.err)) +
-			helpBar("r retry", "q quit")
+		return renderErrorView(m.err)
 	}
 
 	var sb strings.Builder

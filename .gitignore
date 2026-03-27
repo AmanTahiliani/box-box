@@ -1,0 +1,11 @@
+# Binaries
+cmd/cmd
+box-box
+
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+
+# Old file cache
+.cache/

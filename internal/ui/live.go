@@ -161,7 +161,7 @@ func (m LiveModel) Update(msg tea.Msg) (LiveModel, tea.Cmd) {
 			return m, nil
 		}
 		m.err = nil
-		
+
 		// Get latest positions and intervals per driver
 		for _, p := range msg.positions {
 			current, exists := m.positions[p.DriverNumber]
@@ -185,7 +185,7 @@ func (m LiveModel) View() string {
 		return fmt.Sprintf("\n  %s  Loading live telemetry...", m.spinner.View())
 	}
 	if m.err != nil && len(m.positions) == 0 {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v\n", m.err))
+		return renderErrorView(m.err)
 	}
 	if m.session == nil {
 		return styleMuted.Render("\n  No active session found.\n")
@@ -193,7 +193,7 @@ func (m LiveModel) View() string {
 
 	var sb strings.Builder
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red)).Bold(true)
-	
+
 	sb.WriteString("\n  " + titleStyle.Render(fmt.Sprintf("LIVE: %s", m.session.SessionName)) + "\n\n")
 
 	if len(m.positions) == 0 {
@@ -217,7 +217,7 @@ func (m LiveModel) View() string {
 	for _, d := range drivers {
 		pos := m.positions[d].Position
 		interval := m.intervals[d]
-		
+
 		gapToLeader := "LAP"
 		if interval.GapToLeader != nil {
 			gapToLeader = fmt.Sprintf("+%.3fs", *interval.GapToLeader)

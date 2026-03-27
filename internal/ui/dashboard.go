@@ -109,7 +109,7 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 		}
 		m.meetings = msg.meetings
 		now := time.Now()
-		
+
 		for i := range m.meetings {
 			mtg := m.meetings[i]
 			end, _ := time.Parse(time.RFC3339, mtg.DateEnd)
@@ -124,7 +124,7 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 		}
 		m.loading = false
 		return m, nil
-		
+
 	case dashboardSessionsLoadedMsg:
 		m.loading = false
 		if msg.err == nil {
@@ -134,6 +134,12 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 
 	case tickCountdownMsg:
 		return m, tickCountdown()
+	case tea.KeyMsg:
+		if matchKey(msg, GlobalKeys.Retry) && m.err != nil {
+			m.err = nil
+			m.loading = true
+			return m, m.Init()
+		}
 	}
 	return m, nil
 }
@@ -143,7 +149,7 @@ func (m DashboardModel) View() string {
 		return fmt.Sprintf("\n  %s  Loading dashboard...", m.spinner.View())
 	}
 	if m.err != nil {
-		return styleError.Render(fmt.Sprintf("\n  Error: %v\n", m.err))
+		return renderErrorView(m.err)
 	}
 
 	if m.next == nil {
@@ -163,7 +169,7 @@ func (m DashboardModel) View() string {
 	sb.WriteString("\n")
 	sb.WriteString(titleStyle.Render(fmt.Sprintf("  NEXT RACE: %s", m.next.MeetingOfficialName)) + "\n")
 	sb.WriteString(fmt.Sprintf("  %s • %s\n", countryFlag(m.next.CountryCode), m.next.Location))
-	
+
 	now := time.Now()
 	end, _ := time.Parse(time.RFC3339, m.next.DateEnd)
 	endLocal := end.Local()
@@ -179,7 +185,7 @@ func (m DashboardModel) View() string {
 			break
 		}
 	}
-	
+
 	if !startFound {
 		nextStart, _ = time.Parse(time.RFC3339, m.next.DateStart)
 		nextStart = nextStart.Local()
@@ -201,7 +207,7 @@ func (m DashboardModel) View() string {
 	}
 
 	sb.WriteString("\n")
-	
+
 	// Weekend Schedule
 	if len(m.sessions) > 0 {
 		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Bold(true).Render("  WEEKEND SCHEDULE (Local Time)") + "\n")
@@ -210,12 +216,12 @@ func (m DashboardModel) View() string {
 			stLocal := st.Local()
 			day := stLocal.Format("Mon 02 Jan")
 			tStr := stLocal.Format("15:04")
-			
+
 			rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
 			if now.After(stLocal) {
 				rowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
 			}
-			
+
 			sb.WriteString(rowStyle.Render(fmt.Sprintf("  %-15s %-12s %s", s.SessionName, day, tStr)) + "\n")
 		}
 	}

@@ -11,7 +11,17 @@ import (
 )
 
 func main() {
-	client := api.NewOpenF1Client("https://api.openf1.org", 15*time.Second)
+	var client *api.OpenF1Client
+	if apiKey := os.Getenv("OPENF1_API_KEY"); apiKey != "" {
+		client = api.NewOpenF1ClientWithKey("https://api.openf1.org", 15*time.Second, apiKey)
+	} else {
+		client = api.NewOpenF1Client("https://api.openf1.org", 15*time.Second)
+	}
+	defer client.Close()
+
+	// Clean up old file-based cache (one-time migration).
+	go api.CleanupOldFileCache()
+
 	model := ui.NewAppModel(client)
 
 	p := tea.NewProgram(

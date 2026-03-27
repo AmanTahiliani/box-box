@@ -114,3 +114,9 @@ type driverSelectedMsg struct {
 	driver     models.Driver
 	sessionKey int
 }
+
+// loadSecondaryDataMsg triggers loading of secondary session data (race control, weather, overtakes)
+// after the primary data (results, drivers) has arrived.
+type loadSecondaryDataMsg struct {
+	sessionKey int
+}

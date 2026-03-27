@@ -29,10 +29,12 @@ type RaceDetailModel struct {
 	resultsCursor   int
 	resultsScroll   int
 
-	loadingSessions bool
-	loadingResults  bool
-	errSessions     error
-	errResults      error
+	loadingSessions  bool
+	loadingResults   bool
+	driversLoaded    bool
+	secondaryLoading bool
+	errSessions      error
+	errResults       error
 
 	spinner spinner.Model
 	rcView  viewport.Model
@@ -65,6 +67,8 @@ func fetchSessions(client *api.OpenF1Client, meetingKey int) tea.Cmd {
 	}
 }
 
+// fetchSessionData fetches primary data (results + drivers) for a session.
+// Secondary data (race control, weather, overtakes) is loaded after primary data arrives.
 func fetchSessionData(client *api.OpenF1Client, sessionKey int) tea.Cmd {
 	return tea.Batch(
 		func() tea.Msg {
@@ -75,6 +79,12 @@ func fetchSessionData(client *api.OpenF1Client, sessionKey int) tea.Cmd {
 			drivers, err := client.GetDriversForSession(sessionKey)
 			return sessionDriversLoadedMsg{drivers: drivers, err: err}
 		},
+	)
+}
+
+// fetchSecondaryData fetches lower-priority data (race control, weather, overtakes).
+func fetchSecondaryData(client *api.OpenF1Client, sessionKey int) tea.Cmd {
+	return tea.Batch(
 		func() tea.Msg {
 			msgs, err := client.GetRaceControl(sessionKey)
 			return raceControlLoadedMsg{messages: msgs, err: err}
@@ -117,6 +127,8 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 		m.resultsScroll = 0
 		m.loadingSessions = true
 		m.loadingResults = false
+		m.driversLoaded = false
+		m.secondaryLoading = false
 		m.errSessions = nil
 		m.errResults = nil
 		m.rcReady = false
@@ -142,6 +154,8 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			sess := m.sessions[raceIdx]
 			m.selectedSession = &sess
 			m.loadingResults = true
+			m.driversLoaded = false
+			m.secondaryLoading = false
 			m.results = nil
 			m.rcMsgs = nil
 			m.weather = nil
@@ -154,6 +168,8 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			sess := m.sessions[lastIdx]
 			m.selectedSession = &sess
 			m.loadingResults = true
+			m.driversLoaded = false
+			m.secondaryLoading = false
 			m.drivers = make(map[int]models.Driver)
 			cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, sess.SessionKey))
 		}
@@ -167,7 +183,9 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 		m.results = msg.results
 		m.resultsCursor = 0
 		m.resultsScroll = 0
-		m.checkResultsLoaded()
+		if cmd := m.checkPrimaryLoaded(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 
 	case sessionDriversLoadedMsg:
 		if msg.err == nil {
@@ -175,7 +193,16 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 				m.drivers[d.DriverNumber] = d
 			}
 		}
-		m.checkResultsLoaded()
+		m.driversLoaded = true
+		if cmd := m.checkPrimaryLoaded(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+	case loadSecondaryDataMsg:
+		// Only load secondary data if it's still for the currently selected session
+		if m.selectedSession != nil && m.selectedSession.SessionKey == msg.sessionKey {
+			cmds = append(cmds, fetchSecondaryData(m.client, msg.sessionKey))
+		}
 
 	case raceControlLoadedMsg:
 		if msg.err == nil {
@@ -203,6 +230,8 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			} else if m.errResults != nil && m.selectedSession != nil {
 				m.errResults = nil
 				m.loadingResults = true
+				m.driversLoaded = false
+				m.secondaryLoading = false
 				cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, m.selectedSession.SessionKey))
 			}
 		case matchKey(msg, GlobalKeys.Up):
@@ -248,6 +277,9 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 				sess := m.sessions[m.sessionCursor]
 				m.selectedSession = &sess
 				m.loadingResults = true
+				m.driversLoaded = false
+				m.secondaryLoading = false
+				m.errResults = nil
 				m.results = nil
 				m.rcMsgs = nil
 				m.weather = nil
@@ -264,10 +296,42 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 		case matchKey(msg, RaceDetailKeys.PrevSession):
 			if m.sessionCursor > 0 {
 				m.sessionCursor--
+				sess := m.sessions[m.sessionCursor]
+				if m.selectedSession == nil || m.selectedSession.SessionKey != sess.SessionKey {
+					m.selectedSession = &sess
+					m.loadingResults = true
+					m.driversLoaded = false
+					m.secondaryLoading = false
+					m.errResults = nil
+					m.results = nil
+					m.rcMsgs = nil
+					m.weather = nil
+					m.overtakes = nil
+					m.resultsCursor = 0
+					m.resultsScroll = 0
+					m.drivers = make(map[int]models.Driver)
+					cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, sess.SessionKey))
+				}
 			}
 		case matchKey(msg, RaceDetailKeys.NextSession):
 			if m.sessionCursor < len(m.sessions)-1 {
 				m.sessionCursor++
+				sess := m.sessions[m.sessionCursor]
+				if m.selectedSession == nil || m.selectedSession.SessionKey != sess.SessionKey {
+					m.selectedSession = &sess
+					m.loadingResults = true
+					m.driversLoaded = false
+					m.secondaryLoading = false
+					m.errResults = nil
+					m.results = nil
+					m.rcMsgs = nil
+					m.weather = nil
+					m.overtakes = nil
+					m.resultsCursor = 0
+					m.resultsScroll = 0
+					m.drivers = make(map[int]models.Driver)
+					cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, sess.SessionKey))
+				}
 			}
 		}
 	}
@@ -281,10 +345,19 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *RaceDetailModel) checkResultsLoaded() {
-	if m.results != nil {
+// checkPrimaryLoaded checks if both results and drivers have arrived.
+// If so, marks loading complete and returns a command to trigger secondary data loading.
+func (m *RaceDetailModel) checkPrimaryLoaded() tea.Cmd {
+	if m.results != nil && m.driversLoaded {
 		m.loadingResults = false
+		if m.selectedSession != nil && !m.secondaryLoading {
+			m.secondaryLoading = true
+			return func() tea.Msg {
+				return loadSecondaryDataMsg{sessionKey: m.selectedSession.SessionKey}
+			}
+		}
 	}
+	return nil
 }
 
 func (m RaceDetailModel) resultsVisibleRows() int {
@@ -395,7 +468,7 @@ func (m RaceDetailModel) View() string {
 		sb.WriteString(panels + "\n")
 	}
 
-	sb.WriteString(helpBar("[/] sessions", "enter load", "j/k results", "g/G top/bottom", "K/J scroll RC", "b back", "q quit"))
+	sb.WriteString(helpBar("[/] sessions", "j/k results", "g/G top/bottom", "K/J scroll RC", "b back", "q quit"))
 	return sb.String()
 }
 
@@ -404,7 +477,7 @@ func (m RaceDetailModel) renderSessionPills() string {
 		return fmt.Sprintf("  %s Loading sessions...", m.spinner.View())
 	}
 	if m.errSessions != nil {
-		return styleError.Render(fmt.Sprintf("  Error: %v", m.errSessions))
+		return renderErrorView(m.errSessions)
 	}
 
 	var pills []string
@@ -444,11 +517,11 @@ func (m RaceDetailModel) renderResults(width int) string {
 		return sb.String()
 	}
 	if m.errResults != nil {
-		sb.WriteString(styleError.Render(fmt.Sprintf("  Error: %v\n", m.errResults)))
+		sb.WriteString(renderErrorView(m.errResults))
 		return sb.String()
 	}
 	if m.selectedSession == nil {
-		sb.WriteString(styleMuted.Render("  Press Enter to load session results.\n"))
+		sb.WriteString(styleMuted.Render("  Use [ ] to select a session.\n"))
 		return sb.String()
 	}
 	if len(m.results) == 0 {
