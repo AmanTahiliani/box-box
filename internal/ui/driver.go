@@ -603,6 +603,12 @@ func (m DriverModel) renderDetailContent() string {
 	sb.WriteString(m.renderStintBar())
 	sb.WriteString("\n\n")
 
+	// ── TYRE DEGRADATION ────────────────────────────────
+	if degContent := m.renderTyreDegradation(); degContent != "" {
+		sb.WriteString(degContent)
+		sb.WriteString("\n")
+	}
+
 	// ── LAP TIMES ───────────────────────────────────────
 	sb.WriteString("  " + styleSectionTitle.Render("LAP TIMES") + "\n")
 	sparkWidth := min(m.width-6, 70)
@@ -650,6 +656,12 @@ func (m DriverModel) renderDetailContent() string {
 		}
 	}
 	sb.WriteString("\n\n")
+
+	// ── SECTOR ANALYSIS ─────────────────────────────────
+	if sectorContent := m.renderSectorAnalysis(); sectorContent != "" {
+		sb.WriteString(sectorContent)
+		sb.WriteString("\n")
+	}
 
 	// ── PIT STOPS ───────────────────────────────────────
 	sb.WriteString("  " + styleSectionTitle.Render("PIT STOPS") + "\n")
@@ -870,6 +882,288 @@ func (m DriverModel) renderPositionChart() string {
 			}
 		}
 		sb.WriteString("\n")
+	}
+
+	return sb.String()
+}
+
+// renderSectorAnalysis renders sector time and speed trap analysis from existing lap data.
+func (m DriverModel) renderSectorAnalysis() string {
+	if len(m.laps) < 2 {
+		return ""
+	}
+
+	// Collect valid sector times and speeds
+	type sectorStats struct {
+		best    float64
+		total   float64
+		count   int
+		bestLap int
+	}
+	var s1, s2, s3 sectorStats
+	s1.best, s2.best, s3.best = 999, 999, 999
+
+	var speeds []int // speed trap values
+	var bestSpeed, bestSpeedLap int
+
+	for _, lap := range m.laps {
+		if lap.IsPitOutLap {
+			continue
+		}
+		if lap.DurationSector1 != nil && *lap.DurationSector1 > 0 {
+			v := *lap.DurationSector1
+			s1.total += v
+			s1.count++
+			if v < s1.best {
+				s1.best = v
+				s1.bestLap = lap.LapNumber
+			}
+		}
+		if lap.DurationSector2 != nil && *lap.DurationSector2 > 0 {
+			v := *lap.DurationSector2
+			s2.total += v
+			s2.count++
+			if v < s2.best {
+				s2.best = v
+				s2.bestLap = lap.LapNumber
+			}
+		}
+		if lap.DurationSector3 != nil && *lap.DurationSector3 > 0 {
+			v := *lap.DurationSector3
+			s3.total += v
+			s3.count++
+			if v < s3.best {
+				s3.best = v
+				s3.bestLap = lap.LapNumber
+			}
+		}
+		if lap.StSpeed > 0 {
+			speeds = append(speeds, lap.StSpeed)
+			if lap.StSpeed > bestSpeed {
+				bestSpeed = lap.StSpeed
+				bestSpeedLap = lap.LapNumber
+			}
+		}
+	}
+
+	// Need at least some sector data
+	if s1.count == 0 && s2.count == 0 && s3.count == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("  " + styleSectionTitle.Render("SECTOR ANALYSIS") + "\n")
+
+	// Sector best/avg table
+	header := fmt.Sprintf("    %s  %s  %s",
+		padRight("", 3),
+		padLeft("BEST", 10),
+		padLeft("AVG", 10),
+	)
+	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Bold(true).Render(header) + "\n")
+
+	sectors := []struct {
+		name  string
+		stats sectorStats
+	}{
+		{"S1", s1},
+		{"S2", s2},
+		{"S3", s3},
+	}
+
+	// Theoretical best lap
+	var theoreticalBest float64
+
+	for _, sec := range sectors {
+		if sec.stats.count == 0 {
+			sb.WriteString(fmt.Sprintf("    %s  %s  %s\n",
+				styleBold.Render(padRight(sec.name, 3)),
+				padLeft("--", 10),
+				padLeft("--", 10),
+			))
+			continue
+		}
+
+		theoreticalBest += sec.stats.best
+		avg := sec.stats.total / float64(sec.stats.count)
+
+		bestStr := lipgloss.NewStyle().Foreground(lipgloss.Color(colorPurple)).Bold(true).
+			Render(fmt.Sprintf("%.3f", sec.stats.best))
+		avgStr := styleBold.Render(fmt.Sprintf("%.3f", avg))
+
+		sb.WriteString(fmt.Sprintf("    %s  %s  %s  %s\n",
+			styleBold.Render(padRight(sec.name, 3)),
+			padLeftVisible(bestStr, 10),
+			padLeftVisible(avgStr, 10),
+			styleMuted.Render(fmt.Sprintf("L%d", sec.stats.bestLap)),
+		))
+	}
+
+	// Theoretical best
+	if theoreticalBest > 0 {
+		theoryStr := lipgloss.NewStyle().Foreground(lipgloss.Color(colorPurple)).Bold(true).
+			Render(formatSeconds(theoreticalBest))
+		sb.WriteString(fmt.Sprintf("    %s %s\n",
+			styleMuted.Render("Theoretical best:"),
+			theoryStr,
+		))
+	}
+
+	// Speed trap summary
+	if len(speeds) > 0 && bestSpeed > 0 {
+		var totalSpeed int
+		for _, s := range speeds {
+			totalSpeed += s
+		}
+		avgSpeed := totalSpeed / len(speeds)
+
+		sb.WriteString(fmt.Sprintf("    %s %s  %s %s  %s\n",
+			styleMuted.Render("Top speed:"),
+			lipgloss.NewStyle().Foreground(lipgloss.Color(colorCyan)).Bold(true).
+				Render(fmt.Sprintf("%dkm/h", bestSpeed)),
+			styleMuted.Render("Avg:"),
+			styleBold.Render(fmt.Sprintf("%dkm/h", avgSpeed)),
+			styleMuted.Render(fmt.Sprintf("(L%d)", bestSpeedLap)),
+		))
+
+		// Speed sparkline
+		sparkWidth := min(len(speeds), min(m.width-8, 50))
+		if sparkWidth >= 3 {
+			sb.WriteString("    " + speedSparkline(speeds, sparkWidth) + "\n")
+		}
+	}
+
+	return sb.String()
+}
+
+// stintLapTimes returns the valid (non-pit, non-nil) lap durations for a stint,
+// along with the lap numbers. Used for degradation computation.
+func (m DriverModel) stintLapTimes(stint models.Stint) ([]float64, []int) {
+	var durations []float64
+	var lapNums []int
+	for _, lap := range m.laps {
+		if lap.LapNumber < stint.LapStart || lap.LapNumber > stint.LapEnd {
+			continue
+		}
+		if lap.IsPitOutLap || lap.LapDuration == nil || *lap.LapDuration <= 0 {
+			continue
+		}
+		durations = append(durations, *lap.LapDuration)
+		lapNums = append(lapNums, lap.LapNumber)
+	}
+	return durations, lapNums
+}
+
+// renderTyreDegradation computes and renders degradation analysis per stint.
+// Returns empty string if insufficient data.
+func (m DriverModel) renderTyreDegradation() string {
+	if len(m.stints) == 0 || len(m.laps) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("  " + styleSectionTitle.Render("TYRE DEGRADATION") + "\n")
+
+	hasData := false
+	for _, stint := range m.stints {
+		durations, lapNums := m.stintLapTimes(stint)
+		if len(durations) < 3 {
+			continue
+		}
+		hasData = true
+
+		compoundStyle := tyreStyle(stint.Compound)
+		label := compoundStyle.Render(fmt.Sprintf("%s L%d-%d", tyreAbbrev(stint.Compound), stint.LapStart, stint.LapEnd))
+		lapsOnTyre := stint.LapEnd - stint.LapStart + 1
+		if stint.TyreAgeAtStart > 0 {
+			label += styleMuted.Render(fmt.Sprintf(" (used +%d)", stint.TyreAgeAtStart))
+		}
+		sb.WriteString(fmt.Sprintf("  %s  %s laps\n", label, styleMuted.Render(fmt.Sprintf("%d", lapsOnTyre))))
+
+		// Find best and average lap time in stint
+		bestTime := durations[0]
+		var total float64
+		for _, d := range durations {
+			total += d
+			if d < bestTime {
+				bestTime = d
+			}
+		}
+		avgTime := total / float64(len(durations))
+
+		// Degradation rate: compare first 3 laps avg vs last 3 laps avg
+		firstN := 3
+		lastN := 3
+		if len(durations) < 6 {
+			firstN = len(durations) / 2
+			lastN = len(durations) / 2
+		}
+		if firstN < 1 {
+			firstN = 1
+		}
+		if lastN < 1 {
+			lastN = 1
+		}
+
+		var earlySum, lateSum float64
+		for i := 0; i < firstN; i++ {
+			earlySum += durations[i]
+		}
+		for i := len(durations) - lastN; i < len(durations); i++ {
+			lateSum += durations[i]
+		}
+		earlyAvg := earlySum / float64(firstN)
+		lateAvg := lateSum / float64(lastN)
+		degTotal := lateAvg - earlyAvg
+		degPerLap := degTotal / float64(len(durations)-1)
+
+		// Stats line
+		bestStr := lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen)).Render(formatSeconds(bestTime))
+		avgStr := styleBold.Render(formatSeconds(avgTime))
+		sb.WriteString(fmt.Sprintf("    Best %s  Avg %s", bestStr, avgStr))
+
+		// Deg rate with color coding
+		if degPerLap > 0 {
+			var degStyle lipgloss.Style
+			switch {
+			case degPerLap < 0.05:
+				degStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
+			case degPerLap < 0.15:
+				degStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorYellow))
+			default:
+				degStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red))
+			}
+			sb.WriteString(fmt.Sprintf("  Deg %s",
+				degStyle.Render(fmt.Sprintf("+%.3fs/lap", degPerLap))))
+		} else {
+			sb.WriteString(fmt.Sprintf("  Deg %s",
+				lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen)).Render("improving")))
+		}
+		sb.WriteString("\n")
+
+		// Mini sparkline for this stint's lap times
+		sparkWidth := min(len(durations), min(m.width-8, 50))
+		if sparkWidth >= 3 {
+			// Build mini laps slice for sparkline
+			stintLaps := make([]models.Lap, len(durations))
+			for i, d := range durations {
+				dur := d
+				stintLaps[i] = models.Lap{
+					LapDuration: &dur,
+					LapNumber:   lapNums[i],
+				}
+			}
+			sb.WriteString("    " + sparkline(stintLaps, sparkWidth) + "\n")
+			sb.WriteString(fmt.Sprintf("    %s%s%s\n",
+				styleMuted.Render(fmt.Sprintf("L%d", stint.LapStart)),
+				strings.Repeat(" ", max(sparkWidth-8, 1)),
+				styleMuted.Render(fmt.Sprintf("L%d", stint.LapEnd)),
+			))
+		}
+	}
+
+	if !hasData {
+		return ""
 	}
 
 	return sb.String()

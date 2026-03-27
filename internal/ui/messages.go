@@ -115,6 +115,12 @@ type driverSelectedMsg struct {
 	sessionKey int
 }
 
+// startingGridLoadedMsg carries starting grid data for a session.
+type startingGridLoadedMsg struct {
+	grid []models.StartingGrid
+	err  error
+}
+
 // loadSecondaryDataMsg triggers loading of secondary session data (race control, weather, overtakes)
 // after the primary data (results, drivers) has arrived.
 type loadSecondaryDataMsg struct {

@@ -21,10 +21,13 @@ const (
 	tabRaceDetail tabIndex = 3
 	tabDriver     tabIndex = 4
 	tabLive       tabIndex = 5
+	tabTrackMap   tabIndex = 6
 )
 
-var tabNames = []string{"Home", "Standings", "Calendar", "Race", "Drivers", "Live"}
-var tabIcons = []string{"🏠", "🏆", "📅", "🏁", "👤", "🔴"}
+const numTabs = 7
+
+var tabNames = []string{"Home", "Standings", "Calendar", "Race", "Drivers", "Live", "Map"}
+var tabIcons = []string{"🏠", "🏆", "📅", "🏁", "👤", "🔴", "🗺"}
 
 // splashDoneMsg is sent after the splash screen duration has elapsed.
 type splashDoneMsg struct{}
@@ -44,6 +47,7 @@ type AppModel struct {
 	driver     DriverModel
 	dashboard  DashboardModel
 	live       OfficialLiveModel
+	trackMap   TrackMapModel
 
 	meetings []models.Meeting
 
@@ -69,6 +73,7 @@ func NewAppModel(client *api.OpenF1Client) AppModel {
 		driver:        NewDriverModel(client),
 		dashboard:     NewDashboardModel(client, year),
 		live:          NewOfficialLiveModel(),
+		trackMap:      NewTrackMapModel(client),
 		showSplash:    true,
 		splashSpinner: sp,
 	}
@@ -88,6 +93,7 @@ func (m AppModel) Init() tea.Cmd {
 		m.calendar.Init(),
 		m.raceDetail.Init(),
 		m.driver.Init(),
+		m.trackMap.Init(),
 		m.splashSpinner.Tick,
 		splashTimer(),
 	)
@@ -103,14 +109,15 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := m.height - 5 // tab bar(2) + status bar + help + spacing
 		m.raceDetail.SetSize(m.width-4, contentHeight)
 		m.live.SetSize(m.width, contentHeight)
-		var cmd1, cmd2, cmd3, cmd4, cmd5, cmd6 tea.Cmd
+		var cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7 tea.Cmd
 		m.dashboard, cmd1 = m.dashboard.Update(msg)
 		m.live, cmd2 = m.live.Update(msg)
 		m.standings, cmd3 = m.standings.Update(msg)
 		m.calendar, cmd4 = m.calendar.Update(msg)
 		m.raceDetail, cmd5 = m.raceDetail.Update(msg)
 		m.driver, cmd6 = m.driver.Update(msg)
-		return m, tea.Batch(cmd1, cmd2, cmd3, cmd4, cmd5, cmd6)
+		m.trackMap, cmd7 = m.trackMap.Update(msg)
+		return m, tea.Batch(cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7)
 
 	case splashDoneMsg:
 		m.showSplash = false
@@ -150,8 +157,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case matchKey(msg, GlobalKeys.Tab6):
 			m.activeTab = tabLive
 			return m, nil
+		case matchKey(msg, GlobalKeys.Tab7):
+			m.activeTab = tabTrackMap
+			if !m.trackMap.HasSession() {
+				var cmd tea.Cmd
+				m.trackMap, cmd = m.trackMap.FetchActiveSession(m.client)
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
 		case matchKey(msg, GlobalKeys.NextTab):
-			m.activeTab = (m.activeTab + 1) % 6
+			m.activeTab = (m.activeTab + 1) % numTabs
 			if m.activeTab == tabDriver {
 				var cmd tea.Cmd
 				m.driver, cmd = m.driver.TriggerLoad()
@@ -159,7 +174,7 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		case matchKey(msg, GlobalKeys.PrevTab):
-			m.activeTab = (m.activeTab - 1 + 6) % 6
+			m.activeTab = (m.activeTab - 1 + numTabs) % numTabs
 			if m.activeTab == tabDriver {
 				var cmd tea.Cmd
 				m.driver, cmd = m.driver.TriggerLoad()
@@ -262,6 +277,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
 
+	case startingGridLoadedMsg:
+		var cmd tea.Cmd
+		m.raceDetail, cmd = m.raceDetail.Update(msg)
+		cmds = append(cmds, cmd)
+		return m, tea.Batch(cmds...)
+
 	case loadSecondaryDataMsg:
 		var cmd tea.Cmd
 		m.raceDetail, cmd = m.raceDetail.Update(msg)
@@ -308,6 +329,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.live, cmd = m.live.Update(msg)
 		cmds = append(cmds, cmd)
+		// Forward driver info to track map for car-marker colouring
+		m.trackMap.InjectDriverInfo(msg.DriverInfo)
+		return m, tea.Batch(cmds...)
+
+	case trackOutlineLoadedMsg, trackCarsLoadedMsg, trackMapTickMsg:
+		var cmd tea.Cmd
+		m.trackMap, cmd = m.trackMap.Update(msg)
+		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
 
 	case spinner.TickMsg:
@@ -316,12 +345,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.splashSpinner, cmd = m.splashSpinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
-		var cmd1, cmd2, cmd3, cmd4 tea.Cmd
+		var cmd1, cmd2, cmd3, cmd4, cmd5 tea.Cmd
 		m.standings, cmd1 = m.standings.Update(msg)
 		m.calendar, cmd2 = m.calendar.Update(msg)
 		m.raceDetail, cmd3 = m.raceDetail.Update(msg)
 		m.driver, cmd4 = m.driver.Update(msg)
-		cmds = append(cmds, cmd1, cmd2, cmd3, cmd4)
+		m.trackMap, cmd5 = m.trackMap.Update(msg)
+		cmds = append(cmds, cmd1, cmd2, cmd3, cmd4, cmd5)
 		return m, tea.Batch(cmds...)
 	}
 
@@ -350,6 +380,10 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tabDriver:
 		var cmd tea.Cmd
 		m.driver, cmd = m.driver.Update(msg)
+		cmds = append(cmds, cmd)
+	case tabTrackMap:
+		var cmd tea.Cmd
+		m.trackMap, cmd = m.trackMap.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -387,6 +421,8 @@ func (m AppModel) View() string {
 		content = m.raceDetail.View()
 	case tabDriver:
 		content = m.driver.View()
+	case tabTrackMap:
+		content = m.trackMap.View()
 	}
 
 	statusBar := m.renderStatusBar(w)
@@ -497,7 +533,7 @@ func (m AppModel) renderStatusBar(width int) string {
 	// Right side: cache stats + navigation hints
 	cacheStats := m.client.CacheStats()
 	cacheInfo := styleMuted.Render(fmt.Sprintf("cache %d/%d", cacheStats.Hits, cacheStats.Hits+cacheStats.Misses))
-	right := cacheInfo + "  " + styleMuted.Render("1-6 tabs · y year · q quit")
+	right := cacheInfo + "  " + styleMuted.Render("1-7 tabs · y year · q quit")
 
 	leftW := lipgloss.Width(left)
 	rightW := lipgloss.Width(right)

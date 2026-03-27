@@ -17,6 +17,11 @@
 - 📅 **Race Calendar**: The full 2025 schedule at your fingertips.
 - 🏎️ **Race Details**: Deep dive into session results, starting grids, and lap data.
 - 👤 **Driver Profiles**: Detailed stats for every driver on the grid.
+- 🔴 **Official Live Timing**: Real-time F1 timing tower via the official SignalR feed — gaps, intervals, tyre age, sector times, DRS, and track status.
+- ⚔️ **Battle Tracker**: Auto-detects on-track duels within DRS range with gap sparklines and tyre strategy comparison.
+- 🔧 **Pit Window Calculator**: Predicts rejoin position if a driver pits now, using per-circuit pit loss times.
+- ⏪ **Race Replay**: Lap-by-lap scrubber for completed races — relive the whole field's evolution with pit annotations and race control messages.
+- 🗺️ **ASCII Track Map**: Live car positions on a terminal-rendered track outline, team-coloured.
 - 🔌 **Offline-ish**: Fast, lightweight, and powered by the wonderful [OpenF1 API](https://openf1.org).
 
 ## 🚀 Quick Start
@@ -40,14 +45,24 @@ go run cmd/main.go
 
 | Key | Action |
 | --- | --- |
-| `1` | Switch to **Standings** |
-| `2` | Switch to **Calendar** |
-| `3` | Switch to **Race Details** |
-| `4` | Switch to **Drivers** |
+| `1` | Switch to **Home** |
+| `2` | Switch to **Standings** |
+| `3` | Switch to **Calendar** |
+| `4` | Switch to **Race Details** |
+| `5` | Switch to **Drivers** |
+| `6` | Switch to **Live Timing** |
+| `7` | Switch to **Track Map** |
+| `tab` / `shift+tab` | Next / Previous tab |
 | `j`/`↓` | Navigate down |
 | `k`/`↑` | Navigate up |
 | `enter` | Select/Inspect item |
-| `b` | Go back |
+| `b` / `esc` | Go back / collapse |
+| `s` | Toggle sector times (Live tab) |
+| `b` | Toggle Battle Tracker (Live tab) |
+| `p` | Toggle Pit Window Calculator (Live tab) |
+| `r` | Enter Race Replay (Race Detail tab, Race sessions) |
+| `←`/`h` · `→`/`l` | Scrub laps in Replay |
+| `y` | Cycle season year |
 | `q` / `ctrl+c` | Exit |
 
 ## 🛠️ Tech Stack

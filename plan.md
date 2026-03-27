@@ -1,106 +1,47 @@
-Great name! **box-box** it is 🏎️
+# box-box Roadmap
 
-Here's your getting started guide:
-
----
-
-## The Stack
-
-| Tool | Purpose |
-|---|---|
-| **Bubble Tea** | TUI framework — the "engine" (like React for terminals) |
-| **Lipgloss** | Styling — colors, borders, padding |
-| **Bubbles** | Pre-built components — tables, spinners, viewports |
-| **OpenF1 API** | Data source — free, no key needed |
+A living document tracking the evolution of box-box from a solid F1 terminal dashboard into the ultimate pit wall companion.
 
 ---
 
-## Core Bubble Tea Concepts to Know
+## Phase 1 — "Pit Wall Mode" (Enhance What Exists)
 
-Bubble Tea follows the **Elm architecture** — just 3 things:
+Enrich existing tabs with data that's already available from the API but not yet rendered. Zero or minimal new API calls — prioritizes computed insights from data we already fetch.
 
-1. **Model** — your app's state (what data you're holding, which tab is active, etc.)
-2. **Update** — handles events (keypresses, API responses) and returns a new model
-3. **View** — renders the model to a string that gets printed to the terminal
-
-Everything flows in one direction: `event → update → view`. That's it.
-
-```
-type model struct {
-    activeTab  int
-    standings  []Driver
-    loading    bool
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { ... }
-func (m model) View() string { ... }
-```
+- [x] **Starting Grid View** — Show qualifying lap times and grid order in Race Detail tab (secondary data tier, Race sessions only)
+- [x] **Tyre Degradation Analysis** — Compute deg rate per stint from existing laps + stints data in Driver Detail. Show pace drop-off, stint consistency, and degradation sparklines
+- [x] **Sector & Speed Analysis** — Sector time sparklines (S1/S2/S3) and speed trap trends from existing lap data in Driver Detail
+- [x] **Gap Trend Sparklines in Live Feed** — Track gap-to-leader history per driver over WebSocket updates. Show mini trend indicator in the timing tower during races
 
 ---
 
-## Project Structure
+## Phase 2 — "Race Director" (Killer Features)
 
-```
-box-box/
-├── cmd/
-│   └── main.go          # Entry point
-├── internal/
-│   ├── api/
-│   │   └── openf1.go    # All API calls
-│   ├── ui/
-│   │   ├── app.go       # Root model, tab switching
-│   │   ├── standings.go # Standings tab
-│   │   ├── calendar.go  # Calendar tab
-│   │   ├── results.go   # Results tab
-│   │   └── driver.go    # Driver lookup tab
-│   └── models/
-│       └── types.go     # Structs (Driver, Race, Result, etc.)
-├── go.mod
-└── README.md
-```
+New views that reconstruct the race narrative and make box-box indispensable during a live session.
+
+- [x] **ASCII Track Map** — Render track outline from Location data with live car positions colored by team
+- [x] **Race Replay / Lap Scrubber** — Step through a completed race lap-by-lap with full context (positions, pits, RC messages, weather). Arrow keys scrub, showing the field evolve over time
+- [x] **Battle Tracker** — Auto-detect duels (drivers within DRS range) and show head-to-head gap analysis, pace comparison, and pit strategy divergence
+- [x] **Pit Window Calculator** — Predict rejoin position if a driver pits now, based on current gaps + avg pit loss + estimated tyre deg rate
 
 ---
 
-## How to Bootstrap It
+## Phase 3 — "Engineering Room" (Companion Web View)
 
-```bash
-mkdir box-box && cd box-box
-go mod init github.com/yourusername/box-box
+A lightweight local web UI for visualizations that need a proper canvas.
 
-# Install dependencies
-go get github.com/charmbracelet/bubbletea
-go get github.com/charmbracelet/lipgloss
-go get github.com/charmbracelet/bubbles
-```
+- [ ] **`box-box --web` server** — Spawn a localhost SPA from Go embedded assets, sharing the same SQLite cache
+- [ ] **SVG Track Map** — Animated car positions on a real circuit layout with team colors
+- [ ] **Telemetry Overlay** — Interactive throttle/brake/speed graph through a lap (D3.js or Canvas)
+- [ ] **Strategy Timeline** — Visual pit stop and stint timeline for the full field
 
 ---
 
-## Key Concepts for a Beginner
+## Phase 4 — "Always On" (Background Intelligence)
 
-**1. Commands (Cmd) are how you do async work**
-API calls happen outside the Update loop — you return a `tea.Cmd` which runs in the background and sends a message back when done. This keeps the UI non-blocking.
+Passive monitoring and historical analysis features.
 
-**2. Messages (Msg) are how things communicate**
-When your API call finishes, it sends a message like `standingsFetchedMsg` back into Update. You pattern match on it and update your model.
-
-**3. Tabs = multiple models composed together**
-Each tab (standings, calendar, etc.) can be its own mini Bubble Tea model. The root `app.go` model holds them all and delegates keypresses to whichever tab is active.
-
-**4. Lipgloss is just styling strings**
-Since everything in Bubble Tea is strings, Lipgloss lets you wrap them with colors, borders, and layout — think of it like CSS for your terminal output.
-
----
-
-## Suggested Learning Order
-
-1. Follow the [Bubble Tea tutorial](https://github.com/charmbracelet/bubbletea/tree/master/tutorials) — takes ~30 mins
-2. Build a single tab first (just standings) — get data showing in a table
-3. Add tab navigation
-4. Add the remaining views one by one
-5. Polish with Lipgloss last
-
----
-
-The OpenF1 API is straightforward REST — for example `https://api.openf1.org/v1/drivers?session_key=latest` gives you current session drivers. No auth, no rate limits to worry about for personal use.
-
-Want me to write out the skeleton code to get you started — just the structure with empty stubs and the Bubble Tea boilerplate wired up?
+- [ ] **Daemon / Notification Mode** — `box-box --watch` sends OS notifications for key race events (flags, overtakes, pit stops)
+- [ ] **Championship Simulator** — "What if" scenarios: set finishing positions per driver and project championship standings forward
+- [ ] **Multi-Year Driver Comparison** — Career arc and season-over-season stats with win/pole rates
+- [ ] **tmux / Status Bar Integration** — Compact race status output for shell prompts and status bars

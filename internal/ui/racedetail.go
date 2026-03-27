@@ -17,12 +17,13 @@ type RaceDetailModel struct {
 	client  *api.OpenF1Client
 	meeting *models.Meeting
 
-	sessions  []models.Session
-	results   []models.SessionResult
-	drivers   map[int]models.Driver
-	rcMsgs    []models.RaceControl
-	weather   []models.Weather
-	overtakes []models.Overtake
+	sessions     []models.Session
+	results      []models.SessionResult
+	drivers      map[int]models.Driver
+	startingGrid []models.StartingGrid
+	rcMsgs       []models.RaceControl
+	weather      []models.Weather
+	overtakes    []models.Overtake
 
 	selectedSession *models.Session
 	sessionCursor   int
@@ -40,6 +41,8 @@ type RaceDetailModel struct {
 	rcView  viewport.Model
 	rcReady bool
 
+	replay ReplayModel
+
 	width  int
 	height int
 }
@@ -53,6 +56,7 @@ func NewRaceDetailModel(client *api.OpenF1Client) RaceDetailModel {
 		client:  client,
 		spinner: s,
 		drivers: make(map[int]models.Driver),
+		replay:  NewReplayModel(client),
 	}
 }
 
@@ -82,9 +86,9 @@ func fetchSessionData(client *api.OpenF1Client, sessionKey int) tea.Cmd {
 	)
 }
 
-// fetchSecondaryData fetches lower-priority data (race control, weather, overtakes).
-func fetchSecondaryData(client *api.OpenF1Client, sessionKey int) tea.Cmd {
-	return tea.Batch(
+// fetchSecondaryData fetches lower-priority data (race control, weather, overtakes, starting grid).
+func fetchSecondaryData(client *api.OpenF1Client, sessionKey int, isRace bool) tea.Cmd {
+	cmds := []tea.Cmd{
 		func() tea.Msg {
 			msgs, err := client.GetRaceControl(sessionKey)
 			return raceControlLoadedMsg{messages: msgs, err: err}
@@ -97,7 +101,15 @@ func fetchSecondaryData(client *api.OpenF1Client, sessionKey int) tea.Cmd {
 			overtakes, err := client.GetOvertakesForSession(sessionKey)
 			return overtakesLoadedMsg{overtakes: overtakes, err: err}
 		},
-	)
+	}
+	// Starting grid is only relevant for Race sessions — shows qualifying order
+	if isRace {
+		cmds = append(cmds, func() tea.Msg {
+			grid, err := client.GetStartingGrid(sessionKey)
+			return startingGridLoadedMsg{grid: grid, err: err}
+		})
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
@@ -113,11 +125,21 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+		// Also forward to replay spinner
+		var cmd tea.Cmd
+		m.replay, cmd = m.replay.Update(msg)
+		cmds = append(cmds, cmd)
+
+	case replayDataLoadedMsg:
+		var cmd tea.Cmd
+		m.replay, cmd = m.replay.Update(msg)
+		cmds = append(cmds, cmd)
 
 	case meetingSelectedMsg:
 		m.meeting = &msg.meeting
 		m.sessions = nil
 		m.results = nil
+		m.startingGrid = nil
 		m.rcMsgs = nil
 		m.weather = nil
 		m.overtakes = nil
@@ -168,6 +190,7 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			m.driversLoaded = false
 			m.secondaryLoading = false
 			m.results = nil
+			m.startingGrid = nil
 			m.rcMsgs = nil
 			m.weather = nil
 			m.overtakes = nil
@@ -202,7 +225,8 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 	case loadSecondaryDataMsg:
 		// Only load secondary data if it's still for the currently selected session
 		if m.selectedSession != nil && m.selectedSession.SessionKey == msg.sessionKey {
-			cmds = append(cmds, fetchSecondaryData(m.client, msg.sessionKey))
+			isRace := m.selectedSession.SessionType == "Race"
+			cmds = append(cmds, fetchSecondaryData(m.client, msg.sessionKey, isRace))
 		}
 
 	case raceControlLoadedMsg:
@@ -221,7 +245,24 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			m.overtakes = msg.overtakes
 		}
 
+	case startingGridLoadedMsg:
+		if msg.err == nil {
+			m.startingGrid = msg.grid
+		}
+
 	case tea.KeyMsg:
+		// When replay is active, route keys to replay model; only 'b'/'esc' exits.
+		if m.replay.IsActive() {
+			if matchKey(msg, GlobalKeys.Back) {
+				m.replay = m.replay.Exit()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.replay, cmd = m.replay.Update(msg)
+			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
+		}
+
 		switch {
 		case matchKey(msg, GlobalKeys.Retry):
 			if m.errSessions != nil && m.meeting != nil {
@@ -282,6 +323,7 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 				m.secondaryLoading = false
 				m.errResults = nil
 				m.results = nil
+				m.startingGrid = nil
 				m.rcMsgs = nil
 				m.weather = nil
 				m.overtakes = nil
@@ -305,6 +347,7 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 					m.secondaryLoading = false
 					m.errResults = nil
 					m.results = nil
+					m.startingGrid = nil
 					m.rcMsgs = nil
 					m.weather = nil
 					m.overtakes = nil
@@ -325,6 +368,7 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 					m.secondaryLoading = false
 					m.errResults = nil
 					m.results = nil
+					m.startingGrid = nil
 					m.rcMsgs = nil
 					m.weather = nil
 					m.overtakes = nil
@@ -333,6 +377,15 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 					m.drivers = make(map[int]models.Driver)
 					cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, sess.SessionKey))
 				}
+			}
+		case matchKey(msg, RaceDetailKeys.Replay):
+			// Only enter replay for Race sessions with data loaded
+			if m.selectedSession != nil &&
+				m.selectedSession.SessionType == "Race" &&
+				!m.loadingResults {
+				var cmd tea.Cmd
+				m.replay, cmd = m.replay.Enter(m.selectedSession.SessionKey, m.selectedSession.SessionName)
+				cmds = append(cmds, cmd)
 			}
 		}
 	}
@@ -399,6 +452,14 @@ func (m RaceDetailModel) View() string {
 			helpBar("2 calendar", "q quit")
 	}
 
+	// When replay is active, show the replay pane instead of normal race detail.
+	if m.replay.IsActive() {
+		m2 := m.replay
+		m2.width = m.width
+		m2.height = m.height
+		return m2.View()
+	}
+
 	w := m.width
 	if w < 40 {
 		w = 40
@@ -436,6 +497,10 @@ func (m RaceDetailModel) View() string {
 		sb.WriteString("\n")
 		sb.WriteString(m.renderWeatherCard(w - 4))
 		sb.WriteString("\n")
+		if len(m.startingGrid) > 0 {
+			sb.WriteString(m.renderStartingGrid(w - 4))
+			sb.WriteString("\n")
+		}
 		sb.WriteString(m.renderOvertakes(w - 4))
 		sb.WriteString("\n")
 		sb.WriteString(styleSectionTitle.Render("RACE CONTROL") + "\n")
@@ -469,7 +534,7 @@ func (m RaceDetailModel) View() string {
 		sb.WriteString(panels + "\n")
 	}
 
-	sb.WriteString(helpBar("[/] sessions", "j/k results", "g/G top/bottom", "K/J scroll RC", "b back", "q quit"))
+	sb.WriteString(helpBar("[/] sessions", "j/k results", "g/G top/bottom", "K/J scroll RC", "r replay", "b back", "q quit"))
 	return sb.String()
 }
 
@@ -683,6 +748,12 @@ func (m RaceDetailModel) renderRightPanel(width int) string {
 	// Weather card at the top
 	sb.WriteString(m.renderWeatherCard(width))
 	sb.WriteString("\n")
+
+	// Starting grid (Race sessions only)
+	if len(m.startingGrid) > 0 {
+		sb.WriteString(m.renderStartingGrid(width))
+		sb.WriteString("\n")
+	}
 
 	// Overtakes summary
 	sb.WriteString(m.renderOvertakes(width))
@@ -918,6 +989,77 @@ func (m RaceDetailModel) renderOvertakes(width int) string {
 			overtakingStr,
 			overtakenStr,
 		))
+	}
+
+	return sb.String()
+}
+
+// renderStartingGrid renders the qualifying-based starting grid for a Race session.
+func (m RaceDetailModel) renderStartingGrid(width int) string {
+	var sb strings.Builder
+	sb.WriteString(styleSectionTitle.Render("STARTING GRID") + "\n")
+
+	if len(m.startingGrid) == 0 {
+		sb.WriteString(styleMuted.Render("  No grid data.\n"))
+		return sb.String()
+	}
+
+	// Find the pole time to compute deltas
+	var poleTime float64
+	for _, g := range m.startingGrid {
+		if g.Position == 1 {
+			poleTime = g.LapDuration
+			break
+		}
+	}
+
+	// Show top entries (limit to keep the panel compact)
+	maxShow := 10
+	if len(m.startingGrid) < maxShow {
+		maxShow = len(m.startingGrid)
+	}
+
+	for i := 0; i < maxShow; i++ {
+		g := m.startingGrid[i]
+		d := m.drivers[g.DriverNumber]
+		acronym := d.NameAcronym
+		if acronym == "" {
+			acronym = fmt.Sprintf("#%d", g.DriverNumber)
+		}
+
+		teamColor := colorMuted
+		if d.TeamColour != "" {
+			teamColor = "#" + d.TeamColour
+		} else if d.TeamName != "" {
+			teamColor = teamColorFromName(d.TeamName)
+		}
+
+		colorBar := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
+		pos := renderPosition(g.Position)
+
+		// Qualifying time or delta to pole
+		var timeStr string
+		if g.LapDuration <= 0 {
+			timeStr = styleMuted.Render("no time")
+		} else if g.Position == 1 {
+			timeStr = lipgloss.NewStyle().Foreground(lipgloss.Color(colorPurple)).Bold(true).Render(formatSeconds(g.LapDuration))
+		} else if poleTime > 0 {
+			delta := g.LapDuration - poleTime
+			timeStr = styleGap.Render(fmt.Sprintf("+%.3fs", delta))
+		} else {
+			timeStr = formatSeconds(g.LapDuration)
+		}
+
+		sb.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n",
+			padRightVisible(pos, 3),
+			colorBar,
+			padRight(acronym, 4),
+			timeStr,
+		))
+	}
+
+	if len(m.startingGrid) > maxShow {
+		sb.WriteString(styleMuted.Render(fmt.Sprintf("  ... %d more\n", len(m.startingGrid)-maxShow)))
 	}
 
 	return sb.String()

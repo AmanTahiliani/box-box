@@ -37,7 +37,7 @@ type F1TimingLine struct {
 		Value interface{} `json:"Value"`
 	} `json:"IntervalToPositionAhead"`
 	Position     interface{} `json:"Position"`
-	RacingNumber string     `json:"RacingNumber"`
+	RacingNumber string      `json:"RacingNumber"`
 	LastLapTime  struct {
 		Value           string `json:"Value"`
 		PersonalFastest bool   `json:"PersonalFastest"`
@@ -268,10 +268,6 @@ func ConnectToF1LiveTiming(dataChan chan LiveStreamData) error {
 				}
 				if json.Unmarshal(data, &td) == nil {
 					for num, lineRaw := range td.Lines {
-						// Debug: dump first driver's raw JSON to see field types
-						if num == "1" || num == "81" || num == "44" {
-							log.Printf("[DEBUG TimingData] driver=%s raw=%s", num, string(lineRaw))
-						}
 						var line F1TimingLine
 						if json.Unmarshal(lineRaw, &line) == nil {
 							updateDriver(drivers, num, line)
@@ -306,8 +302,8 @@ func ConnectToF1LiveTiming(dataChan chan LiveStreamData) error {
 				}
 			case "ExtrapolatedClock":
 				var ec struct {
-					Remaining    string `json:"Remaining"`
-					Utc          string `json:"Utc"`
+					Remaining     string `json:"Remaining"`
+					Utc           string `json:"Utc"`
 					Extrapolating bool   `json:"Extrapolating"`
 				}
 				if json.Unmarshal(data, &ec) == nil && ec.Remaining != "" {
@@ -427,10 +423,12 @@ func ConnectToF1LiveTiming(dataChan chan LiveStreamData) error {
 							New      string `json:"New"`
 						}
 						if json.Unmarshal(raw, &td) == nil && td.Compound != "" {
-							tyres[num] = LiveTyreData{
-								Compound: td.Compound,
-								New:      td.New == "true" || td.New == "True",
-							}
+							// Preserve the existing Age — CurrentTyres only carries
+							// compound and newness, not lap count.
+							t := tyres[num]
+							t.Compound = td.Compound
+							t.New = td.New == "true" || td.New == "True"
+							tyres[num] = t
 							updated = true
 						}
 					}
@@ -462,11 +460,13 @@ func ConnectToF1LiveTiming(dataChan chan LiveStreamData) error {
 							}
 							if len(driverStints) > 0 {
 								stints[num] = driverStints
-								// Always sync tyre from latest stint
+								// Sync compound and age from the latest stint.
+								// Stints are authoritative: they include historical data and
+								// carry both compound and laps on the current set.
 								lastStint := driverStints[len(driverStints)-1]
 								t := tyres[num]
 								t.Age = lastStint.Laps
-								if t.Compound == "" && lastStint.Compound != "" {
+								if lastStint.Compound != "" {
 									t.Compound = lastStint.Compound
 									t.New = lastStint.New
 								}
@@ -727,6 +727,129 @@ func parseGap(val string) string {
 	return val
 }
 
+// parseLapTimeMs parses a lap time string like "1:33.596" or "1:33" into
+// milliseconds.  Returns -1 if the string cannot be parsed.
+func parseLapTimeMs(s string) int64 {
+	if s == "" {
+		return -1
+	}
+	// Handle M:SS.mmm  or  M:SS
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) == 2 {
+		var mins int
+		if _, err := fmt.Sscanf(parts[0], "%d", &mins); err != nil {
+			return -1
+		}
+		var secs float64
+		if _, err := fmt.Sscanf(parts[1], "%f", &secs); err != nil {
+			return -1
+		}
+		return int64(float64(mins)*60000 + secs*1000)
+	}
+	// Bare seconds: SS.mmm
+	var secs float64
+	if _, err := fmt.Sscanf(s, "%f", &secs); err != nil {
+		return -1
+	}
+	return int64(secs * 1000)
+}
+
+// computeGapFromBestLap returns a gap string like "+1.234" computed from the
+// difference between the driver's best lap time and the leader's best lap time.
+// Returns "" if either time is missing.
+func computeGapFromBestLap(driverBest, leaderBest string) string {
+	dMs := parseLapTimeMs(driverBest)
+	lMs := parseLapTimeMs(leaderBest)
+	if dMs < 0 || lMs < 0 {
+		return ""
+	}
+	diff := dMs - lMs
+	if diff <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("+%.3f", float64(diff)/1000.0)
+}
+
+// parseGapToFloat extracts a numeric gap value from a gap string like "+1.234" or "1.234".
+// Returns -1 if the string cannot be parsed (e.g. "1 LAP", empty, "LAP").
+func parseGapToFloat(val string) float64 {
+	if val == "" {
+		return -1
+	}
+	s := strings.TrimPrefix(val, "+")
+	var f float64
+	if _, err := fmt.Sscanf(s, "%f", &f); err == nil && f >= 0 {
+		return f
+	}
+	return -1
+}
+
+// gapTrendIndicator renders a compact 8-character sparkline showing gap trend.
+// Rising = gap increasing (bad, red), falling = gap decreasing (good, green).
+func gapTrendIndicator(history []float64) string {
+	if len(history) < 2 {
+		return ""
+	}
+
+	const trendWidth = 8
+	blocks := []rune("▁▂▃▄▅▆▇█")
+
+	// Use the most recent samples that fit
+	data := history
+	if len(data) > trendWidth {
+		data = data[len(data)-trendWidth:]
+	}
+
+	minVal, maxVal := data[0], data[0]
+	for _, v := range data {
+		if v < minVal {
+			minVal = v
+		}
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	rng := maxVal - minVal
+	if rng < 0.01 {
+		// Gap is stable — show flat indicator
+		return styleMuted.Render(strings.Repeat("─", len(data)))
+	}
+
+	// Determine trend direction: compare first half avg vs second half avg
+	mid := len(data) / 2
+	var firstHalf, secondHalf float64
+	for i := 0; i < mid; i++ {
+		firstHalf += data[i]
+	}
+	for i := mid; i < len(data); i++ {
+		secondHalf += data[i]
+	}
+	firstHalf /= float64(mid)
+	secondHalf /= float64(len(data) - mid)
+	closing := secondHalf < firstHalf // gap shrinking = good
+
+	var sb strings.Builder
+	for _, v := range data {
+		norm := (v - minVal) / rng
+		idx := int(norm*float64(len(blocks)-1) + 0.5)
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(blocks) {
+			idx = len(blocks) - 1
+		}
+		var style lipgloss.Style
+		if closing {
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
+		} else {
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red))
+		}
+		sb.WriteString(style.Render(string(blocks[idx])))
+	}
+	return sb.String()
+}
+
 // compoundAbbrevStyle returns the single-letter abbreviation and lipgloss style for a tyre compound string.
 func compoundAbbrevStyle(compound string) (string, lipgloss.Style) {
 	switch {
@@ -759,17 +882,20 @@ func parseHHMMSS(s string) (time.Duration, error) {
 	return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(sec)*time.Second, nil
 }
 
+// maxGapHistory is the number of gap samples to keep per driver for trend sparklines.
+const maxGapHistory = 20
+
 type OfficialLiveModel struct {
 	width  int
 	height int
 
-	dataChan    chan LiveStreamData
-	drivers     map[string]LiveDriverData
-	driverInfo  map[string]F1DriverListEntry
-	tyres       map[string]LiveTyreData
-	rcMessages  []LiveRCMessage
-	weather     LiveWeatherData
-	session     LiveSessionMeta
+	dataChan           chan LiveStreamData
+	drivers            map[string]LiveDriverData
+	driverInfo         map[string]F1DriverListEntry
+	tyres              map[string]LiveTyreData
+	rcMessages         []LiveRCMessage
+	weather            LiveWeatherData
+	session            LiveSessionMeta
 	trackStatus        string
 	currentLap         int
 	totalLaps          int
@@ -777,6 +903,7 @@ type OfficialLiveModel struct {
 	clockRefTime       time.Time
 	clockExtrapolating bool
 	stints             map[string][]LiveStintData
+	gapHistory         map[string][]float64 // racing number -> recent gap-to-leader values
 	err                error
 
 	// UI state
@@ -785,6 +912,8 @@ type OfficialLiveModel struct {
 	showSectors    bool
 	expandedDriver string // racing number, "" if none
 	showRC         bool   // compact mode RC overlay toggle
+	showBattles    bool   // battle tracker overlay
+	showPitWindow  bool   // pit window calculator overlay
 
 	rcView  viewport.Model
 	rcReady bool
@@ -797,6 +926,7 @@ func NewOfficialLiveModel() OfficialLiveModel {
 		driverInfo: make(map[string]F1DriverListEntry),
 		tyres:      make(map[string]LiveTyreData),
 		stints:     make(map[string][]LiveStintData),
+		gapHistory: make(map[string][]float64),
 	}
 }
 
@@ -831,9 +961,126 @@ func (m OfficialLiveModel) displayClock() string {
 	return fmt.Sprintf("%02d:%02d:%02d", h, mnt, sec)
 }
 
+// recomputeImpliedPositions assigns positions to drivers based on session type.
+//
+// In practice and qualifying sessions the feed's Position field is unreliable —
+// many drivers never receive an explicit position.  Instead, we derive positions
+// from best lap times (fastest = P1), which matches the official F1 timing
+// screen behaviour.  Drivers without a time are placed at the bottom.
+//
+// In race sessions the feed's Position field is authoritative, so we only
+// back-fill drivers that still have Position == 0.
+func (m *OfficialLiveModel) recomputeImpliedPositions() {
+	type entry struct {
+		num         string
+		bestLapTime string
+		racingNum   int
+	}
+
+	if m.isPracticeOrQuali() {
+		// -- Practice / Qualifying: rank everyone by best lap time ----------
+		var all []entry
+		for num, d := range m.drivers {
+			var n int
+			fmt.Sscanf(num, "%d", &n)
+			all = append(all, entry{num, d.BestLapTime, n})
+		}
+		// Also include drivers from driverInfo that have no timing data yet.
+		for num := range m.driverInfo {
+			if _, exists := m.drivers[num]; !exists {
+				var n int
+				fmt.Sscanf(num, "%d", &n)
+				all = append(all, entry{num, "", n})
+			}
+		}
+
+		// Drivers with a time sort first (ascending), then drivers without a
+		// time are ordered by racing number.
+		sort.Slice(all, func(i, j int) bool {
+			ti, tj := all[i].bestLapTime, all[j].bestLapTime
+			switch {
+			case ti != "" && tj != "":
+				return ti < tj
+			case ti != "":
+				return true
+			case tj != "":
+				return false
+			default:
+				return all[i].racingNum < all[j].racingNum
+			}
+		})
+
+		for i, e := range all {
+			newPos := i + 1
+			d, exists := m.drivers[e.num]
+			if !exists {
+				d = LiveDriverData{RacingNumber: e.num}
+			}
+			if d.Position != newPos {
+				d.PrevPosition = d.Position
+				if d.PrevPosition == 0 {
+					d.PrevPosition = newPos // suppress spurious delta arrow on first assignment
+				}
+				d.Position = newPos
+			}
+			m.drivers[e.num] = d
+		}
+		return
+	}
+
+	// -- Race: only back-fill drivers whose Position is still 0 ---------------
+	var unpos []entry
+	for num, d := range m.drivers {
+		if d.Position == 0 {
+			var n int
+			fmt.Sscanf(num, "%d", &n)
+			unpos = append(unpos, entry{num, d.BestLapTime, n})
+		}
+	}
+	if len(unpos) == 0 {
+		return
+	}
+
+	highestExplicit := 0
+	for _, d := range m.drivers {
+		if d.Position > highestExplicit {
+			highestExplicit = d.Position
+		}
+	}
+
+	sort.Slice(unpos, func(i, j int) bool {
+		ti, tj := unpos[i].bestLapTime, unpos[j].bestLapTime
+		switch {
+		case ti != "" && tj != "":
+			return ti < tj
+		case ti != "":
+			return true
+		case tj != "":
+			return false
+		default:
+			return unpos[i].racingNum < unpos[j].racingNum
+		}
+	})
+
+	for i, e := range unpos {
+		impliedPos := highestExplicit + i + 1
+		d := m.drivers[e.num]
+		if d.Position != impliedPos {
+			d.PrevPosition = d.Position
+			if d.PrevPosition == 0 {
+				d.PrevPosition = impliedPos
+			}
+			d.Position = impliedPos
+			m.drivers[e.num] = d
+		}
+	}
+}
+
 func (m OfficialLiveModel) sortedDrivers() []LiveDriverData {
-	// Merge timing data with driver list so all known drivers appear,
-	// even those who have not set a lap time yet (Position == 0).
+	// In practice/qualifying, recomputeImpliedPositions already placed every
+	// known driver (including driverInfo-only entries) into m.drivers with a
+	// correct Position.  For races we still merge driverInfo to show drivers
+	// that haven't received any timing data yet.
 	merged := make(map[string]LiveDriverData, len(m.drivers)+len(m.driverInfo))
 	for num, d := range m.drivers {
 		merged[num] = d
@@ -844,35 +1091,68 @@ func (m OfficialLiveModel) sortedDrivers() []LiveDriverData {
 		}
 	}
 
-	var positioned, unpositioned []LiveDriverData
+	var all []LiveDriverData
 	for _, d := range merged {
-		if d.Position > 0 {
-			positioned = append(positioned, d)
-		} else {
-			unpositioned = append(unpositioned, d)
-		}
+		all = append(all, d)
 	}
-
-	sort.Slice(positioned, func(i, j int) bool {
-		return positioned[i].Position < positioned[j].Position
-	})
-	sort.Slice(unpositioned, func(i, j int) bool {
+	sort.Slice(all, func(i, j int) bool {
+		pi, pj := all[i].Position, all[j].Position
+		if pi > 0 && pj > 0 {
+			return pi < pj
+		}
+		if pi > 0 {
+			return true
+		}
+		if pj > 0 {
+			return false
+		}
+		// Both unpositioned: sort by best lap time, then racing number
+		ti, tj := all[i].BestLapTime, all[j].BestLapTime
+		if ti != "" && tj != "" {
+			return ti < tj
+		}
+		if ti != "" {
+			return true
+		}
+		if tj != "" {
+			return false
+		}
 		var ni, nj int
-		fmt.Sscanf(unpositioned[i].RacingNumber, "%d", &ni)
-		fmt.Sscanf(unpositioned[j].RacingNumber, "%d", &nj)
+		fmt.Sscanf(all[i].RacingNumber, "%d", &ni)
+		fmt.Sscanf(all[j].RacingNumber, "%d", &nj)
 		return ni < nj
 	})
 
-	return append(positioned, unpositioned...)
+	// Back-fill any remaining Position==0 entries so the P column is never blank.
+	for i := range all {
+		if all[i].Position == 0 {
+			all[i].Position = i + 1
+		}
+	}
+
+	return all
 }
 
-// isPracticeOrQuali returns true for Free Practice, Qualifying, and Sprint Qualifying.
-// In these sessions the timing tower shows BEST lap time as the primary column.
+// isPracticeOrQuali returns true for Free Practice, Qualifying, Sprint Qualifying,
+// and Sprint Shootout.  In these sessions the timing tower shows BEST lap time
+// as the primary column.
 func (m OfficialLiveModel) isPracticeOrQuali() bool {
 	t := strings.ToLower(m.session.SessionType)
+	return m.isTimeBasedSession(t)
+}
+
+// isTimeBasedSession returns true for any session type where positions are
+// determined by best lap time rather than by on-track race order.  This covers
+// Free Practice, Qualifying, Sprint Qualifying, and Sprint Shootout.
+// "Sprint" on its own is a race and is NOT included.
+func (m OfficialLiveModel) isTimeBasedSession(sessionType string) bool {
+	t := sessionType
+	if t == "" {
+		t = strings.ToLower(m.session.SessionType)
+	}
 	return strings.Contains(t, "practice") ||
 		strings.Contains(t, "qualifying") ||
-		strings.Contains(t, "sprint") ||
+		strings.Contains(t, "shootout") ||
 		t == "fp1" || t == "fp2" || t == "fp3" ||
 		t == "q" || t == "sq"
 }
@@ -969,6 +1249,19 @@ func (m OfficialLiveModel) Update(msg tea.Msg) (OfficialLiveModel, tea.Cmd) {
 		m.clockRefTime = msg.ClockRefTime
 		m.clockExtrapolating = msg.ClockExtrapolating
 		m.stints = msg.Stints
+		// Record gap history for trend sparklines
+		for num, d := range msg.Drivers {
+			if gap := parseGapToFloat(d.GapToLeader); gap >= 0 {
+				hist := m.gapHistory[num]
+				hist = append(hist, gap)
+				if len(hist) > maxGapHistory {
+					hist = hist[len(hist)-maxGapHistory:]
+				}
+				m.gapHistory[num] = hist
+			}
+		}
+		// Back-fill implied positions for drivers the feed hasn't positioned yet.
+		m.recomputeImpliedPositions()
 		m.updateRCViewport()
 		return m, listenForWSData(m.dataChan)
 	case tea.KeyMsg:
@@ -1011,13 +1304,35 @@ func (m OfficialLiveModel) Update(msg tea.Msg) (OfficialLiveModel, tea.Cmd) {
 		case matchKey(msg, LiveKeys.ToggleRC):
 			if m.width < 100 {
 				m.showRC = !m.showRC
+				if m.showRC {
+					m.showBattles = false
+					m.showPitWindow = false
+				}
+			}
+		case matchKey(msg, LiveKeys.ToggleBattles):
+			m.showBattles = !m.showBattles
+			if m.showBattles {
+				m.showRC = false
+				m.showPitWindow = false
+				m.expandedDriver = ""
+			}
+		case matchKey(msg, LiveKeys.TogglePitWindow):
+			m.showPitWindow = !m.showPitWindow
+			if m.showPitWindow {
+				m.showRC = false
+				m.showBattles = false
+				m.expandedDriver = ""
 			}
 		case matchKey(msg, LiveKeys.ExpandDriver):
 			if len(drivers) > 0 && m.cursor < len(drivers) {
 				m.expandedDriver = drivers[m.cursor].RacingNumber
+				m.showBattles = false
+				m.showPitWindow = false
 			}
 		case matchKey(msg, LiveKeys.Collapse):
 			m.expandedDriver = ""
+			m.showBattles = false
+			m.showPitWindow = false
 		case matchKey(msg, LiveKeys.ScrollRCUp):
 			if m.rcReady {
 				m.rcView.LineUp(3)
@@ -1067,14 +1382,27 @@ func (m OfficialLiveModel) View() string {
 		leftWidth := int(float64(w) * 0.6)
 		rightWidth := w - leftWidth - 4
 
+		var rightPanel string
+		if m.showBattles {
+			rightPanel = m.renderBattlesPanel(rightWidth)
+		} else if m.showPitWindow {
+			rightPanel = m.renderPitWindowPanel(rightWidth)
+		} else {
+			rightPanel = m.renderRightPanel(rightWidth)
+		}
+
 		panels := lipgloss.JoinHorizontal(lipgloss.Top,
 			m.renderTimingTower(leftWidth),
 			"  ",
-			m.renderRightPanel(rightWidth),
+			rightPanel,
 		)
 		sb.WriteString(panels)
 	} else {
-		if m.showRC {
+		if m.showBattles {
+			sb.WriteString(m.renderBattlesPanel(w - 2))
+		} else if m.showPitWindow {
+			sb.WriteString(m.renderPitWindowPanel(w - 2))
+		} else if m.showRC {
 			sb.WriteString(m.renderRCContent())
 		} else {
 			sb.WriteString(m.renderTimingTower(w - 2))
@@ -1083,9 +1411,9 @@ func (m OfficialLiveModel) View() string {
 
 	sb.WriteString("\n")
 	if wide {
-		sb.WriteString(helpBar("j/k scroll", "enter detail", "s sectors", "K/J race ctrl", "1-6 tabs", "q quit"))
+		sb.WriteString(helpBar("j/k scroll", "enter detail", "s sectors", "b battles", "p pit win", "K/J race ctrl", "1-7 tabs", "q quit"))
 	} else {
-		sb.WriteString(helpBar("j/k scroll", "enter detail", "s sectors", "r toggle RC", "1-6 tabs", "q quit"))
+		sb.WriteString(helpBar("j/k scroll", "enter detail", "s sectors", "b battles", "p pit win", "r RC", "1-7 tabs", "q quit"))
 	}
 
 	return sb.String()
@@ -1232,10 +1560,10 @@ func (m OfficialLiveModel) renderTimingTower(w int) string {
 			padRight("TYRE", 5), padRight("AGE", 3), padRight("", 1),
 			padRight("BEST", 10), padRight("LAST", 10), padRight("GAP", 10))
 	} else {
-		header = fmt.Sprintf("  %s %s  %s  %s  %s %s  %s  %s  %s",
+		header = fmt.Sprintf("  %s %s  %s  %s  %s %s  %s  %s  %s  %s",
 			padRight("P", 3), padRight("Δ", 2), padRight("", 1), padRight("TLA", 4),
 			padRight("TYRE", 5), padRight("AGE", 3), padRight("LAST", 10),
-			padRight("GAP", 10), padRight("INT", 10))
+			padRight("GAP", 10), padRight("INT", 10), padRight("TREND", 8))
 	}
 	sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Bold(true).Render(header) + "\n")
 	sb.WriteString("  " + divider(min(w-4, lipgloss.Width(header))) + "\n")
@@ -1355,13 +1683,18 @@ func (m OfficialLiveModel) renderDriverRow(d LiveDriverData, idx int, fpq bool, 
 			row = lipgloss.NewStyle().Foreground(lipgloss.Color(colorOrange)).Render(row)
 		}
 	} else {
-		// Race mode: LAST + GAP + INT
-		row = fmt.Sprintf("  %s %s  %s  %s  %s %s  %s  %s  %s",
+		// Race mode: LAST + GAP + INT + TREND
+		trend := ""
+		if hist, ok := m.gapHistory[d.RacingNumber]; ok && d.Position > 1 {
+			trend = gapTrendIndicator(hist)
+		}
+		row = fmt.Sprintf("  %s %s  %s  %s  %s %s  %s  %s  %s  %s",
 			posStr, deltaStr, colorBar, tlaStr, tyreStr,
 			m.renderTyreAge(d.RacingNumber),
 			lastLap,
 			m.renderGapStr(d, fpq),
-			m.renderIntvStr(d))
+			m.renderIntvStr(d),
+			padRightVisible(trend, 8))
 	}
 
 	if idx == m.cursor {
@@ -1395,8 +1728,19 @@ func (m OfficialLiveModel) renderGapStr(d LiveDriverData, fpq bool) string {
 		}
 		return padRightVisible(styleLeader.Render("LEADER"), 10)
 	}
+	// Try the feed-supplied gap first.
 	if g := parseGap(d.GapToLeader); g != "" {
 		return padRightVisible(styleGap.Render(g), 10)
+	}
+	// In practice/qualifying, compute gap from best lap times when the feed
+	// doesn't supply one.
+	if fpq {
+		if g := computeGapFromBestLap(d.BestLapTime, m.overallBestLapTime()); g != "" {
+			return padRightVisible(styleGap.Render(g), 10)
+		}
+		if d.BestLapTime == "" {
+			return padRight(styleMuted.Render("no time"), 10)
+		}
 	}
 	return padRight("", 10)
 }
@@ -1429,7 +1773,7 @@ func (m OfficialLiveModel) renderTyreIndicator(num string) string {
 
 func (m OfficialLiveModel) renderTyreAge(num string) string {
 	tyre, ok := m.tyres[num]
-	if !ok {
+	if !ok || tyre.Age == 0 {
 		return padRight("", 3)
 	}
 
@@ -1523,6 +1867,20 @@ func (m OfficialLiveModel) renderRightPanel(w int) string {
 	}
 
 	return sb.String()
+}
+
+// renderBattlesPanel is a thin receiver wrapper around the free renderBattlePanel function.
+func (m OfficialLiveModel) renderBattlesPanel(width int) string {
+	drivers := m.sortedDrivers()
+	battles := detectBattles(drivers, m.driverInfo, m.tyres, m.stints, m.gapHistory)
+	isRace := !m.isPracticeOrQuali()
+	return renderBattlePanel(battles, width, isRace)
+}
+
+// renderPitWindowPanel is a thin receiver wrapper around the free renderPitWindowPanel function.
+func (m OfficialLiveModel) renderPitWindowPanel(width int) string {
+	isRace := !m.isPracticeOrQuali()
+	return renderPitWindowPanel(m.drivers, m.driverInfo, m.session.CircuitName, isRace, width)
 }
 
 func (m OfficialLiveModel) renderDriverDetail(w int) string {

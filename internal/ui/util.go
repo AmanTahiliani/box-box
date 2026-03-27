@@ -164,6 +164,62 @@ func sparkline(laps []models.Lap, width int) string {
 	return result
 }
 
+// speedSparkline generates a unicode block chart for speed trap values.
+// Higher speed = taller bar (green). Lower speed = shorter bar (red).
+func speedSparkline(speeds []int, width int) string {
+	const blocks = "▁▂▃▄▅▆▇█"
+	blockRunes := []rune(blocks)
+
+	if len(speeds) == 0 {
+		return styleMuted.Render(strings.Repeat("·", width))
+	}
+
+	minSpd, maxSpd := speeds[0], speeds[0]
+	for _, s := range speeds {
+		if s < minSpd {
+			minSpd = s
+		}
+		if s > maxSpd {
+			maxSpd = s
+		}
+	}
+	rng := maxSpd - minSpd
+	if rng == 0 {
+		rng = 1
+	}
+
+	var sb strings.Builder
+	count := 0
+	for _, s := range speeds {
+		if count >= width {
+			break
+		}
+		norm := float64(s-minSpd) / float64(rng)
+		idx := int(norm*float64(len(blockRunes)-1) + 0.5)
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(blockRunes) {
+			idx = len(blockRunes) - 1
+		}
+		var style lipgloss.Style
+		switch {
+		case norm > 0.75:
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorCyan))
+		case norm > 0.5:
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
+		case norm > 0.25:
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorYellow))
+		default:
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
+		}
+		sb.WriteString(style.Render(string(blockRunes[idx])))
+		count++
+	}
+
+	return sb.String()
+}
+
 // windArrow maps a wind direction in degrees to a unicode arrow.
 func windArrow(degrees int) string {
 	arrows := []string{"↑", "↗", "→", "↘", "↓", "↙", "←", "↖"}

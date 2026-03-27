@@ -10,6 +10,7 @@ type GlobalKeyMap struct {
 	Tab4     key.Binding
 	Tab5     key.Binding
 	Tab6     key.Binding
+	Tab7     key.Binding
 	NextTab  key.Binding
 	PrevTab  key.Binding
 	Quit     key.Binding
@@ -50,6 +51,10 @@ var GlobalKeys = GlobalKeyMap{
 	Tab6: key.NewBinding(
 		key.WithKeys("6"),
 		key.WithHelp("6", "live"),
+	),
+	Tab7: key.NewBinding(
+		key.WithKeys("7"),
+		key.WithHelp("7", "track map"),
 	),
 	NextTab: key.NewBinding(
 		key.WithKeys("tab", "right"),
@@ -124,12 +129,14 @@ var StandingsKeys = StandingsKeyMap{
 
 // LiveKeyMap holds keybindings specific to the live timing tab.
 type LiveKeyMap struct {
-	ToggleSectors key.Binding
-	ToggleRC      key.Binding
-	ScrollRCUp    key.Binding
-	ScrollRCDown  key.Binding
-	ExpandDriver  key.Binding
-	Collapse      key.Binding
+	ToggleSectors   key.Binding
+	ToggleRC        key.Binding
+	ToggleBattles   key.Binding
+	TogglePitWindow key.Binding
+	ScrollRCUp      key.Binding
+	ScrollRCDown    key.Binding
+	ExpandDriver    key.Binding
+	Collapse        key.Binding
 }
 
 var LiveKeys = LiveKeyMap{
@@ -140,6 +147,14 @@ var LiveKeys = LiveKeyMap{
 	ToggleRC: key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "toggle RC panel"),
+	),
+	ToggleBattles: key.NewBinding(
+		key.WithKeys("b"),
+		key.WithHelp("b", "toggle battles"),
+	),
+	TogglePitWindow: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "pit window"),
 	),
 	ScrollRCUp: key.NewBinding(
 		key.WithKeys("K"),
@@ -154,8 +169,8 @@ var LiveKeys = LiveKeyMap{
 		key.WithHelp("enter", "driver detail"),
 	),
 	Collapse: key.NewBinding(
-		key.WithKeys("esc", "b"),
-		key.WithHelp("esc/b", "collapse"),
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "collapse"),
 	),
 }
 
@@ -165,6 +180,7 @@ type RaceDetailKeyMap struct {
 	ScrollDown  key.Binding
 	PrevSession key.Binding
 	NextSession key.Binding
+	Replay      key.Binding
 }
 
 var RaceDetailKeys = RaceDetailKeyMap{
@@ -183,5 +199,9 @@ var RaceDetailKeys = RaceDetailKeyMap{
 	NextSession: key.NewBinding(
 		key.WithKeys("]"),
 		key.WithHelp("]", "next session"),
+	),
+	Replay: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "replay lap scrubber"),
 	),
 }
