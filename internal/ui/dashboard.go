@@ -110,12 +110,27 @@ func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
 		m.meetings = msg.meetings
 		now := time.Now()
 
+		// First priority: find a meeting that has already started but not yet ended
+		// (i.e. we're currently in a GP weekend).
 		for i := range m.meetings {
 			mtg := m.meetings[i]
+			start, _ := time.Parse(time.RFC3339, mtg.DateStart)
 			end, _ := time.Parse(time.RFC3339, mtg.DateEnd)
-			if now.Before(end.Local()) || now.Sub(end.Local()) < 24*time.Hour { // also keep showing for 24h after
+			if now.After(start.Local()) && now.Before(end.Local().Add(24*time.Hour)) {
 				m.next = &mtg
 				break
+			}
+		}
+
+		// Second priority: if no ongoing weekend, find the next upcoming meeting.
+		if m.next == nil {
+			for i := range m.meetings {
+				mtg := m.meetings[i]
+				start, _ := time.Parse(time.RFC3339, mtg.DateStart)
+				if now.Before(start.Local()) {
+					m.next = &mtg
+					break
+				}
 			}
 		}
 
@@ -166,21 +181,32 @@ func (m DashboardModel) View() string {
 		Foreground(lipgloss.Color(colorF1Red)).
 		Bold(true)
 
+	// Determine if the weekend has started
+	now := time.Now()
+	meetingStart, _ := time.Parse(time.RFC3339, m.next.DateStart)
+	meetingStart = meetingStart.Local()
+	weekendUnderway := now.After(meetingStart)
+
 	sb.WriteString("\n")
-	sb.WriteString(titleStyle.Render(fmt.Sprintf("  NEXT RACE: %s", m.next.MeetingOfficialName)) + "\n")
+	if weekendUnderway {
+		sb.WriteString(titleStyle.Render(fmt.Sprintf("  CURRENT RACE: %s", m.next.MeetingOfficialName)) + "\n")
+	} else {
+		sb.WriteString(titleStyle.Render(fmt.Sprintf("  NEXT RACE: %s", m.next.MeetingOfficialName)) + "\n")
+	}
 	sb.WriteString(fmt.Sprintf("  %s • %s\n", countryFlag(m.next.CountryCode), m.next.Location))
 
-	now := time.Now()
 	end, _ := time.Parse(time.RFC3339, m.next.DateEnd)
 	endLocal := end.Local()
 
-	// Show countdown to first session if available, else use start date
+	// Show countdown to next session if available, else use start date
 	var nextStart time.Time
+	var nextSession *models.Session
 	startFound := false
-	for _, s := range m.sessions {
-		st, _ := time.Parse(time.RFC3339, s.DateStart)
+	for i := range m.sessions {
+		st, _ := time.Parse(time.RFC3339, m.sessions[i].DateStart)
 		if now.Before(st.Local()) {
 			nextStart = st.Local()
+			nextSession = &m.sessions[i]
 			startFound = true
 			break
 		}
@@ -201,7 +227,11 @@ func (m DashboardModel) View() string {
 		hours := int(diff.Hours()) % 24
 		mins := int(diff.Minutes()) % 60
 		secs := int(diff.Seconds()) % 60
-		sb.WriteString(fmt.Sprintf("  Starts in: %dd %02dh %02dm %02ds\n", days, hours, mins, secs))
+		if nextSession != nil {
+			sb.WriteString(fmt.Sprintf("  Next: %s in %dd %02dh %02dm %02ds\n", nextSession.SessionName, days, hours, mins, secs))
+		} else {
+			sb.WriteString(fmt.Sprintf("  Starts in: %dd %02dh %02dm %02ds\n", days, hours, mins, secs))
+		}
 	} else {
 		sb.WriteString("  " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Render("Weekend Finished") + "\n")
 	}

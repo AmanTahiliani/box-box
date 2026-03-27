@@ -288,7 +288,15 @@ func renderPointsBar(points, maxPoints float64, width int, color string) string 
 }
 
 // meetingStatus returns a status indicator for a meeting.
+// isNext is true when this meeting is the "current or next" highlighted one.
 func meetingStatus(m models.Meeting, now time.Time, isNext bool) string {
+	start, err := time.Parse(time.RFC3339, m.DateStart)
+	if err != nil {
+		start, _ = time.Parse("2006-01-02", m.DateStart[:min(len(m.DateStart), 10)])
+	} else {
+		start = start.Local()
+	}
+
 	end, err := time.Parse(time.RFC3339, m.DateEnd)
 	if err != nil {
 		end, err = time.Parse("2006-01-02", m.DateEnd[:min(len(m.DateEnd), 10)])
@@ -296,8 +304,14 @@ func meetingStatus(m models.Meeting, now time.Time, isNext bool) string {
 			return " "
 		}
 		end = end.Add(24 * time.Hour)
+	} else {
+		end = end.Local()
 	}
 
+	// Currently underway: started but not ended
+	if now.After(start) && now.Before(end) {
+		return styleNext.Render("▶")
+	}
 	if end.Before(now) {
 		return stylePast.Render("✓")
 	}

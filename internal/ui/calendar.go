@@ -151,6 +151,24 @@ func (m *CalendarModel) ensureCursorVisible() {
 
 func (m CalendarModel) findNextRaceIndex() int {
 	now := time.Now()
+
+	// First: return the index of a meeting currently underway (started but not ended).
+	for i, meeting := range m.meetings {
+		start, err := time.Parse(time.RFC3339, meeting.DateStart)
+		if err != nil {
+			start, _ = time.Parse("2006-01-02", meeting.DateStart[:min(len(meeting.DateStart), 10)])
+		}
+		end, err2 := time.Parse(time.RFC3339, meeting.DateEnd)
+		if err2 != nil {
+			end, _ = time.Parse("2006-01-02", meeting.DateEnd[:min(len(meeting.DateEnd), 10)])
+			end = end.Add(24 * time.Hour)
+		}
+		if now.After(start.Local()) && now.Before(end.Local()) {
+			return i
+		}
+	}
+
+	// Second: return the next upcoming meeting (start is in the future).
 	for i, meeting := range m.meetings {
 		start, err := time.Parse(time.RFC3339, meeting.DateStart)
 		if err != nil {

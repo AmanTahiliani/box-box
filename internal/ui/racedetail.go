@@ -141,17 +141,28 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			return m, nil
 		}
 		m.sessions = msg.sessions
-		// Auto-select the Race session and load its data
-		raceIdx := -1
+
+		// Auto-select the best session to show:
+		// 1. The last session that has already started (ongoing or completed).
+		// 2. If no session has started yet, fall back to the first session.
+		now := time.Now()
+		autoIdx := -1
 		for i, s := range m.sessions {
-			if s.SessionName == "Race" {
-				raceIdx = i
-				break
+			st, err := time.Parse(time.RFC3339, s.DateStart)
+			if err != nil {
+				continue
+			}
+			if now.After(st.Local()) {
+				autoIdx = i // keep updating — we want the LAST one that has started
 			}
 		}
-		if raceIdx >= 0 {
-			m.sessionCursor = raceIdx
-			sess := m.sessions[raceIdx]
+		if autoIdx < 0 && len(m.sessions) > 0 {
+			autoIdx = 0 // nothing started yet, show first session
+		}
+
+		if autoIdx >= 0 {
+			m.sessionCursor = autoIdx
+			sess := m.sessions[autoIdx]
 			m.selectedSession = &sess
 			m.loadingResults = true
 			m.driversLoaded = false
@@ -159,17 +170,7 @@ func (m RaceDetailModel) Update(msg tea.Msg) (RaceDetailModel, tea.Cmd) {
 			m.results = nil
 			m.rcMsgs = nil
 			m.weather = nil
-			m.drivers = make(map[int]models.Driver)
-			cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, sess.SessionKey))
-		} else if len(m.sessions) > 0 {
-			// Fallback: select last session
-			lastIdx := len(m.sessions) - 1
-			m.sessionCursor = lastIdx
-			sess := m.sessions[lastIdx]
-			m.selectedSession = &sess
-			m.loadingResults = true
-			m.driversLoaded = false
-			m.secondaryLoading = false
+			m.overtakes = nil
 			m.drivers = make(map[int]models.Driver)
 			cmds = append(cmds, m.spinner.Tick, fetchSessionData(m.client, sess.SessionKey))
 		}
