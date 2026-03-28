@@ -347,13 +347,23 @@ func (m StandingsModel) renderDriverStandings() string {
 		colorBar := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
 		pointsBar := renderPointsBar(s.PointsCurrent, maxPoints, barWidth, teamColor)
 
+		// Styling for top 3
+		nameStyle := lipgloss.NewStyle()
+		if i == 0 {
+			nameStyle = stylePositionFirst
+		} else if i == 1 {
+			nameStyle = stylePositionSecond
+		} else if i == 2 {
+			nameStyle = stylePositionThird
+		}
+
 		var row string
 		if compact {
 			row = fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 				padRightVisible(pos, 3),
 				delta,
 				colorBar,
-				padRight(acronym, 4),
+				nameStyle.Render(padRight(acronym, 4)),
 				padRight(truncate(team, teamWidth), teamWidth),
 				padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), 5),
 			)
@@ -362,8 +372,8 @@ func (m StandingsModel) renderDriverStandings() string {
 				padRightVisible(pos, 4),
 				delta,
 				colorBar,
-				padRight(acronym, 4),
-				padRight(truncate(name, nameWidth), nameWidth),
+				nameStyle.Render(padRight(acronym, 4)),
+				nameStyle.Render(padRight(truncate(name, nameWidth), nameWidth)),
 				padRight(truncate(team, teamWidth), teamWidth),
 				padLeft(fmt.Sprintf("%.0f", s.PointsCurrent), 6),
 				pointsBar,

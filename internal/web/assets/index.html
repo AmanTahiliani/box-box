@@ -40,6 +40,16 @@
       <div class="home-hero" x-show="!loading">
         <!-- Next race -->
         <div class="card next-race" x-show="nextRace">
+          <!-- Speed lines background -->
+          <div class="speed-lines" aria-hidden="true">
+            <div class="speed-line"></div><div class="speed-line"></div><div class="speed-line"></div>
+            <div class="speed-line"></div><div class="speed-line"></div><div class="speed-line"></div>
+            <div class="speed-line"></div><div class="speed-line"></div>
+          </div>
+          <!-- Circuit watermark -->
+          <div class="circuit-watermark" x-text="nextRace?.circuit_short_name||''"></div>
+          <!-- Checkered flag pattern -->
+          <div class="checkered-corner" aria-hidden="true"></div>
           <div class="card-label" x-text="heroLabel"></div>
           <div class="next-race-flag" x-text="flagEmoji(nextRace?.country_code)"></div>
           <h2 class="next-race-name" x-text="nextRace?.meeting_name||''"></h2>
@@ -51,8 +61,10 @@
         <!-- Championship sidebar -->
         <div class="card champ-sidebar">
           <div class="card-label">DRIVERS' CHAMPIONSHIP</div>
-          <template x-for="d in champDrivers.slice(0,5)" :key="d.driver_number">
-            <div class="champ-row" :style="`--team-color:#${d.team_colour}`">
+          <template x-for="(d, idx) in champDrivers.slice(0,10)" :key="d.driver_number">
+            <div class="champ-row" 
+                 :class="idx === 0 ? 'podium-1' : (idx === 1 ? 'podium-2' : (idx === 2 ? 'podium-3' : ''))"
+                 :style="`--team-color:#${d.team_colour}`">
               <span class="champ-pos" x-text="d.position_current"></span>
               <span class="team-swatch"></span>
               <span class="champ-tla" x-text="d.name_acronym||d.driver_number"></span>
@@ -74,7 +86,8 @@
       <div class="section-label" x-text="season + ' SEASON'"></div>
       <div class="meetings-grid" x-show="!loading">
         <template x-for="m in meetings" :key="m.meeting_key">
-          <a class="meeting-card" :class="{past: isPast(m)}" :href="`#/race/${m.meeting_key}`">
+          <a class="meeting-card" :class="{past: isPast(m), 'meeting-next': m === nextRace}" :href="`#/race/${m.meeting_key}`">
+            <div class="meeting-card-accent"></div>
             <div class="meeting-flag" x-text="flagEmoji(m.country_code)"></div>
             <div class="meeting-name" x-text="m.meeting_name"></div>
             <div class="meeting-circuit" x-text="m.circuit_short_name"></div>
@@ -285,32 +298,73 @@
         </template>
       </div>
 
-      <table class="data-table" x-show="!loading && view==='drivers'">
-        <thead><tr><th>POS</th><th>DRIVER</th><th>TEAM</th><th>PTS</th></tr></thead>
-        <tbody>
-          <template x-for="d in driverStandings" :key="d.driver_number">
-            <tr :style="`--team-color:#${d.team_colour}`">
-              <td x-text="d.position_current"></td>
-              <td><span class="team-swatch"></span><span x-text="d.full_name||d.driver_number"></span></td>
-              <td x-text="d.team_name||'-'"></td>
-              <td x-text="d.points_current"></td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+      <!-- Drivers standings table -->
+      <div class="standings-table" x-show="!loading && view==='drivers'">
+        <div class="standings-header">
+          <span class="sh-pos">POS</span>
+          <span class="sh-driver">DRIVER</span>
+          <span class="sh-team">TEAM</span>
+          <span class="sh-bar"></span>
+          <span class="sh-pts">PTS</span>
+          <span class="sh-gap">GAP</span>
+        </div>
+        <template x-for="(d, idx) in driverStandings" :key="d.driver_number">
+          <div class="standings-row"
+               :class="idx === 0 ? 'podium-1' : (idx === 1 ? 'podium-2' : (idx === 2 ? 'podium-3' : ''))"
+               :style="`--team-color:#${d.team_colour}`">
+            <!-- Team color left border (via CSS) -->
+            <div class="sr-pos">
+              <span class="trophy-icon" x-show="idx < 3" x-text="['🥇','🥈','🥉'][idx]"></span>
+              <span x-show="idx >= 3" x-text="d.position_current" class="pos-num"></span>
+            </div>
+            <div class="sr-driver">
+              <span class="driver-num-badge" :style="`background:#${d.team_colour}22; color:#${d.team_colour}; border-color:#${d.team_colour}55`" x-text="d.driver_number"></span>
+              <div class="sr-driver-info">
+                <span class="sr-full-name" x-text="d.full_name||d.driver_number"></span>
+                <span class="sr-tla" x-text="d.name_acronym||''"></span>
+              </div>
+            </div>
+            <div class="sr-team" x-text="d.team_name||'-'"></div>
+            <div class="sr-bar-wrap">
+              <div class="sr-bar" :style="`width:${standingsBarWidth(d.points_current, driverStandings)}%;`"></div>
+            </div>
+            <div class="sr-pts" x-text="d.points_current"></div>
+            <div class="sr-gap" x-text="idx === 0 ? 'LEADER' : '-' + (driverStandings[0].points_current - d.points_current)"></div>
+          </div>
+        </template>
+      </div>
 
-      <table class="data-table" x-show="!loading && view==='teams'">
-        <thead><tr><th>POS</th><th>TEAM</th><th>PTS</th></tr></thead>
-        <tbody>
-          <template x-for="t in teamStandings" :key="t.team_name">
-            <tr>
-              <td x-text="t.position_current"></td>
-              <td x-text="t.team_name"></td>
-              <td x-text="t.points_current"></td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+      <!-- Constructors standings table -->
+      <div class="standings-table" x-show="!loading && view==='teams'">
+        <div class="standings-header constructor-header">
+          <span class="sh-pos">POS</span>
+          <span class="sh-driver">CONSTRUCTOR</span>
+          <span class="sh-bar"></span>
+          <span class="sh-pts">PTS</span>
+          <span class="sh-gap">GAP</span>
+        </div>
+        <template x-for="(t, idx) in teamStandings" :key="t.team_name">
+          <div class="standings-row constructor-row"
+               :class="idx === 0 ? 'podium-1' : (idx === 1 ? 'podium-2' : (idx === 2 ? 'podium-3' : ''))"
+               :style="`--team-color:${teamColor(t.team_name)}`">
+            <div class="sr-pos">
+              <span class="trophy-icon" x-show="idx < 3" x-text="['🥇','🥈','🥉'][idx]"></span>
+              <span x-show="idx >= 3" x-text="t.position_current" class="pos-num"></span>
+            </div>
+            <div class="sr-driver">
+              <div class="constructor-color-block" :style="`background:${teamColor(t.team_name)}`"></div>
+              <div class="sr-driver-info">
+                <span class="sr-full-name" x-text="t.team_name"></span>
+              </div>
+            </div>
+            <div class="sr-bar-wrap">
+              <div class="sr-bar" :style="`width:${standingsBarWidth(t.points_current, teamStandings)}%;`"></div>
+            </div>
+            <div class="sr-pts" x-text="t.points_current"></div>
+            <div class="sr-gap" x-text="idx === 0 ? 'LEADER' : '-' + (teamStandings[0].points_current - t.points_current)"></div>
+          </div>
+        </template>
+      </div>
     </div>
   </template>
 

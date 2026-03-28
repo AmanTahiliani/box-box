@@ -167,46 +167,53 @@ func (m DashboardModel) View() string {
 
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorF1Red)).
-		Bold(true)
+		Bold(true).
+		MarginBottom(1)
 
 	now := time.Now()
 	weekendUnderway := meetingHasStarted(*m.next, now)
 
-	sb.WriteString("\n")
+	// Left panel: Meeting Info & Countdown
+	var leftSide strings.Builder
+	leftSide.WriteString("\n")
 	if weekendUnderway {
-		sb.WriteString(titleStyle.Render(fmt.Sprintf("  CURRENT RACE: %s", m.next.MeetingOfficialName)) + "\n")
+		leftSide.WriteString(titleStyle.Render(fmt.Sprintf("CURRENT RACE: %s", m.next.MeetingOfficialName)) + "\n")
 	} else {
-		sb.WriteString(titleStyle.Render(fmt.Sprintf("  NEXT RACE: %s", m.next.MeetingOfficialName)) + "\n")
+		leftSide.WriteString(titleStyle.Render(fmt.Sprintf("NEXT RACE: %s", m.next.MeetingOfficialName)) + "\n")
 	}
-	sb.WriteString(fmt.Sprintf("  %s • %s\n", countryFlag(m.next.CountryCode), m.next.Location))
+	leftSide.WriteString(fmt.Sprintf(" %s • %s\n", countryFlag(m.next.CountryCode), m.next.Location))
 
 	currentSession, nextSession := currentAndNextSession(m.sessions, now)
 
-	sb.WriteString("\n")
+	leftSide.WriteString("\n")
 	if currentSession != nil {
-		liveBadge := lipgloss.NewStyle().Background(lipgloss.Color(colorSoft)).Foreground(lipgloss.Color(colorSurface0)).Bold(true).Padding(0, 1).Render("LIVE")
-		sb.WriteString(fmt.Sprintf("  %s %s\n", liveBadge, currentSession.SessionName))
+		liveBadge := lipgloss.NewStyle().Background(lipgloss.Color(colorF1Red)).Foreground(lipgloss.Color(colorWhite)).Bold(true).Padding(0, 1).Render("LIVE")
+		leftSide.WriteString(fmt.Sprintf(" %s %s\n", liveBadge, currentSession.SessionName))
 	} else if nextSession != nil {
 		nextStart, err := sessionStartTime(*nextSession)
 		if err != nil {
-			sb.WriteString("  " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Render("Schedule unavailable") + "\n")
+			leftSide.WriteString(" " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Render("Schedule unavailable") + "\n")
 		} else {
 			diff := nextStart.Sub(now)
 			days := int(diff.Hours() / 24)
 			hours := int(diff.Hours()) % 24
 			mins := int(diff.Minutes()) % 60
 			secs := int(diff.Seconds()) % 60
-			sb.WriteString(fmt.Sprintf("  Next: %s in %dd %02dh %02dm %02ds\n", nextSession.SessionName, days, hours, mins, secs))
+
+			countdown := fmt.Sprintf("%dd %02dh %02dm %02ds", days, hours, mins, secs)
+			leftSide.WriteString(fmt.Sprintf(" Next: %s\n", styleBold.Render(nextSession.SessionName)))
+			leftSide.WriteString(fmt.Sprintf(" Starts in: %s\n", styleCountdown.Render(countdown)))
 		}
 	} else {
-		sb.WriteString("  " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Render("Weekend Finished") + "\n")
+		leftSide.WriteString(" " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted)).Render("Weekend Finished") + "\n")
 	}
 
-	sb.WriteString("\n")
+	leftPanel := stylePanelBorder.Width(w/2 - 4).Render(leftSide.String())
 
-	// Weekend Schedule
+	// Right panel: Weekend Schedule
+	var rightSide strings.Builder
 	if len(m.sessions) > 0 {
-		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Bold(true).Render("  WEEKEND SCHEDULE (Local Time)") + "\n")
+		rightSide.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Bold(true).Render("WEEKEND SCHEDULE (Local Time)") + "\n\n")
 		for _, s := range m.sessions {
 			stLocal, err := sessionStartTime(s)
 			if err != nil {
@@ -219,13 +226,20 @@ func (m DashboardModel) View() string {
 			if end, err := sessionEndTime(s); err == nil && !now.Before(end) {
 				rowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
 			} else if currentSession != nil && currentSession.SessionKey == s.SessionKey {
-				rowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorSoft)).Bold(true)
+				rowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorF1Red)).Bold(true)
 			}
 
-			sb.WriteString(rowStyle.Render(fmt.Sprintf("  %-15s %-12s %s", s.SessionName, day, tStr)) + "\n")
+			rightSide.WriteString(rowStyle.Render(fmt.Sprintf("%-15s %-12s %s", s.SessionName, day, tStr)) + "\n")
 		}
 	}
+	rightPanel := stylePanelBorder.Width(w/2 - 4).Render(rightSide.String())
 
-	sb.WriteString("\n" + helpBar("1-6 tabs", "q quit"))
+	if m.width > 80 {
+		sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, "  ", rightPanel))
+	} else {
+		sb.WriteString(leftPanel + "\n" + rightPanel)
+	}
+
+	sb.WriteString("\n\n" + helpBar("1-7 tabs", "q quit"))
 	return sb.String()
 }

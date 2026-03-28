@@ -615,6 +615,32 @@ function standingsPage() {
           : [];
       } catch (_) { this.teamStandings = []; }
     },
+
+    standingsBarWidth(pts, list) {
+      if (!list || !list.length) return 0;
+      const max = list[0].points_current;
+      return max > 0 ? Math.round((pts / max) * 100) : 0;
+    },
+
+    teamColor(name) {
+      // Map known constructor names to brand colors
+      const map = {
+        'Red Bull Racing': '#3671C6',
+        'Mercedes':        '#27F4D2',
+        'Ferrari':         '#E8002D',
+        'McLaren':         '#FF8000',
+        'Aston Martin':    '#229971',
+        'Alpine':          '#FF87BC',
+        'Williams':        '#64C4FF',
+        'Racing Bulls':    '#6692FF',
+        'Kick Sauber':     '#52E252',
+        'Haas F1 Team':    '#B6BABD',
+      };
+      for (const key of Object.keys(map)) {
+        if (name && name.includes(key.split(' ')[0])) return map[key];
+      }
+      return '#666688';
+    },
   };
 }
 
