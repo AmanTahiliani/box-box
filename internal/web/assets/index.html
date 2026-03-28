@@ -85,13 +85,22 @@
       <!-- Season grid -->
       <div class="section-label" x-text="season + ' SEASON'"></div>
       <div class="meetings-grid" x-show="!loading">
-        <template x-for="m in meetings" :key="m.meeting_key">
-          <a class="meeting-card" :class="{past: isPast(m), 'meeting-next': m === nextRace}" :href="`#/race/${m.meeting_key}`">
+        <template x-for="(m, idx) in meetings" :key="m.meeting_key">
+          <a class="meeting-card"
+             :class="{past: isPast(m), 'meeting-next': m === nextRace}"
+             :href="`#/race/${m.meeting_key}`"
+             :style="meetingCardStyle(m.country_code)">
             <div class="meeting-card-accent"></div>
-            <div class="meeting-flag" x-text="flagEmoji(m.country_code)"></div>
-            <div class="meeting-name" x-text="m.meeting_name"></div>
-            <div class="meeting-circuit" x-text="m.circuit_short_name"></div>
-            <div class="meeting-date" x-text="fmtDate(m.date_start)"></div>
+            <div class="meeting-card-body">
+              <div class="meeting-country-code" x-text="m.country_code||'?'"></div>
+              <div class="meeting-card-flag" x-text="flagEmoji(m.country_code)"></div>
+            </div>
+            <div class="meeting-card-foot">
+              <div class="meeting-name" x-text="m.meeting_name"></div>
+              <div class="meeting-circuit" x-text="m.circuit_short_name"></div>
+              <div class="meeting-date" x-text="fmtDate(m.date_start)"></div>
+            </div>
+            <div class="meeting-round" x-text="'R' + roundNum(m)"></div>
           </a>
         </template>
       </div>

@@ -4,14 +4,94 @@
 
 // ---- Shared helpers ----
 
-// Convert ISO 3166-1 alpha-2 country code → emoji flag (mirrors TUI countryFlag).
+// Map OpenF1 3-letter country codes → ISO 3166-1 alpha-2 for flag emoji.
+const CODE3_TO_2 = {
+  AUS:'AU', AUT:'AT', AZE:'AZ', BRN:'BH', BEL:'BE', BRA:'BR', CHN:'CN',
+  NED:'NL', FRA:'FR', GER:'DE', HUN:'HU', ITA:'IT', JPN:'JP', MON:'MC',
+  MEX:'MX', QAT:'QA', KSA:'SA', SGP:'SG', ESP:'ES', UAE:'AE', GBR:'GB',
+  USA:'US', CAN:'CA', RSA:'ZA',
+};
+
+// Convert country code (2- or 3-letter) → emoji flag.
 function flagEmoji(code) {
-  if (!code || code.length !== 2) return '🏁';
-  const offset = 0x1F1E6 - 65; // Regional Indicator A offset
+  if (!code) return '🏁';
+  let iso2 = code.toUpperCase();
+  if (iso2.length === 3) iso2 = CODE3_TO_2[iso2] || '';
+  if (iso2.length !== 2) return '🏁';
+  const offset = 0x1F1E6 - 65;
   return String.fromCodePoint(
-    code.toUpperCase().charCodeAt(0) + offset,
-    code.toUpperCase().charCodeAt(1) + offset
+    iso2.charCodeAt(0) + offset,
+    iso2.charCodeAt(1) + offset
   );
+}
+
+// Per-country accent colours for GP cards.
+// Keys cover both ISO 3166-1 alpha-2 AND the 3-letter codes OpenF1 sometimes returns.
+const COUNTRY_COLORS = {
+  // 2-letter ISO
+  AU: '#C0392B', AT: '#ED2939', AZ: '#0092BC', BH: '#CE1126',
+  BE: '#F0B400', BR: '#009C3B', CN: '#DE2910', NL: '#FF6600',
+  FR: '#002395', DE: '#CC0000', HU: '#3A6B35', IT: '#009246',
+  JP: '#BC002D', MC: '#CE1126', MX: '#006847', QA: '#8D1B3D',
+  SA: '#006C35', SG: '#EF3340', ES: '#C60B1E', AE: '#009A44',
+  GB: '#012169', US: '#B22234', CA: '#FF0000',
+  // 3-letter OpenF1 codes
+  AUS: '#C0392B', // Australia
+  AUT: '#ED2939', // Austria
+  AZE: '#0092BC', // Azerbaijan / Baku
+  BRN: '#CE1126', // Bahrain
+  BEL: '#F0B400', // Belgium
+  BRA: '#009C3B', // Brazil
+  CHN: '#DE2910', // China
+  NED: '#FF6600', // Netherlands
+  FRA: '#002395', // France
+  GER: '#CC0000', // Germany
+  HUN: '#3A6B35', // Hungary
+  ITA: '#009246', // Italy
+  JPN: '#BC002D', // Japan
+  MON: '#CE1126', // Monaco
+  MEX: '#006847', // Mexico
+  QAT: '#8D1B3D', // Qatar
+  KSA: '#006C35', // Saudi Arabia
+  SGP: '#EF3340', // Singapore
+  ESP: '#C60B1E', // Spain
+  UAE: '#009A44', // Abu Dhabi
+  GBR: '#012169', // Great Britain
+  USA: '#B22234', // USA
+  CAN: '#FF0000', // Canada
+  RSA: '#007A4D', // South Africa
+};
+
+// Return the accent hex for a country code (2- or 3-letter), or null.
+function countryAccent(code) {
+  return COUNTRY_COLORS[code?.toUpperCase()] || null;
+}
+
+// Build the full inline `style` string for a meeting card so the background
+// gradient is applied directly (CSS vars containing gradient strings don't work
+// reliably across all browsers when used in background-image).
+function meetingCardStyle(code) {
+  const accent = countryAccent(code) || '#2a2a44';
+  // Parse the hex to RGB for use in rgba()
+  const r = parseInt(accent.slice(1, 3), 16);
+  const g = parseInt(accent.slice(3, 5), 16);
+  const b = parseInt(accent.slice(5, 7), 16);
+  return [
+    `--country-accent:${accent}`,
+    `--country-r:${r}`,
+    `--country-g:${g}`,
+    `--country-b:${b}`,
+    `background:linear-gradient(145deg, rgba(${r},${g},${b},0.18) 0%, rgba(${r},${g},${b},0.07) 55%, var(--surface-1) 100%)`,
+  ].join(';');
+}
+
+// Tinted gradient string (kept for backward compat, not used on cards now).
+function countryGradient(code) {
+  const accent = countryAccent(code) || '#2a2a44';
+  const r = parseInt(accent.slice(1, 3), 16);
+  const g = parseInt(accent.slice(3, 5), 16);
+  const b = parseInt(accent.slice(5, 7), 16);
+  return `linear-gradient(145deg, rgba(${r},${g},${b},0.18) 0%, rgba(${r},${g},${b},0.07) 55%, transparent 100%)`;
 }
 
 // Current F1 season year derived from today's date.
@@ -230,7 +310,14 @@ function homePage() {
     },
 
     flagEmoji,
+    countryAccent,
+    meetingCardStyle,
     isPast(m) { return new Date(m.date_start).getTime() < Date.now(); },
+    roundNum(m) {
+      // Find 1-based index within the meetings list
+      const idx = this.meetings.indexOf(m);
+      return idx >= 0 ? String(idx + 1).padStart(2, '0') : '—';
+    },
     fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) : ''; },
 
     destroy() { clearInterval(this._countdownTimer); },
