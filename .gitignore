@@ -1,6 +1,12 @@
 # Binaries
 cmd/cmd
 box-box
+box-box-*
+main
+build/
+
+# Log files
+*.log
 
 # SQLite database files
 *.db
