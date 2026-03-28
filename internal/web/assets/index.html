@@ -40,10 +40,11 @@
       <div class="home-hero" x-show="!loading">
         <!-- Next race -->
         <div class="card next-race" x-show="nextRace">
-          <div class="card-label">NEXT RACE</div>
+          <div class="card-label" x-text="heroLabel"></div>
           <div class="next-race-flag" x-text="flagEmoji(nextRace?.country_code)"></div>
           <h2 class="next-race-name" x-text="nextRace?.meeting_name||''"></h2>
           <div class="next-race-circuit" x-text="nextRace?.circuit_short_name||''"></div>
+          <div class="next-race-session" x-show="heroMeta" x-text="heroMeta"></div>
           <div class="next-race-countdown" x-text="countdown"></div>
         </div>
 

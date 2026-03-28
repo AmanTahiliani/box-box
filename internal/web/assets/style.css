@@ -150,6 +150,13 @@ a { color: inherit; text-decoration: none; }
 .next-race-flag   { font-size: 3rem; margin: 0.25rem 0; }
 .next-race-name   { font-size: 1.4rem; font-weight: 700; margin: 0.25rem 0; }
 .next-race-circuit { color: var(--text-2); font-size: 0.85rem; margin-bottom: 0.5rem; }
+.next-race-session {
+  color: var(--text-1);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.45rem;
+}
 .next-race-countdown {
   font-size: 1.6rem;
   font-weight: 800;

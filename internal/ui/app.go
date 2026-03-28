@@ -55,10 +55,20 @@ type AppModel struct {
 	trackMap   TrackMapModel
 
 	meetings []models.Meeting
+	nextInfo *statusBarTarget
 
 	// Splash screen state
 	showSplash    bool
 	splashSpinner spinner.Model
+}
+
+type statusBarTarget struct {
+	meeting *models.Meeting
+	current *models.Session
+	next    *models.Session
+	loading bool
+	stale   bool
+	err     error
 }
 
 func NewAppModel(client *api.OpenF1Client) AppModel {
@@ -102,6 +112,43 @@ func prefetchTrackOutlines(client *api.OpenF1Client, year int) tea.Cmd {
 		}
 		client.PrefetchTrackOutlines(meetings)
 		return trackPrefetchDoneMsg{}
+	}
+}
+
+type statusBarScheduleLoadedMsg struct {
+	target *statusBarTarget
+}
+
+func fetchStatusBarSchedule(client *api.OpenF1Client, meetings []models.Meeting) tea.Cmd {
+	meetingsCopy := append([]models.Meeting(nil), meetings...)
+	return func() tea.Msg {
+		now := time.Now()
+		target := &statusBarTarget{}
+
+		meeting := currentMeeting(meetingsCopy, now)
+		if meeting == nil {
+			meeting = nextUpcomingMeeting(meetingsCopy, now)
+		}
+		if meeting == nil {
+			return statusBarScheduleLoadedMsg{target: target}
+		}
+
+		target.meeting = meeting
+		target.loading = true
+
+		sessions, err := client.GetSessionsForMeeting(int(meeting.MeetingKey))
+		if err != nil {
+			target.loading = false
+			target.err = err
+			target.stale = client.LastResponseWasStale()
+			return statusBarScheduleLoadedMsg{target: target}
+		}
+
+		sortSessionsByStart(sessions)
+		target.current, target.next = currentAndNextSession(sessions, now)
+		target.loading = false
+		target.stale = client.LastResponseWasStale()
+		return statusBarScheduleLoadedMsg{target: target}
 	}
 }
 
@@ -268,11 +315,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case meetingsLoadedMsg:
 		if msg.err == nil {
 			m.meetings = msg.meetings
+			m.nextInfo = &statusBarTarget{loading: true}
+			cmds = append(cmds, fetchStatusBarSchedule(m.client, msg.meetings))
 		}
 		var cmd tea.Cmd
 		m.calendar, cmd = m.calendar.Update(msg)
 		cmds = append(cmds, cmd)
 		return m, tea.Batch(cmds...)
+
+	case statusBarScheduleLoadedMsg:
+		m.nextInfo = msg.target
+		return m, nil
 
 	case sessionResultsLoadedMsg:
 		var cmd tea.Cmd
@@ -521,37 +574,51 @@ func (m AppModel) renderStatusBar(width int) string {
 			Render("BOX-BOX"),
 	}
 
-	// Next race countdown
-	var nextMeeting *models.Meeting
-	for i := range m.meetings {
-		start, err := time.Parse(time.RFC3339, m.meetings[i].DateStart)
-		if err != nil {
-			start, _ = time.Parse("2006-01-02", m.meetings[i].DateStart[:min(len(m.meetings[i].DateStart), 10)])
-		}
-		if start.After(now) {
-			nextMeeting = &m.meetings[i]
-			break
-		}
-	}
+	if m.nextInfo != nil && m.nextInfo.meeting != nil {
+		flag := countryFlag(m.nextInfo.meeting.CountryCode)
+		raceName := styleStatusValue.Render(m.nextInfo.meeting.MeetingName)
 
-	if nextMeeting != nil {
-		start, err := time.Parse(time.RFC3339, nextMeeting.DateStart)
-		if err == nil {
-			diff := start.Sub(now)
-			days := int(diff.Hours() / 24)
-			hours := int(diff.Hours()) % 24
+		leftParts = append(leftParts, styleStatusLabel.Render("│"))
 
-			flag := countryFlag(nextMeeting.CountryCode)
-			raceName := styleStatusValue.Render(nextMeeting.MeetingName)
-			countdown := styleCountdown.Render(fmt.Sprintf("%dd %dh", days, hours))
-
+		switch {
+		case m.nextInfo.current != nil:
 			leftParts = append(leftParts,
-				styleStatusLabel.Render("│"),
-				styleStatusLabel.Render("NEXT"),
+				styleStatusLabel.Render("LIVE"),
 				flag+" "+raceName,
-				styleStatusLabel.Render("in"),
-				countdown,
+				styleStatusLabel.Render("·"),
+				styleStatusValue.Render(m.nextInfo.current.SessionName),
 			)
+		case m.nextInfo.next != nil:
+			if start, err := sessionStartTime(*m.nextInfo.next); err == nil {
+				diff := start.Sub(now)
+				days := int(diff.Hours() / 24)
+				hours := int(diff.Hours()) % 24
+				leftParts = append(leftParts,
+					styleStatusLabel.Render("NEXT"),
+					flag+" "+raceName,
+					styleStatusLabel.Render("·"),
+					styleStatusValue.Render(m.nextInfo.next.SessionName),
+					styleStatusLabel.Render("in"),
+					styleCountdown.Render(fmt.Sprintf("%dd %dh", days, hours)),
+				)
+			}
+		case meetingHasStarted(*m.nextInfo.meeting, now):
+			leftParts = append(leftParts,
+				styleStatusLabel.Render("DONE"),
+				flag+" "+raceName,
+			)
+		default:
+			if start, err := meetingStartTime(*m.nextInfo.meeting); err == nil {
+				diff := start.Sub(now)
+				days := int(diff.Hours() / 24)
+				hours := int(diff.Hours()) % 24
+				leftParts = append(leftParts,
+					styleStatusLabel.Render("NEXT"),
+					flag+" "+raceName,
+					styleStatusLabel.Render("in"),
+					styleCountdown.Render(fmt.Sprintf("%dd %dh", days, hours)),
+				)
+			}
 		}
 	}
 

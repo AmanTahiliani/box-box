@@ -19,6 +19,53 @@ function currentSeason() {
   return new Date().getFullYear();
 }
 
+function parseScheduleTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function sortSessionsByStart(sessions) {
+  return [...sessions].sort((a, b) => {
+    const left = parseScheduleTime(a.date_start);
+    const right = parseScheduleTime(b.date_start);
+    return (left?.getTime() || 0) - (right?.getTime() || 0);
+  });
+}
+
+function pickRelevantMeeting(meetings, now = new Date()) {
+  const started = meetings
+    .map(meeting => ({
+      meeting,
+      start: parseScheduleTime(meeting.date_start),
+      end: parseScheduleTime(meeting.date_end) || null,
+    }))
+    .filter(entry => entry.start && entry.start.getTime() <= now.getTime())
+    .filter(entry => !entry.end || now.getTime() <= entry.end.getTime() + 24 * 60 * 60 * 1000)
+    .sort((a, b) => b.start.getTime() - a.start.getTime());
+  if (started.length) return started[0].meeting;
+
+  return meetings.find(meeting => {
+    const start = parseScheduleTime(meeting.date_start);
+    return start && start.getTime() > now.getTime();
+  }) || null;
+}
+
+function pickCurrentAndNextSession(sessions, now = new Date()) {
+  for (const session of sessions) {
+    const start = parseScheduleTime(session.date_start);
+    const end = parseScheduleTime(session.date_end) || (start ? new Date(start.getTime() + 3 * 60 * 60 * 1000) : null);
+    if (!start || !end) continue;
+
+    if (now.getTime() >= start.getTime() && now.getTime() < end.getTime()) {
+      return { current: session, next: null };
+    }
+    if (now.getTime() < start.getTime()) {
+      return { current: null, next: session };
+    }
+  }
+  return { current: null, next: null };
+}
+
 // ---- Root state: routing + live check ----
 
 function appState() {
@@ -69,6 +116,10 @@ function homePage() {
     meetings: [],
     champDrivers: [],
     nextRace: null,
+    nextSession: null,
+    currentSession: null,
+    heroLabel: 'NEXT RACE',
+    heroMeta: '',
     countdown: '',
     season: currentSeason(),
     _countdownTimer: null,
@@ -88,9 +139,33 @@ function homePage() {
         const r = await fetch(`/api/v1/meetings?year=${this.season}`);
         const data = await r.json();
         this.meetings = Array.isArray(data) ? data : [];
-        // Find next race
-        const now = Date.now();
-        this.nextRace = this.meetings.find(m => new Date(m.date_start).getTime() > now) || null;
+
+        const meeting = pickRelevantMeeting(this.meetings);
+        this.nextRace = meeting;
+        this.nextSession = null;
+        this.currentSession = null;
+        this.heroLabel = meeting && parseScheduleTime(meeting.date_start)?.getTime() <= Date.now()
+          ? 'CURRENT WEEKEND'
+          : 'NEXT RACE';
+        this.heroMeta = '';
+
+        if (!meeting) return;
+
+        const sessionsResp = await fetch(`/api/v1/sessions?meeting_key=${meeting.meeting_key}`);
+        const sessionsData = await sessionsResp.json();
+        const sessions = Array.isArray(sessionsData) ? sortSessionsByStart(sessionsData) : [];
+        const { current, next } = pickCurrentAndNextSession(sessions);
+
+        this.currentSession = current;
+        this.nextSession = next;
+
+        if (current) {
+          this.heroLabel = 'LIVE NOW';
+          this.heroMeta = current.session_name;
+        } else if (next) {
+          this.heroLabel = 'NEXT SESSION';
+          this.heroMeta = next.session_name;
+        }
       } catch (_) {}
     },
 
@@ -106,20 +181,46 @@ function homePage() {
 
     startCountdown() {
       if (!this.nextRace) return;
-      const target = new Date(this.nextRace.date_start).getTime();
       const update = () => {
-        const diff = target - Date.now();
-        if (diff <= 0) { this.countdown = 'Race day!'; return; }
+        const targetSource = this.currentSession || this.nextSession || this.nextRace;
+        const targetTime = this.currentSession
+          ? parseScheduleTime(this.currentSession.date_end)?.getTime()
+          : parseScheduleTime(targetSource?.date_start)?.getTime();
+        if (!targetTime) {
+          this.countdown = '';
+          return;
+        }
+
+        const diff = targetTime - Date.now();
+        if (this.currentSession) {
+          if (diff <= 0) {
+            this.countdown = 'Session complete';
+            return;
+          }
+          this.countdown = `Ends in ${this.formatDuration(diff)}`;
+          return;
+        }
+
+        if (diff <= 0) {
+          this.countdown = this.nextSession ? 'Session starting' : 'Race day!';
+          return;
+        }
+
+        const prefix = this.nextSession ? 'Starts in ' : '';
+        this.countdown = prefix + this.formatDuration(diff);
+      };
+      update();
+      this._countdownTimer = setInterval(update, 1000);
+    },
+
+    formatDuration(diff) {
         const d = Math.floor(diff / 86400000);
         const h = Math.floor((diff % 86400000) / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
         const s = Math.floor((diff % 60000) / 1000);
-        this.countdown = d > 0
+        return d > 0
           ? `${d}d ${pad(h)}:${pad(m)}:${pad(s)}`
           : `${pad(h)}:${pad(m)}:${pad(s)}`;
-      };
-      update();
-      this._countdownTimer = setInterval(update, 1000);
     },
 
     barWidth(pts) {
