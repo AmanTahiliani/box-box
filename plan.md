@@ -30,10 +30,10 @@ New views that reconstruct the race narrative and make box-box indispensable dur
 
 A lightweight local web UI for visualizations that need a proper canvas.
 
-- [ ] **`box-box --web` server** — Spawn a localhost SPA from Go embedded assets, sharing the same SQLite cache
-- [ ] **SVG Track Map** — Animated car positions on a real circuit layout with team colors
-- [ ] **Telemetry Overlay** — Interactive throttle/brake/speed graph through a lap (D3.js or Canvas)
-- [ ] **Strategy Timeline** — Visual pit stop and stint timeline for the full field
+- [x] **`box-box --web` server** — Spawn a localhost SPA from Go embedded assets, sharing the same SQLite cache
+- [x] **SVG Track Map** — Animated car positions on a real circuit layout with team colors
+- [x] **Telemetry Overlay** — Interactive throttle/brake/speed graph through a lap (D3.js or Canvas)
+- [x] **Strategy Timeline** — Visual pit stop and stint timeline for the full field
 
 ---
 
