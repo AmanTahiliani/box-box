@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>box-box</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <style>[x-cloak]{display:none!important}</style>
+</head>
+<body x-data="appState()" x-cloak>
+
+  <!-- Navigation -->
+  <nav class="nav">
+    <a class="nav-brand" href="#/">box&#x2011;box</a>
+    <div class="nav-links">
+      <a href="#/" :class="{active: page==='home'}">Home</a>
+      <a href="#/standings" :class="{active: page==='standings'}">Standings</a>
+      <a href="#/live" :class="{active: page==='live'}">
+        Live
+        <span x-show="isLive" class="live-dot"></span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Stale data banner -->
+  <div x-show="staleWarning" class="stale-banner">
+    <span>Showing cached data — live session in progress (free tier)</span>
+    <details>
+      <summary>Why?</summary>
+      <p>During live F1 sessions the free-tier OpenF1 API restricts access.
+         box-box automatically serves the last cached data.</p>
+    </details>
+  </div>
+
+  <!-- Home page -->
+  <template x-if="page==='home'">
+    <div x-data="homePage()" x-init="init()">
+
+      <!-- Next race card + championship sidebar -->
+      <div class="home-hero" x-show="!loading">
+        <!-- Next race -->
+        <div class="card next-race" x-show="nextRace">
+          <div class="card-label">NEXT RACE</div>
+          <div class="next-race-flag" x-text="flagEmoji(nextRace?.country_code)"></div>
+          <h2 class="next-race-name" x-text="nextRace?.meeting_name||''"></h2>
+          <div class="next-race-circuit" x-text="nextRace?.circuit_short_name||''"></div>
+          <div class="next-race-countdown" x-text="countdown"></div>
+        </div>
+
+        <!-- Championship sidebar -->
+        <div class="card champ-sidebar">
+          <div class="card-label">DRIVERS' CHAMPIONSHIP</div>
+          <template x-for="d in champDrivers.slice(0,5)" :key="d.driver_number">
+            <div class="champ-row" :style="`--team-color:#${d.team_colour}`">
+              <span class="champ-pos" x-text="d.position_current"></span>
+              <span class="team-swatch"></span>
+              <span class="champ-tla" x-text="d.name_acronym||d.driver_number"></span>
+              <div class="champ-bar-wrap">
+                <div class="champ-bar" :style="`width:${barWidth(d.points_current)}%`"></div>
+              </div>
+              <span class="champ-pts" x-text="d.points_current"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Loading skeleton -->
+      <div x-show="loading" class="skeleton-wrap">
+        <div class="skeleton" style="height:120px;margin-bottom:1rem;"></div>
+      </div>
+
+      <!-- Season grid -->
+      <div class="section-label" x-text="season + ' SEASON'"></div>
+      <div class="meetings-grid" x-show="!loading">
+        <template x-for="m in meetings" :key="m.meeting_key">
+          <a class="meeting-card" :class="{past: isPast(m)}" :href="`#/race/${m.meeting_key}`">
+            <div class="meeting-flag" x-text="flagEmoji(m.country_code)"></div>
+            <div class="meeting-name" x-text="m.meeting_name"></div>
+            <div class="meeting-circuit" x-text="m.circuit_short_name"></div>
+            <div class="meeting-date" x-text="fmtDate(m.date_start)"></div>
+          </a>
+        </template>
+      </div>
+    </div>
+  </template>
+
+  <!-- Race page -->
+  <template x-if="page==='race'">
+    <div x-data="racePage()" x-init="init()">
+      <div class="page-header">
+        <a class="back-btn" href="#/">← Back</a>
+        <h1 class="page-title" x-text="meetingName"></h1>
+      </div>
+
+      <!-- Session picker -->
+      <div class="session-pills" x-show="sessions.length">
+        <template x-for="sess in sessions" :key="sess.session_key">
+          <button class="pill"
+                  :class="{active: activeSession?.session_key===sess.session_key}"
+                  @click="selectSession(sess)"
+                  x-text="sess.session_name">
+          </button>
+        </template>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" x-show="activeSession">
+        <button class="tab" :class="{active:tab==='results'}"   @click="tab='results'">Results</button>
+        <button class="tab" :class="{active:tab==='strategy'}"  @click="loadStrategy();tab='strategy'">Strategy</button>
+        <button class="tab" :class="{active:tab==='laps'}"      @click="loadLaps();tab='laps'">Lap Times</button>
+        <button class="tab" :class="{active:tab==='track'}"     @click="loadTrack();tab='track'">Track</button>
+        <button class="tab" :class="{active:tab==='telemetry'}" @click="tab='telemetry'">Telemetry</button>
+      </div>
+
+      <!-- Results tab -->
+      <div x-show="tab==='results'">
+        <div x-show="resultsLoading" class="skeleton-wrap">
+          <template x-for="i in [1,2,3,4,5]" :key="i">
+            <div class="skeleton" style="height:36px;margin-bottom:4px;"></div>
+          </template>
+        </div>
+        <table class="data-table" x-show="!resultsLoading && results.length">
+          <thead>
+            <tr>
+              <th>POS</th><th>DRIVER</th><th>TEAM</th><th>TIME / GAP</th><th>PTS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="r in results" :key="r.driver_number">
+              <tr :style="`--team-color:#${r.team_colour}`">
+                <td class="pos-cell">
+                  <span x-text="r.position||'-'"></span>
+                  <span x-show="r.dnf" class="badge dnf">DNF</span>
+                  <span x-show="r.dns" class="badge dns">DNS</span>
+                  <span x-show="r.dsq" class="badge dsq">DSQ</span>
+                </td>
+                <td><span class="team-swatch"></span><span x-text="r.full_name||r.driver_number"></span></td>
+                <td x-text="r.team_name||'-'"></td>
+                <td x-text="fmtDuration(r.duration)"></td>
+                <td x-text="r.points||0"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="!resultsLoading && !results.length" class="empty-msg">No results available.</div>
+      </div>
+
+      <!-- Strategy tab -->
+      <div x-show="tab==='strategy'" x-effect="tab==='strategy' && strategyData && renderStrategy()">
+        <div x-show="strategyLoading" class="skeleton-wrap">
+          <div class="skeleton" style="height:300px;"></div>
+        </div>
+        <div x-show="strategyNote" class="empty-msg" x-text="strategyNote"></div>
+        <div id="strategy-chart" x-show="!strategyLoading && !strategyNote" style="min-height:300px;overflow-x:auto;"></div>
+      </div>
+
+      <!-- Lap Times tab -->
+      <div x-show="tab==='laps'" x-effect="tab==='laps' && lapsData && renderLapTimes()">
+        <div x-show="lapsLoading" class="skeleton-wrap">
+          <div class="skeleton" style="height:300px;"></div>
+        </div>
+        <div id="laps-chart" x-show="!lapsLoading" style="min-height:300px;"></div>
+      </div>
+
+      <!-- Track tab -->
+      <div x-show="tab==='track'" x-effect="tab==='track' && trackData && renderTrack()">
+        <div x-show="trackLoading" class="skeleton-wrap">
+          <div class="skeleton" style="height:300px;"></div>
+        </div>
+        <div x-show="!trackData && !trackLoading" class="empty-msg">Track outline not available for this circuit.</div>
+        <div id="track-chart" x-show="!trackLoading && trackData" style="min-height:300px;"></div>
+      </div>
+
+      <!-- Telemetry tab -->
+      <div x-show="tab==='telemetry'">
+        <div class="driver-selector">
+          <label>Select driver:</label>
+          <template x-for="d in drivers" :key="d.driver_number">
+            <button class="pill"
+                    :class="{active: telemetryDrivers.includes(d.driver_number)}"
+                    :style="`--team-color:#${d.team_colour}`"
+                    @click="toggleTelemetryDriver(d.driver_number)"
+                    x-text="d.name_acronym">
+            </button>
+          </template>
+        </div>
+        <div x-show="telemetryLoading" class="skeleton-wrap">
+          <div class="skeleton" style="height:340px;"></div>
+        </div>
+        <div id="telemetry-chart" x-show="!telemetryLoading" style="min-height:340px;"
+             x-effect="telemetryData.length && tab==='telemetry' && renderTelemetry()"></div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Live page -->
+  <template x-if="page==='live'">
+    <div x-data="livePage()" x-init="init()" x-destroy="cleanup()">
+      <div class="page-header">
+        <h1 class="page-title">
+          Live Timing
+          <span x-show="isLive" class="live-dot large"></span>
+        </h1>
+        <div class="session-info" x-show="session.meeting_name">
+          <span x-text="session.meeting_name"></span> —
+          <span x-text="session.session_name"></span>
+        </div>
+      </div>
+
+      <!-- No session placeholder -->
+      <div x-show="!isLive" class="empty-msg large">
+        No live session active. Check back during a race weekend.
+      </div>
+
+      <!-- Timing tower -->
+      <div x-show="isLive">
+        <div class="live-meta">
+          <span>Lap <strong x-text="currentLap"></strong>/<strong x-text="totalLaps"></strong></span>
+          <span x-show="trackStatus" class="track-status" :class="trackStatusClass()" x-text="trackStatusText()"></span>
+          <span class="clock" x-text="clockDisplay"></span>
+        </div>
+
+        <table class="timing-tower">
+          <thead>
+            <tr><th>POS</th><th>Δ</th><th>DRIVER</th><th>TYRE</th><th>LAST LAP</th><th>GAP</th><th>BEST</th></tr>
+          </thead>
+          <tbody>
+            <template x-for="d in sortedDrivers" :key="d.RacingNumber">
+              <tr :class="{in-pit: d.InPit, retired: d.Retired, pit-out: d.PitOut}"
+                  :style="`--team-color:#${driverTeamColor(d.RacingNumber)}`">
+                <td class="pos-cell" x-text="d.Position"></td>
+                <td class="pos-delta" x-text="posDelta(d)"></td>
+                <td><span class="team-swatch"></span><span x-text="driverTla(d.RacingNumber)"></span>
+                    <span x-show="d.InPit" class="badge pit">PIT</span>
+                    <span x-show="d.Retired" class="badge out">OUT</span>
+                </td>
+                <td>
+                  <span class="tyre-badge" :class="tyreClass(d.RacingNumber)"
+                        x-text="tyreLabel(d.RacingNumber)"></span>
+                </td>
+                <td :class="{pb: d.LastLapPB, ob: d.LastLapOB}" x-text="d.LastLapTime||'-'"></td>
+                <td x-text="d.GapToLeader||'-'"></td>
+                <td :class="{ob: d.BestLapOB}" x-text="d.BestLapTime||'-'"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+
+        <!-- Race control messages -->
+        <div class="rc-panel" x-show="rcMessages.length">
+          <div class="card-label">RACE CONTROL</div>
+          <template x-for="(msg, i) in rcMessages.slice().reverse().slice(0,10)" :key="i">
+            <div class="rc-message" :class="`rc-${msg.Category?.toLowerCase()}`">
+              <span class="rc-time" x-text="msg.Time"></span>
+              <span class="rc-flag" x-show="msg.Flag" x-text="msg.Flag"></span>
+              <span x-text="msg.Message"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Standings page -->
+  <template x-if="page==='standings'">
+    <div x-data="standingsPage()" x-init="init()">
+      <div class="page-header">
+        <h1 class="page-title">Championship Standings</h1>
+        <div class="year-selector">
+          <button class="pill" :class="{active:year===2026}" @click="setYear(2026)">2026</button>
+          <button class="pill" :class="{active:year===2025}" @click="setYear(2025)">2025</button>
+          <button class="pill" :class="{active:year===2024}" @click="setYear(2024)">2024</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab" :class="{active:view==='drivers'}" @click="view='drivers'">Drivers</button>
+        <button class="tab" :class="{active:view==='teams'}"   @click="view='teams'">Constructors</button>
+      </div>
+
+      <div x-show="loading" class="skeleton-wrap">
+        <template x-for="i in [1,2,3,4,5,6,7,8,9,10]" :key="i">
+          <div class="skeleton" style="height:40px;margin-bottom:4px;"></div>
+        </template>
+      </div>
+
+      <table class="data-table" x-show="!loading && view==='drivers'">
+        <thead><tr><th>POS</th><th>DRIVER</th><th>TEAM</th><th>PTS</th></tr></thead>
+        <tbody>
+          <template x-for="d in driverStandings" :key="d.driver_number">
+            <tr :style="`--team-color:#${d.team_colour}`">
+              <td x-text="d.position_current"></td>
+              <td><span class="team-swatch"></span><span x-text="d.full_name||d.driver_number"></span></td>
+              <td x-text="d.team_name||'-'"></td>
+              <td x-text="d.points_current"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+
+      <table class="data-table" x-show="!loading && view==='teams'">
+        <thead><tr><th>POS</th><th>TEAM</th><th>PTS</th></tr></thead>
+        <tbody>
+          <template x-for="t in teamStandings" :key="t.team_name">
+            <tr>
+              <td x-text="t.position_current"></td>
+              <td x-text="t.team_name"></td>
+              <td x-text="t.points_current"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="/charts.js"></script>
+  <script src="/track.js"></script>
+  <script src="/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+</body>
+</html>

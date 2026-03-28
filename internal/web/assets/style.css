@@ -1,0 +1,483 @@
+/* ============================================================
+   box-box web companion — dark F1 theme
+   Mirrors styles.go palette as CSS custom properties.
+   ============================================================ */
+
+:root {
+  --f1-red:    #E10600;
+  --surface-0: #0d0d1a;   /* page background */
+  --surface-1: #1B1B2F;   /* card background */
+  --surface-2: #222236;   /* elevated card */
+  --surface-3: #2D2D44;   /* borders, dividers */
+  --text-1:    #ffffff;
+  --text-2:    #8888aa;
+  --text-3:    #555577;
+
+  --soft:  #FF3333;
+  --medium:#FFD700;
+  --hard:  #CCCCCC;
+  --inter: #39B54A;
+  --wet:   #0080FF;
+
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--surface-0);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- Nav ---- */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--surface-3);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-brand {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--f1-red);
+  letter-spacing: 0.04em;
+}
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+}
+.nav-links a {
+  color: var(--text-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: color 0.15s;
+}
+.nav-links a:hover,
+.nav-links a.active { color: var(--text-1); }
+.nav-links a.active { border-bottom: 2px solid var(--f1-red); padding-bottom: 2px; }
+
+/* ---- Live dot ---- */
+.live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #E10600;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.live-dot.large { width: 12px; height: 12px; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ---- Stale banner ---- */
+.stale-banner {
+  background: #2a1800;
+  border-bottom: 1px solid #aa6600;
+  color: #ffcc66;
+  padding: 0.5rem 1.5rem;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.stale-banner details summary { cursor: pointer; color: #aa8844; }
+.stale-banner details p { padding: 0.4rem 0; color: var(--text-2); }
+
+/* ---- Page layout ---- */
+.page-header {
+  padding: 1.25rem 1.5rem 0.75rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.back-btn {
+  color: var(--text-2);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.back-btn:hover { color: var(--text-1); }
+.session-info { color: var(--text-2); font-size: 0.85rem; }
+
+/* ---- Cards ---- */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--surface-3);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+.card-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 0.6rem;
+}
+
+/* ---- Home hero ---- */
+.home-hero {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+}
+@media (max-width: 900px) {
+  .home-hero { grid-template-columns: 1fr; }
+}
+
+/* Next race card */
+.next-race { text-align: center; }
+.next-race-flag   { font-size: 3rem; margin: 0.25rem 0; }
+.next-race-name   { font-size: 1.4rem; font-weight: 700; margin: 0.25rem 0; }
+.next-race-circuit { color: var(--text-2); font-size: 0.85rem; margin-bottom: 0.5rem; }
+.next-race-countdown {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--f1-red);
+  letter-spacing: 0.04em;
+}
+
+/* Championship sidebar */
+.champ-sidebar { display: flex; flex-direction: column; gap: 0.45rem; }
+.champ-row {
+  display: grid;
+  grid-template-columns: 20px 12px 36px 1fr 40px;
+  align-items: center;
+  gap: 0.4rem;
+}
+.champ-pos  { color: var(--text-2); font-size: 0.8rem; text-align: right; }
+.champ-tla  { font-weight: 600; font-size: 0.85rem; }
+.champ-bar-wrap {
+  background: var(--surface-3);
+  border-radius: 2px;
+  height: 6px;
+  overflow: hidden;
+}
+.champ-bar {
+  height: 100%;
+  background: var(--team-color, var(--f1-red));
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+.champ-pts { font-size: 0.8rem; color: var(--text-2); text-align: right; }
+
+/* Team color swatch */
+.team-swatch {
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  background: var(--team-color, #666);
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* ---- Season meetings grid ---- */
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 0 1.5rem;
+  margin-bottom: 0.5rem;
+}
+.meetings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  padding: 0 1.5rem 2rem;
+}
+.meeting-card {
+  display: block;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.meeting-card:hover { background: var(--surface-2); border-color: var(--text-3); }
+.meeting-card.past  { opacity: 0.55; }
+.meeting-flag   { font-size: 1.5rem; margin-bottom: 0.3rem; }
+.meeting-name   { font-weight: 600; font-size: 0.9rem; line-height: 1.3; }
+.meeting-circuit { color: var(--text-2); font-size: 0.78rem; margin-top: 0.15rem; }
+.meeting-date   { color: var(--text-3); font-size: 0.75rem; margin-top: 0.3rem; }
+
+/* ---- Session pills ---- */
+.session-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+}
+.pill {
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: 20px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pill:hover { background: var(--surface-3); color: var(--text-1); }
+.pill.active {
+  background: var(--team-color, var(--f1-red));
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ---- Tabs ---- */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--surface-3);
+  padding: 0 1.5rem;
+  margin-bottom: 1rem;
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 1rem;
+  text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover { color: var(--text-1); }
+.tab.active { color: var(--text-1); border-bottom-color: var(--f1-red); }
+
+/* ---- Data table ---- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 0 1.5rem 1.5rem;
+  width: calc(100% - 3rem);
+}
+.data-table th {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--surface-3);
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+.data-table td {
+  border-bottom: 1px solid var(--surface-3);
+  padding: 0.5rem 0.75rem;
+  vertical-align: middle;
+}
+.data-table tr:hover td { background: var(--surface-1); }
+.pos-cell { font-weight: 700; display: flex; align-items: center; gap: 0.4rem; }
+
+/* ---- Badges ---- */
+.badge {
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+.badge.dnf { background: #442200; color: #ff8844; }
+.badge.dns { background: #333355; color: #8888cc; }
+.badge.dsq { background: #220000; color: #ff4444; }
+.badge.pit { background: #003366; color: #66aaff; }
+.badge.out { background: #330000; color: #ff6666; }
+
+/* ---- Tyre badges ---- */
+.tyre-badge {
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+}
+.tyre-soft   { background: var(--soft);   color: #fff; }
+.tyre-medium { background: var(--medium); color: #111; }
+.tyre-hard   { background: var(--hard);   color: #111; }
+.tyre-inter  { background: var(--inter);  color: #fff; }
+.tyre-wet    { background: var(--wet);    color: #fff; }
+.tyre-unknown { background: var(--surface-3); color: var(--text-2); }
+
+/* ---- Timing tower ---- */
+.live-meta {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 1.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+.timing-tower {
+  width: calc(100% - 3rem);
+  margin: 0 1.5rem 1.5rem;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.timing-tower th {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--surface-3);
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+.timing-tower td {
+  border-bottom: 1px solid var(--surface-3);
+  padding: 0.45rem 0.75rem;
+  vertical-align: middle;
+}
+.timing-tower .in-pit td   { background: rgba(0,51,102,0.25); }
+.timing-tower .retired td  { background: rgba(60,0,0,0.3); opacity: 0.7; }
+.timing-tower .pit-out td  { background: rgba(0,80,0,0.2); }
+.timing-tower .pb          { color: #aaffaa; }
+.timing-tower .ob          { color: #cc44ff; }
+.pos-delta { color: var(--text-3); font-size: 0.75rem; }
+.clock { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: auto; }
+
+/* Track status */
+.track-status {
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+.track-green  { background: #1a3a1a; color: #44cc44; }
+.track-yellow { background: #3a2a00; color: #ffcc00; }
+.track-red    { background: #3a0000; color: #ff4444; }
+.track-sc     { background: #3a2a00; color: #ffaa00; }
+.track-vsc    { background: #1a2a3a; color: #6699ff; }
+
+/* ---- Race control panel ---- */
+.rc-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--surface-3);
+  border-radius: 8px;
+  margin: 0 1.5rem 1.5rem;
+  padding: 0.75rem 1rem;
+}
+.rc-message {
+  border-bottom: 1px solid var(--surface-3);
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  padding: 0.4rem 0;
+}
+.rc-message:last-child { border-bottom: none; }
+.rc-time  { color: var(--text-3); flex-shrink: 0; font-size: 0.75rem; }
+.rc-flag  { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.rc-flag  { background: var(--surface-3); border-radius: 2px; padding: 1px 5px; }
+.rc-safetycarpanel .rc-flag,
+.rc-safetycarpanel { color: #ffcc00; }
+
+/* ---- Driver selector ---- */
+.driver-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.5rem 0.75rem;
+}
+.driver-selector label { color: var(--text-2); font-size: 0.8rem; margin-right: 0.25rem; }
+
+/* ---- Year selector ---- */
+.year-selector {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+/* ---- Skeleton loading ---- */
+.skeleton-wrap { padding: 0.75rem 1.5rem; }
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-1) 25%,
+    var(--surface-2) 50%,
+    var(--surface-1) 75%
+  );
+  background-size: 200% 100%;
+  border-radius: 6px;
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- Empty state ---- */
+.empty-msg {
+  color: var(--text-2);
+  font-size: 0.9rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+.empty-msg.large { font-size: 1.1rem; padding: 4rem 1.5rem; }
+
+/* ---- D3 charts ---- */
+#strategy-chart,
+#laps-chart,
+#telemetry-chart,
+#track-chart {
+  padding: 0 1.5rem 1.5rem;
+}
+#strategy-chart svg,
+#laps-chart svg,
+#telemetry-chart svg,
+#track-chart svg { display: block; }
+
+/* D3 axis text */
+.tick text { fill: var(--text-2); font-size: 11px; }
+.domain, .tick line { stroke: var(--surface-3); }
+
+/* Tooltip */
+.chart-tooltip {
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: 6px;
+  color: var(--text-1);
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  pointer-events: none;
+  position: fixed;
+  z-index: 200;
+}
