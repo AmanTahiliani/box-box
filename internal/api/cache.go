@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -96,9 +97,28 @@ func cacheDBPath() string {
 // ttlForURL determines the appropriate TTL based on the URL pattern.
 // Returns 0 (CacheTTLForever) for historical data that will never change.
 func ttlForURL(url string) time.Duration {
+	var year int
+	if idx := strings.Index(url, "year="); idx != -1 && len(url) >= idx+9 {
+		yearStr := url[idx+5 : idx+9]
+		if y, err := strconv.Atoi(yearStr); err == nil {
+			year = y
+		}
+	}
+
+	currentYear := time.Now().Year()
+
 	// Historical data — completed past seasons never change.
-	if strings.Contains(url, "year=2023") || strings.Contains(url, "year=2024") {
+	if year > 0 && year < currentYear {
 		return CacheTTLForever
+	}
+
+	// For current year or unspecified year (e.g. meeting/session list endpoint that includes a session key query):
+	if year == currentYear || year == 0 {
+		// Cache current year meetings and sessions metadata for 24h
+		if (strings.Contains(url, "/meetings") || strings.Contains(url, "/sessions")) &&
+			!strings.Contains(url, "/session_result") {
+			return CacheTTLLong
+		}
 	}
 
 	// Live telemetry endpoints — change every few seconds during a session.

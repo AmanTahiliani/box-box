@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 // Options configures ingestion behavior.
 type Options struct {
 	DryRun       bool
+	Force        bool // Re-fetch even if session_coverage says 'complete'
 	RequestDelay time.Duration
 	MaxRetries   int
 	RetryBackoff time.Duration
@@ -25,7 +27,7 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{
 		RequestDelay: 300 * time.Millisecond,
-		MaxRetries:   3,
+		MaxRetries:   5,
 		RetryBackoff: 500 * time.Millisecond,
 		Progress:     NewProgress(nil),
 	}
@@ -71,7 +73,7 @@ type Service struct {
 // NewService creates an ingestion service.
 func NewService(st *store.Store, source Source, opts Options) *Service {
 	if opts.MaxRetries <= 0 {
-		opts.MaxRetries = 3
+		opts.MaxRetries = 5
 	}
 	if opts.RetryBackoff <= 0 {
 		opts.RetryBackoff = 500 * time.Millisecond
@@ -132,7 +134,75 @@ func (s *Service) IngestYear(year int) (Summary, error) {
 		summary.Meetings++
 	}
 
-	summary.Status = statusForDryRun(s.opts.DryRun)
+	sessionFailures := 0
+	partialSessions := 0
+	var totalSessionsCount int
+
+	for _, m := range meetings {
+		s.opts.Progress.Step("fetching sessions for meeting %d (%s)", m.MeetingKey, m.MeetingName)
+		sessionFetch, sessions, err := fetchWithRetry(s, func() (FetchResult, []models.Session, error) {
+			return s.source.FetchSessionsForMeeting(int(m.MeetingKey))
+		})
+		if err != nil {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("meeting %d (%s) sessions: %v", m.MeetingKey, m.MeetingName, err))
+			continue
+		}
+		summary.RawPayloads++
+		if !s.opts.DryRun {
+			mkVal := int(m.MeetingKey)
+			inserted, err := s.storeRaw(sessionFetch, &mkVal, nil)
+			if err != nil {
+				return s.finishFailed(runID, summary, err)
+			}
+			if inserted {
+				summary.RawInserted++
+			}
+		}
+		s.delay()
+
+		for _, sess := range sessions {
+			if s.opts.DryRun {
+				summary.Sessions++
+				totalSessionsCount++
+				continue
+			}
+			if err := s.store.UpsertSession(sessionToStore(sess)); err != nil {
+				return s.finishFailed(runID, summary, err)
+			}
+			summary.Sessions++
+			totalSessionsCount++
+		}
+
+		for _, sess := range sessions {
+			s.opts.Progress.Step("ingesting Race Hub datasets for session %d (%s)", sess.SessionKey, sess.SessionName)
+			sessSummary, err := s.ingestSessionDatasets(sess)
+			ss := SessionSummary{
+				SessionKey:  sess.SessionKey,
+				SessionName: sess.SessionName,
+				Summary:     sessSummary,
+			}
+			if err != nil {
+				sessionFailures++
+				ss.Summary.Status = "failed"
+				ss.Summary.Errors = append(ss.Summary.Errors, err.Error())
+				summary.Errors = append(summary.Errors, fmt.Sprintf(
+					"session %d (%s): %v", sess.SessionKey, sess.SessionName, err,
+				))
+			}
+			if err == nil && sessSummary.Status == "partial" {
+				partialSessions++
+				for _, partialErr := range sessSummary.Errors {
+					summary.Errors = append(summary.Errors, fmt.Sprintf(
+						"session %d (%s): %s", sess.SessionKey, sess.SessionName, partialErr,
+					))
+				}
+			}
+			summary.SessionSummaries = append(summary.SessionSummaries, ss)
+			summary.mergeCounts(sessSummary)
+		}
+	}
+
+	summary.Status = meetingStatus(sessionFailures, partialSessions, totalSessionsCount, s.opts.DryRun)
 	s.finishRun(runID, summary)
 	s.opts.Progress.Summary(summary)
 	return summary, nil
@@ -355,63 +425,94 @@ func (s *Service) ingestSessionDatasets(sess models.Session) (Summary, error) {
 	}
 	sk := sessionKey
 
-	s.opts.Progress.Step("fetching drivers for session %d", sessionKey)
-	driverFetch, drivers, err := fetchWithRetry(s, func() (FetchResult, []models.Driver, error) {
-		return s.source.FetchDriversForSession(sessionKey)
-	})
+	coverage, err := s.store.GetSessionCoverage(sessionKey)
 	if err != nil {
-		return summary, err
+		coverage = make(map[string]store.CoverageEntry)
 	}
-	summary.RawPayloads++
-	if !s.opts.DryRun {
-		inserted, err := s.storeRaw(driverFetch, &meetingKey, &sk)
+
+	// 1. Ingest drivers
+	if cov, ok := coverage["drivers"]; ok && cov.Status == "complete" && !s.opts.Force {
+		s.opts.Progress.Step("drivers already complete for session %d, skipping", sessionKey)
+		summary.Drivers = cov.RowCount
+	} else {
+		s.opts.Progress.Step("fetching drivers for session %d", sessionKey)
+		driverFetch, drivers, err := fetchWithRetry(s, func() (FetchResult, []models.Driver, error) {
+			return s.source.FetchDriversForSession(sessionKey)
+		})
 		if err != nil {
+			if !s.opts.DryRun {
+				_ = s.store.UpsertCoverage(sessionKey, "drivers", "failed", 0, err.Error())
+			}
 			return summary, err
 		}
-		if inserted {
-			summary.RawInserted++
-		}
-		for _, d := range drivers {
-			if err := s.store.UpsertDriver(driverToStore(d)); err != nil {
+		summary.RawPayloads++
+		if !s.opts.DryRun {
+			inserted, err := s.storeRaw(driverFetch, &meetingKey, &sk)
+			if err != nil {
+				_ = s.store.UpsertCoverage(sessionKey, "drivers", "failed", 0, err.Error())
 				return summary, err
 			}
-			if err := s.store.UpsertSessionDriver(sessionDriverToStore(d)); err != nil {
-				return summary, err
+			if inserted {
+				summary.RawInserted++
 			}
-			summary.Drivers++
+			for _, d := range drivers {
+				if err := s.store.UpsertDriver(driverToStore(d)); err != nil {
+					_ = s.store.UpsertCoverage(sessionKey, "drivers", "failed", 0, err.Error())
+					return summary, err
+				}
+				if err := s.store.UpsertSessionDriver(sessionDriverToStore(d)); err != nil {
+					_ = s.store.UpsertCoverage(sessionKey, "drivers", "failed", 0, err.Error())
+					return summary, err
+				}
+				summary.Drivers++
+			}
+			_ = s.store.UpsertCoverage(sessionKey, "drivers", "complete", len(drivers), "")
+		} else {
+			summary.Drivers = len(drivers)
 		}
-	} else {
-		summary.Drivers = len(drivers)
+		s.delay()
 	}
-	s.delay()
 
-	s.opts.Progress.Step("fetching session results for session %d", sessionKey)
-	resultFetch, results, err := fetchWithRetry(s, func() (FetchResult, []models.SessionResult, error) {
-		return s.source.FetchSessionResult(sessionKey)
-	})
-	if err != nil {
-		return summary, err
-	}
-	summary.RawPayloads++
-	if !s.opts.DryRun {
-		inserted, err := s.storeRaw(resultFetch, &meetingKey, &sk)
+	// 2. Ingest session_result
+	if cov, ok := coverage["session_result"]; ok && cov.Status == "complete" && !s.opts.Force {
+		s.opts.Progress.Step("session_result already complete for session %d, skipping", sessionKey)
+		summary.SessionResults = cov.RowCount
+	} else {
+		s.opts.Progress.Step("fetching session results for session %d", sessionKey)
+		resultFetch, results, err := fetchWithRetry(s, func() (FetchResult, []models.SessionResult, error) {
+			return s.source.FetchSessionResult(sessionKey)
+		})
 		if err != nil {
+			if !s.opts.DryRun {
+				_ = s.store.UpsertCoverage(sessionKey, "session_result", "failed", 0, err.Error())
+			}
 			return summary, err
 		}
-		if inserted {
-			summary.RawInserted++
-		}
-		for _, r := range results {
-			if err := s.store.UpsertSessionResult(sessionResultToStore(r)); err != nil {
+		summary.RawPayloads++
+		if !s.opts.DryRun {
+			inserted, err := s.storeRaw(resultFetch, &meetingKey, &sk)
+			if err != nil {
+				_ = s.store.UpsertCoverage(sessionKey, "session_result", "failed", 0, err.Error())
 				return summary, err
 			}
-			summary.SessionResults++
+			if inserted {
+				summary.RawInserted++
+			}
+			for _, r := range results {
+				if err := s.store.UpsertSessionResult(sessionResultToStore(r)); err != nil {
+					_ = s.store.UpsertCoverage(sessionKey, "session_result", "failed", 0, err.Error())
+					return summary, err
+				}
+				summary.SessionResults++
+			}
+			_ = s.store.UpsertCoverage(sessionKey, "session_result", "complete", len(results), "")
+		} else {
+			summary.SessionResults = len(results)
 		}
-	} else {
-		summary.SessionResults = len(results)
+		s.delay()
 	}
-	s.delay()
 
+	// 3. Optional datasets
 	optionalIngests := []struct {
 		name string
 		run  func(*Summary, int, int) error
@@ -426,9 +527,74 @@ func (s *Service) ingestSessionDatasets(sess models.Session) (Summary, error) {
 		{name: "weather", run: s.ingestWeather},
 		{name: "laps", run: s.ingestLaps},
 	}
+
 	for _, optional := range optionalIngests {
-		if err := optional.run(&summary, meetingKey, sk); err != nil {
+		if cov, ok := coverage[optional.name]; ok && cov.Status == "complete" && !s.opts.Force {
+			s.opts.Progress.Step("%s already complete for session %d, skipping", optional.name, sessionKey)
+			switch optional.name {
+			case "starting_grid":
+				summary.StartingGrid = cov.RowCount
+			case "stints":
+				summary.Stints = cov.RowCount
+			case "pit_stops":
+				summary.PitStops = cov.RowCount
+			case "positions":
+				summary.Positions = cov.RowCount
+			case "race_control":
+				summary.RaceControl = cov.RowCount
+			case "weather":
+				summary.Weather = cov.RowCount
+			case "laps":
+				summary.Laps = cov.RowCount
+			}
+			continue
+		}
+
+		var prevCount int
+		switch optional.name {
+		case "starting_grid":
+			prevCount = summary.StartingGrid
+		case "stints":
+			prevCount = summary.Stints
+		case "pit_stops":
+			prevCount = summary.PitStops
+		case "positions":
+			prevCount = summary.Positions
+		case "race_control":
+			prevCount = summary.RaceControl
+		case "weather":
+			prevCount = summary.Weather
+		case "laps":
+			prevCount = summary.Laps
+		}
+
+		err := optional.run(&summary, meetingKey, sk)
+		if err != nil {
 			summary.Errors = append(summary.Errors, fmt.Sprintf("%s: %v", optional.name, err))
+			if !s.opts.DryRun {
+				_ = s.store.UpsertCoverage(sessionKey, optional.name, "failed", 0, err.Error())
+			}
+		} else {
+			if !s.opts.DryRun {
+				var newCount int
+				switch optional.name {
+				case "starting_grid":
+					newCount = summary.StartingGrid - prevCount
+				case "stints":
+					newCount = summary.Stints - prevCount
+				case "pit_stops":
+					newCount = summary.PitStops - prevCount
+				case "positions":
+					newCount = summary.Positions - prevCount
+				case "race_control":
+					newCount = summary.RaceControl - prevCount
+				case "weather":
+					newCount = summary.Weather - prevCount
+				case "laps":
+					newCount = summary.Laps - prevCount
+				}
+				_ = s.store.UpsertCoverage(sessionKey, optional.name, "complete", newCount, "")
+			}
 		}
 	}
 
@@ -761,7 +927,17 @@ func fetchWithRetry[T any](s *Service, fn fetchFunc[T]) (FetchResult, T, error) 
 
 	for attempt := 0; attempt < s.opts.MaxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(s.opts.RetryBackoff * time.Duration(attempt))
+			backoff := s.opts.RetryBackoff * time.Duration(1<<attempt)
+			jitter := time.Duration(rand.Int63n(int64(backoff / 4)))
+			wait := backoff + jitter
+
+			if lastErr != nil {
+				var rle *api.RateLimitError
+				if errors.As(lastErr, &rle) && rle.RetryAfter > wait {
+					wait = rle.RetryAfter
+				}
+			}
+			time.Sleep(wait)
 		}
 
 		fetch, data, err := fn()
@@ -785,12 +961,17 @@ func isRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
+	var rle *api.RateLimitError
+	if errors.As(err, &rle) {
+		return true
+	}
 	msg := strings.ToLower(err.Error())
 	if strings.Contains(msg, "status 429") ||
 		strings.Contains(msg, "status 5") ||
 		strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "connection reset") ||
-		strings.Contains(msg, "temporary") {
+		strings.Contains(msg, "temporary") ||
+		strings.Contains(msg, "rate limit") {
 		return true
 	}
 	var netErr interface{ Timeout() bool }

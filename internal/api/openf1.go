@@ -20,6 +20,15 @@ import (
 // from ~30 min before a session starts until ~30 min after it ends.
 var ErrLiveSessionLocked = errors.New("live F1 session in progress — API access is restricted to authenticated users until the session ends")
 
+// RateLimitError is returned when the OpenF1 API rate limit is reached (HTTP 429).
+type RateLimitError struct {
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("openf1 API rate limit hit: retry after %v", e.RetryAfter)
+}
+
 // IsLiveSessionError reports whether err (or any error in its chain) is the
 // live-session lockout error from the OpenF1 API.
 func IsLiveSessionError(err error) bool {
@@ -110,6 +119,16 @@ func (c *OpenF1Client) FetchStrict(url string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfterDur := 500 * time.Millisecond
+		if retryAfterHeader := resp.Header.Get("Retry-After"); retryAfterHeader != "" {
+			if seconds, err := strconv.Atoi(retryAfterHeader); err == nil {
+				retryAfterDur = time.Duration(seconds) * time.Second
+			}
+		}
+		return nil, &RateLimitError{RetryAfter: retryAfterDur}
+	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

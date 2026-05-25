@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/api"
@@ -22,12 +23,23 @@ func main() {
 	webMode := flag.Bool("web", false, "Start web companion server instead of TUI")
 	port := flag.Int("port", 8080, "Port for web server (used with --web)")
 	ingestYear := flag.Int("ingest-year", 0, "Ingest OpenF1 meetings for a season year")
+	backfillSeason := flag.Int("backfill-season", 0, "Trigger full-season backfill/deep-ingestion for the given year")
 	ingestMeeting := flag.Int("ingest-meeting", 0, "Ingest meeting metadata and Race Hub datasets for all sessions")
 	ingestSession := flag.Int("ingest-session", 0, "Ingest Race Hub datasets for a session key")
 	ingestNews := flag.Bool("ingest-news", false, "Refresh RSS/Atom paddock briefing feeds")
 	dryRun := flag.Bool("dry-run", false, "Preview ingestion without writing domain rows")
+	force := flag.Bool("force", false, "Re-ingest datasets even if already tracked in the session_coverage table as completed")
+	coverageYear := flag.Int("coverage", 0, "Show season coverage report for the given year")
 	dbPath := flag.String("db", "", "Domain database path (default: ~/.local/share/box-box/boxbox.db)")
 	flag.Parse()
+
+	if *coverageYear != 0 {
+		if err := runCoverageReport(*coverageYear, *dbPath); err != nil {
+			fmt.Fprintf(os.Stderr, "coverage report error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	var client *api.OpenF1Client
 	if apiKey := os.Getenv("OPENF1_API_KEY"); apiKey != "" {
@@ -44,6 +56,9 @@ func main() {
 	if *ingestYear != 0 {
 		ingestFlags++
 	}
+	if *backfillSeason != 0 {
+		ingestFlags++
+	}
 	if *ingestMeeting != 0 {
 		ingestFlags++
 	}
@@ -55,7 +70,7 @@ func main() {
 	}
 	if ingestFlags > 0 {
 		if ingestFlags > 1 {
-			fmt.Fprintln(os.Stderr, "box-box: only one of --ingest-year, --ingest-meeting, --ingest-session, or --ingest-news may be set")
+			fmt.Fprintln(os.Stderr, "box-box: only one of --ingest-year, --backfill-season, --ingest-meeting, --ingest-session, or --ingest-news may be set")
 			os.Exit(1)
 		}
 		if *ingestNews {
@@ -65,7 +80,13 @@ func main() {
 			}
 			return
 		}
-		if err := runIngestion(client, *ingestYear, *ingestMeeting, *ingestSession, *dryRun, *dbPath); err != nil {
+		
+		yearVal := *ingestYear
+		if *backfillSeason != 0 {
+			yearVal = *backfillSeason
+		}
+
+		if err := runIngestion(client, yearVal, *ingestMeeting, *ingestSession, *force, *dryRun, *dbPath); err != nil {
 			fmt.Fprintf(os.Stderr, "box-box ingest error: %v\n", err)
 			os.Exit(1)
 		}
@@ -113,7 +134,7 @@ func main() {
 	}
 }
 
-func runIngestion(client *api.OpenF1Client, year, meetingKey, sessionKey int, dryRun bool, dbPath string) error {
+func runIngestion(client *api.OpenF1Client, year, meetingKey, sessionKey int, force, dryRun bool, dbPath string) error {
 	log.SetOutput(os.Stderr)
 
 	path := dbPath
@@ -129,6 +150,7 @@ func runIngestion(client *api.OpenF1Client, year, meetingKey, sessionKey int, dr
 
 	opts := ingest.DefaultOptions()
 	opts.DryRun = dryRun
+	opts.Force = force
 	opts.Progress = ingest.NewProgress(os.Stderr)
 
 	svc := ingest.NewService(st, ingest.NewOpenF1Source(client), opts)
@@ -184,4 +206,114 @@ func runNewsIngestion(dryRun bool, dbPath string) error {
 		result.ItemsUpserted,
 	)
 	return err
+}
+
+func runCoverageReport(year int, dbPath string) error {
+	path := dbPath
+	if path == "" {
+		path = store.DefaultDBPath()
+	}
+
+	st, err := store.Open(path)
+	if err != nil {
+		return fmt.Errorf("open domain database: %w", err)
+	}
+	defer st.Close()
+
+	rows, err := st.GetSeasonCoverage(year)
+	if err != nil {
+		return fmt.Errorf("get season coverage: %w", err)
+	}
+
+	if len(rows) == 0 {
+		fmt.Printf("No session coverage data found for year %d.\n", year)
+		return nil
+	}
+
+	type datasetStatus struct {
+		Status string
+		Count  int
+	}
+
+	type sessionInfo struct {
+		MeetingName string
+		SessionName string
+		SessionKey  int
+		Datasets    map[string]datasetStatus
+	}
+
+	var sessions []sessionInfo
+	sessionMap := make(map[int]int)
+
+	for _, row := range rows {
+		idx, exists := sessionMap[row.SessionKey]
+		if !exists {
+			idx = len(sessions)
+			sessions = append(sessions, sessionInfo{
+				MeetingName: row.MeetingName,
+				SessionName: row.SessionName,
+				SessionKey:  row.SessionKey,
+				Datasets:    make(map[string]datasetStatus),
+			})
+			sessionMap[row.SessionKey] = idx
+		}
+		if row.Dataset != "" {
+			sessions[idx].Datasets[row.Dataset] = datasetStatus{
+				Status: row.Status,
+				Count:  row.RowCount,
+			}
+		}
+	}
+
+	fmt.Printf("\n--- Season %d Coverage Report ---\n\n", year)
+	fmt.Printf("%-35s | %-5s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s\n", 
+		"Meeting / Session (Key)", "ID", "DR", "SR", "SG", "ST", "PS", "PO", "RC", "WE", "LA")
+	fmt.Println(strings.Repeat("-", 82))
+
+	for _, sess := range sessions {
+		statusChar := func(ds string) string {
+			dsStatus, ok := sess.Datasets[ds]
+			if !ok {
+				return "."
+			}
+			switch dsStatus.Status {
+			case "complete":
+				return "✓"
+			case "failed":
+				return "✗"
+			default:
+				return "."
+			}
+		}
+
+		nameCol := fmt.Sprintf("%s - %s (%d)", sess.MeetingName, sess.SessionName, sess.SessionKey)
+		if len(nameCol) > 35 {
+			nameCol = nameCol[:32] + "..."
+		}
+
+		fmt.Printf("%-35s | %-5d |  %s |  %s |  %s |  %s |  %s |  %s |  %s |  %s |  %s\n",
+			nameCol,
+			sess.SessionKey,
+			statusChar("drivers"),
+			statusChar("session_result"),
+			statusChar("starting_grid"),
+			statusChar("stints"),
+			statusChar("pit_stops"),
+			statusChar("positions"),
+			statusChar("race_control"),
+			statusChar("weather"),
+			statusChar("laps"),
+		)
+	}
+
+	fmt.Println(strings.Repeat("-", 82))
+	fmt.Println("\nLegend:")
+	fmt.Println("  [✓] Complete   [✗] Failed   [.] Pending/Unattempted")
+	fmt.Println("Datasets:")
+	fmt.Println("  DR: drivers          SR: session_result   SG: starting_grid")
+	fmt.Println("  ST: stints           PS: pit_stops        PO: positions")
+	fmt.Println("  RC: race_control     WE: weather          LA: laps")
+	fmt.Println()
+
+	return nil
 }

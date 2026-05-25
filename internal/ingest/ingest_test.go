@@ -760,3 +760,65 @@ func TestIngestMeetingPartialFailurePreservesSuccessfulSessions(t *testing.T) {
 		t.Fatalf("meetings after partial failure = %+v, err = %v, want 1 meeting preserved", meetings, err)
 	}
 }
+
+func TestResumableIngestion(t *testing.T) {
+	_, sessionKey, src := testSessionFixtures()
+	st := openTestStore(t)
+
+	opts := DefaultOptions()
+	opts.RequestDelay = 0
+	svc := NewService(st, src, opts)
+
+	// First run: ingest session. This should populate session_coverage.
+	summary, err := svc.IngestSession(sessionKey)
+	if err != nil {
+		t.Fatalf("first IngestSession() error = %v", err)
+	}
+	if summary.Status != "completed" {
+		t.Fatalf("first run summary.Status = %q, want completed", summary.Status)
+	}
+
+	// Verify coverage was populated in the database.
+	cov, err := st.GetSessionCoverage(sessionKey)
+	if err != nil {
+		t.Fatalf("GetSessionCoverage() error = %v", err)
+	}
+	if len(cov) != 9 {
+		t.Fatalf("cov length = %d, want 9 datasets", len(cov))
+	}
+	for ds, entry := range cov {
+		if entry.Status != "complete" {
+			t.Errorf("dataset %s status = %q, want complete", ds, entry.Status)
+		}
+	}
+
+	// Modify the fake source so it returns empty datasets or fails.
+	// If resumability is working, it should skip all fetches because they are already complete!
+	src.failOn = "drivers" // If it fetches, it will fail!
+	
+	// Second run: without Force, it should skip and succeed.
+	summary2, err := svc.IngestSession(sessionKey)
+	if err != nil {
+		t.Fatalf("second IngestSession() error = %v", err)
+	}
+	if summary2.Status != "completed" {
+		t.Fatalf("second run summary.Status = %q, want completed", summary2.Status)
+	}
+
+	// Third run: with Force, it should try to fetch and fail as expected!
+	opts.Force = true
+	svc2 := NewService(st, src, opts)
+	_, err = svc2.IngestSession(sessionKey)
+	if err == nil {
+		t.Fatal("third IngestSession() expected error due to failOn, got nil")
+	}
+
+	// Check if drivers dataset is now marked as failed in DB
+	cov2, err := st.GetSessionCoverage(sessionKey)
+	if err != nil {
+		t.Fatalf("GetSessionCoverage() error = %v", err)
+	}
+	if cov2["drivers"].Status != "failed" {
+		t.Fatalf("drivers status = %q, want failed", cov2["drivers"].Status)
+	}
+}
