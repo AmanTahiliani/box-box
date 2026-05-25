@@ -187,3 +187,10 @@ After v1:
 - Add Dataset Status, Strategy, and Position Evolution views.
 - Use real local-first data where available and honest missing states otherwise.
 - Continue frontend work with Claude.
+
+### Phase 7: Analytics Data Foundation
+
+- Return to Cursor for backend work.
+- Add local-first store, ingestion, and Race Hub API support for stints,
+  positions, and related analytics datasets.
+- Keep React Strategy/Position views honest until real data is available.

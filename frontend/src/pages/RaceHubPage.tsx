@@ -6,6 +6,10 @@ import { RaceHubHeader } from '../components/RaceHubHeader'
 import { DatasetStrip } from '../components/DatasetStrip'
 import { ClassificationTable } from '../components/ClassificationTable'
 import { StartingGridTable } from '../components/StartingGridTable'
+import { TabBar, type Tab } from '../components/TabBar'
+import { DatasetStatusView } from '../components/DatasetStatusView'
+import { StrategyView } from '../components/StrategyView'
+import { PositionEvolutionView } from '../components/PositionEvolutionView'
 
 interface Props {
   sessionKey: number
@@ -14,6 +18,7 @@ interface Props {
 export function RaceHubPage({ sessionKey }: Props) {
   const navigate = useNavigate()
   const [inputVal, setInputVal] = useState(sessionKey > 0 ? String(sessionKey) : '')
+  const [activeTab, setActiveTab] = useState<Tab>('results')
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['race-hub', sessionKey],
@@ -85,25 +90,65 @@ export function RaceHubPage({ sessionKey }: Props) {
 
           <DatasetStrip datasets={data.datasets} />
 
-          <div className="data-section">
-            <div className="sec-header">
-              <span className="sec-title">Final Classification</span>
-              {data.results.length > 0 && (
-                <span className="sec-meta">{data.results.length} drivers</span>
-              )}
-            </div>
-            <ClassificationTable results={data.results} grid={data.starting_grid} />
-          </div>
+          <TabBar active={activeTab} onChange={setActiveTab} />
 
-          <div className="data-section">
-            <div className="sec-header">
-              <span className="sec-title">Starting Grid</span>
-              {data.starting_grid.length > 0 && (
-                <span className="sec-meta">{data.starting_grid.length} positions</span>
-              )}
+          {activeTab === 'results' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Final Classification</span>
+                {data.results.length > 0 && (
+                  <span className="sec-meta">{data.results.length} drivers</span>
+                )}
+              </div>
+              <ClassificationTable results={data.results} grid={data.starting_grid} />
             </div>
-            <StartingGridTable grid={data.starting_grid} />
-          </div>
+          )}
+
+          {activeTab === 'grid' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Starting Grid</span>
+                {data.starting_grid.length > 0 && (
+                  <span className="sec-meta">{data.starting_grid.length} positions</span>
+                )}
+              </div>
+              <StartingGridTable grid={data.starting_grid} />
+            </div>
+          )}
+
+          {activeTab === 'strategy' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Race Strategy</span>
+              </div>
+              <StrategyView
+                results={data.results}
+                hasStints={data.datasets['stints']?.status === 'available'}
+              />
+            </div>
+          )}
+
+          {activeTab === 'positions' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Position Evolution</span>
+              </div>
+              <PositionEvolutionView
+                results={data.results}
+                grid={data.starting_grid}
+                hasPositions={data.datasets['positions']?.status === 'available'}
+              />
+            </div>
+          )}
+
+          {activeTab === 'datasets' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Dataset Status</span>
+              </div>
+              <DatasetStatusView datasets={data.datasets} />
+            </div>
+          )}
         </>
       )}
     </div>

@@ -61,8 +61,10 @@ not implementation tickets yet.
   implementation slice for the production Web UI.
 - [14 Phase 6 React Race Hub Analytics](14-phase-6-react-race-hub-analytics.md):
   next frontend slice for strategy, position, and richer Race Hub views.
-- [Claude Phase 6 Prompt](claude-phase-6-react-race-hub-analytics-prompt.md):
-  current handoff prompt for the next Claude frontend phase.
+- [15 Phase 7 Analytics Data Foundation](15-phase-7-analytics-data-foundation.md):
+  backend slice for laps, stints, pits, race control, weather, and positions.
+- [Cursor Phase 7 Prompt](cursor-phase-7-analytics-data-foundation-prompt.md):
+  current handoff prompt for the next Cursor backend phase.
 
 ## External References
 
