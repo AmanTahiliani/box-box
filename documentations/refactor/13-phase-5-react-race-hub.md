@@ -46,8 +46,10 @@ Use `/api/v1/race-hub?session_key=...` as the primary API.
 
 ## Visual Direction
 
-Follow the existing mockups in `documentations/refactor/screens/`, but treat
-them as direction, not rigid specs.
+The temporary static mockups used during early product exploration have been
+removed now that the production React routes exist. Use the implemented React
+screens as the current source of truth, and keep this visual direction in mind
+for future refinement.
 
 The UI should feel like an F1 operations room:
 

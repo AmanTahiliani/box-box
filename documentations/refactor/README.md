@@ -75,6 +75,8 @@ not implementation tickets yet.
   slice for making one command ingest a whole race weekend into the local DB.
 - [20 Phase 12 Data Library UI](20-phase-12-data-library-ui.md): frontend slice
   for showing local ingestion coverage and next CLI actions.
+- [21 MVP Completion Checklist](21-mvp-completion-checklist.md): current
+  implementation status, verification commands, and remaining post-MVP work.
 
 ## External References
 

@@ -93,9 +93,7 @@ TUI requirements during v1:
 - Persist live events/snapshots as a separate append-only stream only after the
   extracted package has stable event/state types.
 - See [09 Phase 1 Live Extraction](09-phase-1-live-extraction.md) for the
-  implementation brief and
-  [Cursor Phase 1 Prompt](cursor-phase-1-live-extraction-prompt.md) for the
-  fresh-agent handoff.
+  original implementation brief.
 
 ### Phase 2: Store Foundation
 
@@ -106,9 +104,7 @@ TUI requirements during v1:
 - Add normalized tables required for Race Hub v1.
 - Keep existing HTTP cache behavior unchanged.
 - See [10 Phase 2 Store Foundation](10-phase-2-store-foundation.md) for the
-  implementation brief and
-  [Cursor Phase 2 Prompt](cursor-phase-2-store-foundation-prompt.md) for the
-  fresh-agent handoff.
+  original implementation brief.
 
 ### Phase 3: Ingestion Foundation
 
@@ -118,9 +114,7 @@ TUI requirements during v1:
 - Add conservative request delay, bounded retry, and 429/live-lockout handling.
 - Make ingestion idempotent and resumable.
 - See [11 Phase 3 Ingestion Foundation](11-phase-3-ingestion-foundation.md) for
-  the implementation brief and
-  [Cursor Phase 3 Prompt](cursor-phase-3-ingestion-foundation-prompt.md) for the
-  coding-agent handoff.
+  the original implementation brief.
 
 ### Phase 4: Local-First Web API
 
@@ -129,9 +123,7 @@ TUI requirements during v1:
 - Migrate selected Web endpoints from direct OpenF1 calls to local-first reads.
 - Allow small opportunistic fetches only for missing screen-level data.
 - See [12 Phase 4 Local-First Web API](12-phase-4-local-first-web-api.md) for
-  the implementation brief and
-  [Cursor Phase 4 Prompt](cursor-phase-4-local-first-web-api-prompt.md) for the
-  coding-agent handoff.
+  the original implementation brief.
 
 ### Phase 5: React Race Hub Slice
 
@@ -142,9 +134,7 @@ TUI requirements during v1:
 - Keep the old Web UI available until the replacement route is credible.
 - This is the first frontend phase. Use Claude for this phase.
 - See [13 Phase 5 React Race Hub](13-phase-5-react-race-hub.md) for the
-  implementation brief and
-  [Claude Phase 5 Prompt](claude-phase-5-react-race-hub-prompt.md) for the
-  frontend-agent handoff.
+  original implementation brief.
 
 ## Ingestion Rate-Limit Defaults
 
