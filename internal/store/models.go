@@ -28,6 +28,29 @@ type IngestionRun struct {
 	SummaryJSON string
 }
 
+// NewsSource stores RSS/Atom feed metadata for local-first briefing reads.
+type NewsSource struct {
+	Source    string
+	Name      string
+	FeedURL   string
+	Category  string
+	Enabled   bool
+	FetchedAt *time.Time
+	ExpiresAt *time.Time
+	UpdatedAt time.Time
+}
+
+// NewsItem stores a normalized feed item deduplicated by URL.
+type NewsItem struct {
+	URL         string
+	Source      string
+	Title       string
+	PublishedAt *time.Time
+	Summary     string
+	Category    string
+	FetchedAt   time.Time
+}
+
 // Meeting is a race weekend record.
 type Meeting struct {
 	MeetingKey          int

@@ -192,6 +192,52 @@ func TestHandleSeasonsWithData(t *testing.T) {
 	}
 }
 
+func TestHandleNewsWithLocalData(t *testing.T) {
+	st := openTestStore(t)
+	now := time.Unix(1800000000, 0).UTC()
+	published := now.Add(-30 * time.Minute)
+	if err := st.UpsertNewsSource(store.NewsSource{
+		Source:    "racefans-f1",
+		Name:      "RaceFans F1",
+		FeedURL:   "https://www.racefans.net/category/f1-news/feed/",
+		Category:  "news",
+		Enabled:   true,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertNewsSource() error = %v", err)
+	}
+	if err := st.UpsertNewsItem(store.NewsItem{
+		URL:         "https://example.com/story",
+		Source:      "racefans-f1",
+		Title:       "RaceFans story",
+		PublishedAt: &published,
+		Summary:     "Brief summary",
+		Category:    "news",
+		FetchedAt:   now,
+	}); err != nil {
+		t.Fatalf("UpsertNewsItem() error = %v", err)
+	}
+
+	srv := testServer(t, st)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/news?source=racefans-f1&limit=5", nil)
+	rec := httptest.NewRecorder()
+	srv.handleNews(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var items []query.NewsItem
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	if items[0].Source != "racefans-f1" || items[0].Title != "RaceFans story" {
+		t.Fatalf("items[0] = %+v, want seeded item", items[0])
+	}
+}
+
 func TestHandleWeekendNotFound(t *testing.T) {
 	st := openTestStore(t)
 	srv := testServer(t, st)

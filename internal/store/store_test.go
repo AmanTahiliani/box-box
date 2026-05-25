@@ -28,8 +28,8 @@ func TestOpenAppliesMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion() error = %v", err)
 	}
-	if version != 2 {
-		t.Fatalf("SchemaVersion() = %d, want 2", version)
+	if version != 3 {
+		t.Fatalf("SchemaVersion() = %d, want 3", version)
 	}
 
 	tables := []string{
@@ -48,6 +48,8 @@ func TestOpenAppliesMigrations(t *testing.T) {
 		"race_control",
 		"weather",
 		"laps",
+		"news_sources",
+		"news_items",
 	}
 	for _, table := range tables {
 		var name string
@@ -83,6 +85,12 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("schema_migrations v2 count = %d, want 1", count)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 3`).Scan(&count); err != nil {
+		t.Fatalf("count schema_migrations v3: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("schema_migrations v3 count = %d, want 1", count)
 	}
 }
 
@@ -594,6 +602,58 @@ func TestAnalyticsUpsertRead(t *testing.T) {
 	laps, err := s.ListLaps(sessionKey)
 	if err != nil || len(laps) != 1 {
 		t.Fatalf("ListLaps() = %+v, err = %v", laps, err)
+	}
+}
+
+func TestNewsUpsertRead(t *testing.T) {
+	s := openTestStore(t)
+	now := time.Unix(1800000000, 0).UTC()
+	expires := now.Add(30 * time.Minute)
+
+	if err := s.UpsertNewsSource(NewsSource{
+		Source:    "bbc-f1",
+		Name:      "BBC Sport F1",
+		FeedURL:   "https://feeds.bbci.co.uk/sport/formula1",
+		Category:  "news",
+		Enabled:   true,
+		FetchedAt: &now,
+		ExpiresAt: &expires,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertNewsSource() error = %v", err)
+	}
+
+	published := now.Add(-time.Hour)
+	item := NewsItem{
+		URL:         "https://example.com/f1/story",
+		Source:      "bbc-f1",
+		Title:       "Paddock update",
+		PublishedAt: &published,
+		Summary:     "Short briefing text",
+		Category:    "news",
+		FetchedAt:   now,
+	}
+	if err := s.UpsertNewsItem(item); err != nil {
+		t.Fatalf("UpsertNewsItem() error = %v", err)
+	}
+	updated := item
+	updated.Title = "Paddock update revised"
+	if err := s.UpsertNewsItem(updated); err != nil {
+		t.Fatalf("second UpsertNewsItem() error = %v", err)
+	}
+
+	items, err := s.ListNewsItems(10, "bbc-f1")
+	if err != nil {
+		t.Fatalf("ListNewsItems() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	if items[0].Title != updated.Title {
+		t.Fatalf("title = %q, want %q", items[0].Title, updated.Title)
+	}
+	if items[0].PublishedAt == nil || !items[0].PublishedAt.Equal(published) {
+		t.Fatalf("published_at = %v, want %v", items[0].PublishedAt, published)
 	}
 }
 

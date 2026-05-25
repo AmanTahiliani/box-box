@@ -115,6 +115,24 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, sessions)
 }
 
+// --- /api/v1/news ---
+
+func (s *Server) handleNews(w http.ResponseWriter, r *http.Request) {
+	if !s.hasLocalQuery() {
+		writeJSON(w, []query.NewsItem{})
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	source := strings.TrimSpace(r.URL.Query().Get("source"))
+	items, err := s.query.ListNews(limit, source)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError, false)
+		return
+	}
+	writeJSON(w, items)
+}
+
 // --- /api/v1/drivers ---
 
 func (s *Server) handleDrivers(w http.ResponseWriter, r *http.Request) {

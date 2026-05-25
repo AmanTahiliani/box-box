@@ -64,6 +64,7 @@ func (s *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/race-hub", s.handleRaceHub)
 	mux.HandleFunc("/api/v1/seasons", s.handleSeasons)
 	mux.HandleFunc("/api/v1/weekend", s.handleWeekend)
+	mux.HandleFunc("/api/v1/news", s.handleNews)
 	mux.HandleFunc("/api/v1/meetings", s.handleMeetings)
 	mux.HandleFunc("/api/v1/sessions", s.handleSessions)
 	mux.HandleFunc("/api/v1/drivers", s.handleDrivers)

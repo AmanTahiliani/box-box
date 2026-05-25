@@ -92,6 +92,9 @@ not implementation tickets yet.
 - [25 Phase 18 Fan Command Center](25-phase-18-fan-command-center.md): reworks
   `/` around race-weekend identity and splits ingestion/admin concerns into
   the new `/admin` (Data Health) route.
+- [27 Phase 19B Paddock Briefing RSS](27-phase-19b-paddock-briefing-rss.md):
+  backend spike for publisher-owned RSS/Atom feeds, local SQLite caching, and a
+  future fan-facing briefing API.
 
 ## External References
 
