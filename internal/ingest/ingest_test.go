@@ -476,6 +476,51 @@ func TestSourceErrorStopsRun(t *testing.T) {
 	}
 }
 
+func TestOptionalAnalyticsErrorMakesSessionPartialAndContinues(t *testing.T) {
+	_, sessionKey, src := testSessionFixtures()
+	src.failOn = "stints"
+	st := openTestStore(t)
+
+	opts := DefaultOptions()
+	opts.RequestDelay = 0
+	svc := NewService(st, src, opts)
+
+	summary, err := svc.IngestSession(sessionKey)
+	if err != nil {
+		t.Fatalf("IngestSession() error = %v, want nil partial result", err)
+	}
+	if summary.Status != "partial" {
+		t.Fatalf("summary.Status = %q, want partial", summary.Status)
+	}
+	if len(summary.Errors) != 1 {
+		t.Fatalf("summary.Errors = %v, want 1 optional error", summary.Errors)
+	}
+	if summary.Drivers != 2 || summary.SessionResults != 2 || summary.StartingGrid != 2 {
+		t.Fatalf("core counts = %+v, want drivers/results/grid preserved", summary)
+	}
+	if summary.Stints != 0 {
+		t.Fatalf("summary.Stints = %d, want 0 for failed optional dataset", summary.Stints)
+	}
+	if summary.PitStops != 1 || summary.Positions != 3 || summary.RaceControl != 1 || summary.Weather != 1 || summary.Laps != 1 {
+		t.Fatalf("optional counts after stints failure = %+v, want remaining analytics preserved", summary)
+	}
+	if summary.RawPayloads != 10 {
+		t.Fatalf("summary.RawPayloads = %d, want 10 successful payloads", summary.RawPayloads)
+	}
+
+	stints, err := st.ListStints(sessionKey)
+	if err != nil {
+		t.Fatalf("ListStints() error = %v", err)
+	}
+	if len(stints) != 0 {
+		t.Fatalf("stints after failure = %d, want 0", len(stints))
+	}
+	positions, err := st.ListPositionSamples(sessionKey)
+	if err != nil || len(positions) != 3 {
+		t.Fatalf("positions = %+v, err = %v, want 3 preserved", positions, err)
+	}
+}
+
 func TestLiveSessionLockoutSurfacesControlledFailure(t *testing.T) {
 	_, sessionKey, src := testSessionFixtures()
 	src.liveLockout = true
@@ -564,6 +609,56 @@ func TestIngestMeetingWeekendIngestsAllSessions(t *testing.T) {
 		if err != nil || len(results) != 2 {
 			t.Fatalf("session %d results = %+v, err = %v, want 2", sk, results, err)
 		}
+	}
+}
+
+func TestIngestMeetingOptionalAnalyticsPartialDoesNotFailMeeting(t *testing.T) {
+	meetingKey, qualiKey, raceKey, src := testWeekendFixtures()
+	src.failSession = map[int]string{raceKey: "weather"}
+	st := openTestStore(t)
+
+	opts := DefaultOptions()
+	opts.RequestDelay = 0
+	svc := NewService(st, src, opts)
+
+	summary, err := svc.IngestMeeting(meetingKey)
+	if err != nil {
+		t.Fatalf("IngestMeeting() error = %v, want nil for optional partial", err)
+	}
+	if summary.Status != "partial" {
+		t.Fatalf("summary.Status = %q, want partial", summary.Status)
+	}
+	if len(summary.Errors) != 1 {
+		t.Fatalf("summary.Errors = %v, want 1 optional error", summary.Errors)
+	}
+	if len(summary.SessionSummaries) != 2 {
+		t.Fatalf("session summaries = %d, want 2", len(summary.SessionSummaries))
+	}
+
+	var raceSummary Summary
+	for _, ss := range summary.SessionSummaries {
+		if ss.SessionKey == raceKey {
+			raceSummary = ss.Summary
+		}
+	}
+	if raceSummary.Status != "partial" {
+		t.Fatalf("race session summary status = %q, want partial", raceSummary.Status)
+	}
+	if len(raceSummary.Errors) != 1 {
+		t.Fatalf("race session errors = %v, want 1 optional error", raceSummary.Errors)
+	}
+
+	qualiDrivers, err := st.ListSessionDrivers(qualiKey)
+	if err != nil || len(qualiDrivers) != 2 {
+		t.Fatalf("quali drivers = %+v, err = %v, want 2", qualiDrivers, err)
+	}
+	raceDrivers, err := st.ListSessionDrivers(raceKey)
+	if err != nil || len(raceDrivers) != 2 {
+		t.Fatalf("race drivers = %+v, err = %v, want 2", raceDrivers, err)
+	}
+	positions, err := st.ListPositionSamples(raceKey)
+	if err != nil || len(positions) != 3 {
+		t.Fatalf("race positions = %+v, err = %v, want 3 preserved", positions, err)
 	}
 }
 

@@ -214,6 +214,7 @@ func (s *Service) IngestMeeting(meetingKey int) (Summary, error) {
 	}
 
 	sessionFailures := 0
+	partialSessions := 0
 	for _, sess := range sessions {
 		s.opts.Progress.Step("ingesting Race Hub datasets for session %d (%s)", sess.SessionKey, sess.SessionName)
 		sessSummary, err := s.ingestSessionDatasets(sess.SessionKey, meetingKey)
@@ -230,11 +231,19 @@ func (s *Service) IngestMeeting(meetingKey int) (Summary, error) {
 				"session %d (%s): %v", sess.SessionKey, sess.SessionName, err,
 			))
 		}
+		if err == nil && sessSummary.Status == "partial" {
+			partialSessions++
+			for _, partialErr := range sessSummary.Errors {
+				summary.Errors = append(summary.Errors, fmt.Sprintf(
+					"session %d (%s): %s", sess.SessionKey, sess.SessionName, partialErr,
+				))
+			}
+		}
 		summary.SessionSummaries = append(summary.SessionSummaries, ss)
 		summary.mergeCounts(sessSummary)
 	}
 
-	summary.Status = meetingStatus(sessionFailures, len(sessions), s.opts.DryRun)
+	summary.Status = meetingStatus(sessionFailures, partialSessions, len(sessions), s.opts.DryRun)
 	s.finishRun(runID, summary)
 	s.opts.Progress.Summary(summary)
 
@@ -325,11 +334,12 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 
 	datasetSummary, err := s.ingestSessionDatasets(sessionKey, meetingKey)
 	summary.mergeCounts(datasetSummary)
+	summary.Errors = append(summary.Errors, datasetSummary.Errors...)
 	if err != nil {
 		return s.finishFailed(runID, summary, err)
 	}
 
-	summary.Status = statusForDryRun(s.opts.DryRun)
+	summary.Status = datasetSummary.Status
 	s.finishRun(runID, summary)
 	s.opts.Progress.Summary(summary)
 	return summary, nil
@@ -427,26 +437,24 @@ func (s *Service) ingestSessionDatasets(sessionKey, meetingKey int) (Summary, er
 	}
 	s.delay()
 
-	if err := s.ingestStints(&summary, meetingKey, sk); err != nil {
-		return summary, err
+	optionalIngests := []struct {
+		name string
+		run  func(*Summary, int, int) error
+	}{
+		{name: "stints", run: s.ingestStints},
+		{name: "pit_stops", run: s.ingestPitStops},
+		{name: "positions", run: s.ingestPositions},
+		{name: "race_control", run: s.ingestRaceControl},
+		{name: "weather", run: s.ingestWeather},
+		{name: "laps", run: s.ingestLaps},
 	}
-	if err := s.ingestPitStops(&summary, meetingKey, sk); err != nil {
-		return summary, err
-	}
-	if err := s.ingestPositions(&summary, meetingKey, sk); err != nil {
-		return summary, err
-	}
-	if err := s.ingestRaceControl(&summary, meetingKey, sk); err != nil {
-		return summary, err
-	}
-	if err := s.ingestWeather(&summary, meetingKey, sk); err != nil {
-		return summary, err
-	}
-	if err := s.ingestLaps(&summary, meetingKey, sk); err != nil {
-		return summary, err
+	for _, optional := range optionalIngests {
+		if err := optional.run(&summary, meetingKey, sk); err != nil {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("%s: %v", optional.name, err))
+		}
 	}
 
-	summary.Status = statusForDryRun(s.opts.DryRun)
+	summary.Status = statusForErrors(s.opts.DryRun, summary.Errors)
 	return summary, nil
 }
 
@@ -464,11 +472,14 @@ func (s *Summary) mergeCounts(other Summary) {
 	s.RawInserted += other.RawInserted
 }
 
-func meetingStatus(sessionFailures, sessionTotal int, dryRun bool) string {
+func meetingStatus(sessionFailures, partialSessions, sessionTotal int, dryRun bool) string {
 	if dryRun {
 		return "dry_run"
 	}
 	if sessionFailures == 0 {
+		if partialSessions > 0 {
+			return "partial"
+		}
 		return "completed"
 	}
 	if sessionFailures == sessionTotal {
@@ -670,6 +681,16 @@ func (s *Service) storeAnalyticsFetch(
 func statusForDryRun(dryRun bool) string {
 	if dryRun {
 		return "dry_run"
+	}
+	return "completed"
+}
+
+func statusForErrors(dryRun bool, errs []string) string {
+	if dryRun {
+		return "dry_run"
+	}
+	if len(errs) > 0 {
+		return "partial"
 	}
 	return "completed"
 }
