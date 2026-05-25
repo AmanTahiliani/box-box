@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/api"
 	"github.com/AmanTahiliani/box-box/internal/ingest"
+	"github.com/AmanTahiliani/box-box/internal/news"
 	"github.com/AmanTahiliani/box-box/internal/store"
 	"github.com/AmanTahiliani/box-box/internal/ui"
 	"github.com/AmanTahiliani/box-box/internal/web"
@@ -21,6 +24,7 @@ func main() {
 	ingestYear := flag.Int("ingest-year", 0, "Ingest OpenF1 meetings for a season year")
 	ingestMeeting := flag.Int("ingest-meeting", 0, "Ingest meeting metadata and Race Hub datasets for all sessions")
 	ingestSession := flag.Int("ingest-session", 0, "Ingest Race Hub datasets for a session key")
+	ingestNews := flag.Bool("ingest-news", false, "Refresh RSS/Atom paddock briefing feeds")
 	dryRun := flag.Bool("dry-run", false, "Preview ingestion without writing domain rows")
 	dbPath := flag.String("db", "", "Domain database path (default: ~/.local/share/box-box/boxbox.db)")
 	flag.Parse()
@@ -46,10 +50,20 @@ func main() {
 	if *ingestSession != 0 {
 		ingestFlags++
 	}
+	if *ingestNews {
+		ingestFlags++
+	}
 	if ingestFlags > 0 {
 		if ingestFlags > 1 {
-			fmt.Fprintln(os.Stderr, "box-box: only one of --ingest-year, --ingest-meeting, or --ingest-session may be set")
+			fmt.Fprintln(os.Stderr, "box-box: only one of --ingest-year, --ingest-meeting, --ingest-session, or --ingest-news may be set")
 			os.Exit(1)
+		}
+		if *ingestNews {
+			if err := runNewsIngestion(*dryRun, *dbPath); err != nil {
+				fmt.Fprintf(os.Stderr, "box-box ingest error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
 		if err := runIngestion(client, *ingestYear, *ingestMeeting, *ingestSession, *dryRun, *dbPath); err != nil {
 			fmt.Fprintf(os.Stderr, "box-box ingest error: %v\n", err)
@@ -127,5 +141,47 @@ func runIngestion(client *api.OpenF1Client, year, meetingKey, sessionKey int, dr
 	case sessionKey != 0:
 		_, err = svc.IngestSession(sessionKey)
 	}
+	return err
+}
+
+func runNewsIngestion(dryRun bool, dbPath string) error {
+	log.SetOutput(os.Stderr)
+
+	path := dbPath
+	if path == "" {
+		path = store.DefaultDBPath()
+	}
+
+	var st *store.Store
+	if !dryRun {
+		var err error
+		st, err = store.Open(path)
+		if err != nil {
+			return fmt.Errorf("open domain database: %w", err)
+		}
+		defer st.Close()
+	}
+
+	if dryRun {
+		fmt.Fprintf(os.Stderr, "news: dry run, not writing to %s\n", path)
+	} else {
+		fmt.Fprintf(os.Stderr, "news: refreshing feeds into %s\n", path)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	result, err := news.Refresh(ctx, st, news.RefreshOptions{
+		Client:   &http.Client{Timeout: 10 * time.Second},
+		DryRun:   dryRun,
+		Progress: os.Stderr,
+	})
+	fmt.Fprintf(
+		os.Stderr,
+		"news: %d source(s) fetched, %d failed, %d item(s) fetched, %d upserted\n",
+		result.SourcesFetched,
+		result.SourcesFailed,
+		result.ItemsFetched,
+		result.ItemsUpserted,
+	)
 	return err
 }
