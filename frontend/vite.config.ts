@@ -7,7 +7,7 @@ export default defineConfig({
     port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: `http://localhost:${process.env.BOXBOX_API_PORT ?? '8080'}`,
         changeOrigin: true,
       },
     },

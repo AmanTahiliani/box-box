@@ -21,6 +21,12 @@ type fakeSource struct {
 	drivers           map[int][]models.Driver
 	results           map[int][]models.SessionResult
 	grid              map[int][]models.StartingGrid
+	stints            map[int][]models.Stint
+	pitStops          map[int][]models.Pit
+	positions         map[int][]models.Position
+	raceControl       map[int][]models.RaceControl
+	weather           map[int][]models.Weather
+	laps              map[int][]models.Lap
 	failOn            string
 	liveLockout       bool
 }
@@ -34,6 +40,12 @@ func newFakeSource() *fakeSource {
 		drivers:           make(map[int][]models.Driver),
 		results:           make(map[int][]models.SessionResult),
 		grid:              make(map[int][]models.StartingGrid),
+		stints:            make(map[int][]models.Stint),
+		pitStops:          make(map[int][]models.Pit),
+		positions:         make(map[int][]models.Position),
+		raceControl:       make(map[int][]models.RaceControl),
+		weather:           make(map[int][]models.Weather),
+		laps:              make(map[int][]models.Lap),
 	}
 }
 
@@ -114,6 +126,54 @@ func (f *fakeSource) FetchStartingGrid(sessionKey int) (FetchResult, []models.St
 	return f.wrap("starting_grid", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
 }
 
+func (f *fakeSource) FetchStintsForSession(sessionKey int) (FetchResult, []models.Stint, error) {
+	if err := f.maybeFail("stints"); err != nil {
+		return FetchResult{}, nil, err
+	}
+	data := f.stints[sessionKey]
+	return f.wrap("stints", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
+}
+
+func (f *fakeSource) FetchPitStopsForSession(sessionKey int) (FetchResult, []models.Pit, error) {
+	if err := f.maybeFail("pit"); err != nil {
+		return FetchResult{}, nil, err
+	}
+	data := f.pitStops[sessionKey]
+	return f.wrap("pit", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
+}
+
+func (f *fakeSource) FetchPositionsForSession(sessionKey int) (FetchResult, []models.Position, error) {
+	if err := f.maybeFail("position"); err != nil {
+		return FetchResult{}, nil, err
+	}
+	data := f.positions[sessionKey]
+	return f.wrap("position", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
+}
+
+func (f *fakeSource) FetchRaceControlForSession(sessionKey int) (FetchResult, []models.RaceControl, error) {
+	if err := f.maybeFail("race_control"); err != nil {
+		return FetchResult{}, nil, err
+	}
+	data := f.raceControl[sessionKey]
+	return f.wrap("race_control", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
+}
+
+func (f *fakeSource) FetchWeatherForSession(sessionKey int) (FetchResult, []models.Weather, error) {
+	if err := f.maybeFail("weather"); err != nil {
+		return FetchResult{}, nil, err
+	}
+	data := f.weather[sessionKey]
+	return f.wrap("weather", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
+}
+
+func (f *fakeSource) FetchLapsForSession(sessionKey int) (FetchResult, []models.Lap, error) {
+	if err := f.maybeFail("laps"); err != nil {
+		return FetchResult{}, nil, err
+	}
+	data := f.laps[sessionKey]
+	return f.wrap("laps", fmt.Sprintf("session_key=%d", sessionKey), data), data, nil
+}
+
 func openTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "ingest.db")
@@ -176,8 +236,33 @@ func testSessionFixtures() (int, int, *fakeSource) {
 		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, Position: 1, LapDuration: 71.234},
 		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 44, Position: 2, LapDuration: 71.456},
 	}
+	src.stints[sessionKey] = []models.Stint{
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, StintNumber: 1, Compound: models.CompoundMedium, LapStart: 1, LapEnd: 30},
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 44, StintNumber: 1, Compound: models.CompoundSoft, LapStart: 1, LapEnd: 18},
+	}
+	src.pitStops[sessionKey] = []models.Pit{
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 44, LapNumber: 19, Date: "2025-05-25T14:00:00+00:00", StopDuration: 2.4},
+	}
+	src.positions[sessionKey] = []models.Position{
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, Date: "2025-05-25T13:05:00+00:00", Position: 1},
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, Date: "2025-05-25T13:10:00+00:00", Position: 1},
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 44, Date: "2025-05-25T13:05:00+00:00", Position: 2},
+	}
+	src.raceControl[sessionKey] = []models.RaceControl{
+		{SessionKey: sessionKey, MeetingKey: meetingKey, Date: "2025-05-25T13:01:00+00:00", Category: models.CategoryFlag, Flag: models.FlagGreen, Message: "Green light"},
+	}
+	src.weather[sessionKey] = []models.Weather{
+		{SessionKey: sessionKey, MeetingKey: meetingKey, Date: "2025-05-25T13:00:00+00:00", AirTemperature: 22.0, TrackTemperature: 34.0},
+	}
+	src.laps[sessionKey] = []models.Lap{
+		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, LapNumber: 1, LapDuration: ptrFloat64(75.1)},
+	}
 
 	return meetingKey, sessionKey, src
+}
+
+func ptrFloat64(v float64) *float64 {
+	return &v
 }
 
 func TestIngestSessionWritesDomainAndRawRows(t *testing.T) {
@@ -198,8 +283,11 @@ func TestIngestSessionWritesDomainAndRawRows(t *testing.T) {
 	if summary.Drivers != 2 || summary.SessionResults != 2 || summary.StartingGrid != 2 {
 		t.Fatalf("summary counts = %+v, want 2 drivers/results/grid", summary)
 	}
-	if summary.RawPayloads != 5 {
-		t.Fatalf("summary.RawPayloads = %d, want 5", summary.RawPayloads)
+	if summary.Stints != 2 || summary.PitStops != 1 || summary.Positions != 3 {
+		t.Fatalf("summary analytics counts = %+v, want stints=2 pits=1 positions=3", summary)
+	}
+	if summary.RawPayloads != 11 {
+		t.Fatalf("summary.RawPayloads = %d, want 11", summary.RawPayloads)
 	}
 
 	drivers, err := st.ListSessionDrivers(sessionKey)
@@ -230,8 +318,17 @@ func TestIngestSessionWritesDomainAndRawRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRawPayloadsBySession() error = %v", err)
 	}
-	if len(raw) != 5 {
-		t.Fatalf("raw payloads = %d, want 5", len(raw))
+	if len(raw) != 11 {
+		t.Fatalf("raw payloads = %d, want 11", len(raw))
+	}
+
+	stints, err := st.ListStints(sessionKey)
+	if err != nil || len(stints) != 2 {
+		t.Fatalf("stints = %+v, err = %v, want 2", stints, err)
+	}
+	positions, err := st.ListPositionSamples(sessionKey)
+	if err != nil || len(positions) != 3 {
+		t.Fatalf("positions = %+v, err = %v, want 3", positions, err)
 	}
 }
 

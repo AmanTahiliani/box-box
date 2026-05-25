@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/store"
 )
 
@@ -150,8 +151,8 @@ func TestGetRaceHubCompleteData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRaceHub() error = %v", err)
 	}
-	if hub.Source != ResponseSourceLocal {
-		t.Fatalf("Source = %q, want %q", hub.Source, ResponseSourceLocal)
+	if hub.Source != ResponseSourcePartial {
+		t.Fatalf("Source = %q, want %q (core datasets complete, analytics missing)", hub.Source, ResponseSourcePartial)
 	}
 	if len(hub.Results) != 1 {
 		t.Fatalf("Results len = %d, want 1", len(hub.Results))
@@ -182,6 +183,47 @@ func TestListMeetingsByYear(t *testing.T) {
 	}
 	if len(empty) != 0 {
 		t.Fatalf("ListMeetingsByYear(2024) len = %d, want 0", len(empty))
+	}
+}
+
+func TestGetRaceHubAnalyticsDatasets(t *testing.T) {
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	sessionKey := 9472
+	meetingKey := 1229
+
+	if err := svc.store.UpsertStint(store.Stint{
+		SessionKey: sessionKey, DriverNumber: 1, MeetingKey: meetingKey,
+		StintNumber: 1, Compound: "MEDIUM", LapStart: 1, LapEnd: 30,
+	}); err != nil {
+		t.Fatalf("UpsertStint() error = %v", err)
+	}
+	if err := svc.store.UpsertPositionSample(store.PositionSample{
+		SessionKey: sessionKey, DriverNumber: 1, MeetingKey: meetingKey,
+		Date: "2025-05-25T13:05:00+00:00", Position: 1,
+	}); err != nil {
+		t.Fatalf("UpsertPositionSample() error = %v", err)
+	}
+
+	hub, err := svc.GetRaceHub(sessionKey)
+	if err != nil {
+		t.Fatalf("GetRaceHub() error = %v", err)
+	}
+	if hub.Datasets["stints"].Status != DatasetStatusAvailable {
+		t.Fatalf("stints status = %+v, want available", hub.Datasets["stints"])
+	}
+	if hub.Datasets["positions"].Status != DatasetStatusAvailable {
+		t.Fatalf("positions status = %+v, want available", hub.Datasets["positions"])
+	}
+	if len(hub.Stints) != 1 || hub.Stints[0].Compound != models.CompoundMedium {
+		t.Fatalf("Stints = %+v, want one MEDIUM stint", hub.Stints)
+	}
+	if len(hub.Positions) != 1 {
+		t.Fatalf("Positions len = %d, want 1", len(hub.Positions))
+	}
+	if hub.Datasets["pit_stops"].Status != DatasetStatusMissing {
+		t.Fatalf("pit_stops status = %+v, want missing", hub.Datasets["pit_stops"])
 	}
 }
 

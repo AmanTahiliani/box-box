@@ -81,4 +81,77 @@ export interface RaceHub {
   drivers: Driver[]
   results: EnrichedResult[]
   starting_grid: EnrichedGrid[]
+  stints: Stint[]
+  pit_stops: PitStop[]
+  positions: PositionSample[]
+  race_control: RaceControlMessage[]
+  weather: WeatherSample[]
+  laps: Lap[]
+}
+
+export interface Stint {
+  session_key: number
+  driver_number: number
+  meeting_key: number
+  stint_number: number
+  compound: string
+  lap_start: number
+  lap_end: number
+  tyre_age_at_start: number
+}
+
+export interface PitStop {
+  session_key: number
+  driver_number: number
+  meeting_key: number
+  lap_number: number
+  date: string
+  pit_duration: number
+  lane_duration: number
+  stop_duration: number
+}
+
+export interface PositionSample {
+  session_key: number
+  driver_number: number
+  meeting_key: number
+  date: string
+  position: number
+}
+
+export interface RaceControlMessage {
+  session_key: number
+  meeting_key: number
+  date: string
+  category: string
+  flag: string
+  message: string
+  scope: string
+  driver_number: number | null
+  lap_number: number | null
+  sector: number | null
+  qualifying_phase: number | null
+}
+
+export interface WeatherSample {
+  session_key: number
+  meeting_key: number
+  date: string
+  air_temperature: number
+  track_temperature: number
+  humidity: number
+  pressure: number
+  rainfall: number
+  wind_direction: number
+  wind_speed: number
+}
+
+export interface Lap {
+  session_key: number
+  driver_number: number
+  meeting_key: number
+  lap_number: number
+  date_start: string
+  lap_duration: number | null
+  is_pit_out_lap: boolean
 }

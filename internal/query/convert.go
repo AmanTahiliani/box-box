@@ -99,3 +99,102 @@ func parseJSONValue(raw string) interface{} {
 	}
 	return v
 }
+
+func stintToModel(st store.Stint) models.Stint {
+	return models.Stint{
+		SessionKey:     st.SessionKey,
+		DriverNumber:   st.DriverNumber,
+		MeetingKey:     st.MeetingKey,
+		StintNumber:    st.StintNumber,
+		Compound:       models.TyreCompound(st.Compound),
+		LapStart:       st.LapStart,
+		LapEnd:         st.LapEnd,
+		TyreAgeAtStart: st.TyreAgeAtStart,
+	}
+}
+
+func pitStopToModel(p store.PitStop) models.Pit {
+	stopDuration := p.StopDuration
+	if stopDuration == 0 {
+		stopDuration = p.PitDuration
+	}
+	return models.Pit{
+		SessionKey:   p.SessionKey,
+		DriverNumber: p.DriverNumber,
+		MeetingKey:   p.MeetingKey,
+		LapNumber:    p.LapNumber,
+		Date:         p.Date,
+		PitDuration:  p.PitDuration,
+		LaneDuration: p.LaneDuration,
+		StopDuration: stopDuration,
+	}
+}
+
+func positionToModel(p store.PositionSample) models.Position {
+	return models.Position{
+		SessionKey:   p.SessionKey,
+		DriverNumber: p.DriverNumber,
+		MeetingKey:   p.MeetingKey,
+		Date:         p.Date,
+		Position:     p.Position,
+	}
+}
+
+func raceControlToModel(rc store.RaceControlMessage) models.RaceControl {
+	return models.RaceControl{
+		SessionKey:      rc.SessionKey,
+		MeetingKey:      rc.MeetingKey,
+		Date:            rc.Date,
+		Category:        models.RaceControlCategory(rc.Category),
+		Flag:            models.Flag(rc.Flag),
+		Message:         rc.Message,
+		Scope:           rc.Scope,
+		DriverNumber:    rc.DriverNumber,
+		LapNumber:       rc.LapNumber,
+		Sector:          rc.Sector,
+		QualifyingPhase: rc.QualifyingPhase,
+	}
+}
+
+func weatherToModel(w store.WeatherSample) models.Weather {
+	return models.Weather{
+		SessionKey:       w.SessionKey,
+		MeetingKey:       w.MeetingKey,
+		Date:             w.Date,
+		AirTemperature:   w.AirTemperature,
+		TrackTemperature: w.TrackTemperature,
+		Humidity:         w.Humidity,
+		Pressure:         w.Pressure,
+		Rainfall:         w.Rainfall,
+		WindDirection:    w.WindDirection,
+		WindSpeed:        w.WindSpeed,
+	}
+}
+
+func lapToModel(l store.Lap) models.Lap {
+	lap := models.Lap{
+		SessionKey:   l.SessionKey,
+		DriverNumber: l.DriverNumber,
+		MeetingKey:   l.MeetingKey,
+		LapNumber:    l.LapNumber,
+		DateStart:    l.DateStart,
+		IsPitOutLap:  l.IsPitOutLap,
+	}
+	if l.LapDuration != 0 {
+		d := l.LapDuration
+		lap.LapDuration = &d
+	}
+	if l.DurationSector1 != 0 {
+		d := l.DurationSector1
+		lap.DurationSector1 = &d
+	}
+	if l.DurationSector2 != 0 {
+		d := l.DurationSector2
+		lap.DurationSector2 = &d
+	}
+	if l.DurationSector3 != 0 {
+		d := l.DurationSector3
+		lap.DurationSector3 = &d
+	}
+	return lap
+}

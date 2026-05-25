@@ -28,8 +28,8 @@ func TestOpenAppliesMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion() error = %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("SchemaVersion() = %d, want 1", version)
+	if version != 2 {
+		t.Fatalf("SchemaVersion() = %d, want 2", version)
 	}
 
 	tables := []string{
@@ -42,6 +42,12 @@ func TestOpenAppliesMigrations(t *testing.T) {
 		"session_drivers",
 		"session_results",
 		"starting_grid",
+		"stints",
+		"pit_stops",
+		"positions",
+		"race_control",
+		"weather",
+		"laps",
 	}
 	for _, table := range tables {
 		var name string
@@ -71,6 +77,12 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("schema_migrations count = %d, want 1", count)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 2`).Scan(&count); err != nil {
+		t.Fatalf("count schema_migrations v2: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("schema_migrations v2 count = %d, want 1", count)
 	}
 }
 
@@ -409,6 +421,110 @@ func TestSessionResultAndStartingGridUpsertRead(t *testing.T) {
 	}
 	if resultCount != 1 {
 		t.Fatalf("session_results count = %d, want 1", resultCount)
+	}
+}
+
+func TestAnalyticsUpsertRead(t *testing.T) {
+	s := openTestStore(t)
+
+	meetingKey := 1229
+	sessionKey := 9472
+
+	stint := Stint{
+		SessionKey:     sessionKey,
+		DriverNumber:   1,
+		MeetingKey:     meetingKey,
+		StintNumber:    1,
+		Compound:       "SOFT",
+		LapStart:       1,
+		LapEnd:         20,
+		TyreAgeAtStart: 0,
+	}
+	if err := s.UpsertStint(stint); err != nil {
+		t.Fatalf("UpsertStint() error = %v", err)
+	}
+	stints, err := s.ListStints(sessionKey)
+	if err != nil || len(stints) != 1 || stints[0].Compound != "SOFT" {
+		t.Fatalf("ListStints() = %+v, err = %v", stints, err)
+	}
+
+	pit := PitStop{
+		SessionKey:   sessionKey,
+		DriverNumber: 1,
+		MeetingKey:   meetingKey,
+		LapNumber:    21,
+		Date:         "2025-05-25T14:00:00+00:00",
+		StopDuration: 2.5,
+	}
+	if err := s.UpsertPitStop(pit); err != nil {
+		t.Fatalf("UpsertPitStop() error = %v", err)
+	}
+	pits, err := s.ListPitStops(sessionKey)
+	if err != nil || len(pits) != 1 {
+		t.Fatalf("ListPitStops() = %+v, err = %v", pits, err)
+	}
+
+	pos := PositionSample{
+		SessionKey:   sessionKey,
+		DriverNumber: 1,
+		MeetingKey:   meetingKey,
+		Date:         "2025-05-25T14:05:00+00:00",
+		Position:     1,
+	}
+	if err := s.UpsertPositionSample(pos); err != nil {
+		t.Fatalf("UpsertPositionSample() error = %v", err)
+	}
+	positions, err := s.ListPositionSamples(sessionKey)
+	if err != nil || len(positions) != 1 {
+		t.Fatalf("ListPositionSamples() = %+v, err = %v", positions, err)
+	}
+
+	rc := RaceControlMessage{
+		SessionKey: sessionKey,
+		MeetingKey: meetingKey,
+		Date:       "2025-05-25T14:10:00+00:00",
+		Category:   "Flag",
+		Flag:       "YELLOW",
+		Message:    "Yellow flag sector 1",
+		Scope:      "Track",
+	}
+	if err := s.UpsertRaceControlMessage(rc); err != nil {
+		t.Fatalf("UpsertRaceControlMessage() error = %v", err)
+	}
+	messages, err := s.ListRaceControlMessages(sessionKey)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("ListRaceControlMessages() = %+v, err = %v", messages, err)
+	}
+
+	weather := WeatherSample{
+		SessionKey:       sessionKey,
+		MeetingKey:       meetingKey,
+		Date:             "2025-05-25T14:00:00+00:00",
+		AirTemperature:   22.5,
+		TrackTemperature: 35.0,
+		Humidity:         45.0,
+	}
+	if err := s.UpsertWeatherSample(weather); err != nil {
+		t.Fatalf("UpsertWeatherSample() error = %v", err)
+	}
+	samples, err := s.ListWeatherSamples(sessionKey)
+	if err != nil || len(samples) != 1 {
+		t.Fatalf("ListWeatherSamples() = %+v, err = %v", samples, err)
+	}
+
+	lap := Lap{
+		SessionKey:   sessionKey,
+		DriverNumber: 1,
+		MeetingKey:   meetingKey,
+		LapNumber:    1,
+		LapDuration:  75.123,
+	}
+	if err := s.UpsertLap(lap); err != nil {
+		t.Fatalf("UpsertLap() error = %v", err)
+	}
+	laps, err := s.ListLaps(sessionKey)
+	if err != nil || len(laps) != 1 {
+		t.Fatalf("ListLaps() = %+v, err = %v", laps, err)
 	}
 }
 

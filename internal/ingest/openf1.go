@@ -30,6 +30,12 @@ type Source interface {
 	FetchDriversForSession(sessionKey int) (FetchResult, []models.Driver, error)
 	FetchSessionResult(sessionKey int) (FetchResult, []models.SessionResult, error)
 	FetchStartingGrid(sessionKey int) (FetchResult, []models.StartingGrid, error)
+	FetchStintsForSession(sessionKey int) (FetchResult, []models.Stint, error)
+	FetchPitStopsForSession(sessionKey int) (FetchResult, []models.Pit, error)
+	FetchPositionsForSession(sessionKey int) (FetchResult, []models.Position, error)
+	FetchRaceControlForSession(sessionKey int) (FetchResult, []models.RaceControl, error)
+	FetchWeatherForSession(sessionKey int) (FetchResult, []models.Weather, error)
+	FetchLapsForSession(sessionKey int) (FetchResult, []models.Lap, error)
 }
 
 // OpenF1Source adapts OpenF1Client for ingestion using strict fetches.
@@ -75,6 +81,36 @@ func (s *OpenF1Source) FetchSessionResult(sessionKey int) (FetchResult, []models
 func (s *OpenF1Source) FetchStartingGrid(sessionKey int) (FetchResult, []models.StartingGrid, error) {
 	url := fmt.Sprintf("%s/v1/starting_grid?session_key=%d", s.client.BaseURL(), sessionKey)
 	return s.fetchStartingGrid(url, "starting_grid", fmt.Sprintf("session_key=%d", sessionKey))
+}
+
+func (s *OpenF1Source) FetchStintsForSession(sessionKey int) (FetchResult, []models.Stint, error) {
+	url := fmt.Sprintf("%s/v1/stints?session_key=%d", s.client.BaseURL(), sessionKey)
+	return s.fetchStints(url, "stints", fmt.Sprintf("session_key=%d", sessionKey))
+}
+
+func (s *OpenF1Source) FetchPitStopsForSession(sessionKey int) (FetchResult, []models.Pit, error) {
+	url := fmt.Sprintf("%s/v1/pit?session_key=%d", s.client.BaseURL(), sessionKey)
+	return s.fetchPitStops(url, "pit", fmt.Sprintf("session_key=%d", sessionKey))
+}
+
+func (s *OpenF1Source) FetchPositionsForSession(sessionKey int) (FetchResult, []models.Position, error) {
+	url := fmt.Sprintf("%s/v1/position?session_key=%d", s.client.BaseURL(), sessionKey)
+	return s.fetchPositions(url, "position", fmt.Sprintf("session_key=%d", sessionKey))
+}
+
+func (s *OpenF1Source) FetchRaceControlForSession(sessionKey int) (FetchResult, []models.RaceControl, error) {
+	url := fmt.Sprintf("%s/v1/race_control?session_key=%d", s.client.BaseURL(), sessionKey)
+	return s.fetchRaceControl(url, "race_control", fmt.Sprintf("session_key=%d", sessionKey))
+}
+
+func (s *OpenF1Source) FetchWeatherForSession(sessionKey int) (FetchResult, []models.Weather, error) {
+	url := fmt.Sprintf("%s/v1/weather?session_key=%d", s.client.BaseURL(), sessionKey)
+	return s.fetchWeather(url, "weather", fmt.Sprintf("session_key=%d", sessionKey))
+}
+
+func (s *OpenF1Source) FetchLapsForSession(sessionKey int) (FetchResult, []models.Lap, error) {
+	url := fmt.Sprintf("%s/v1/laps?session_key=%d", s.client.BaseURL(), sessionKey)
+	return s.fetchLaps(url, "laps", fmt.Sprintf("session_key=%d", sessionKey))
 }
 
 func (s *OpenF1Source) fetchMeetings(url, endpoint, requestKey string) (FetchResult, []models.Meeting, error) {
@@ -167,6 +203,114 @@ func (s *OpenF1Source) fetchStartingGrid(url, endpoint, requestKey string) (Fetc
 	}, result, nil
 }
 
+func (s *OpenF1Source) fetchStints(url, endpoint, requestKey string) (FetchResult, []models.Stint, error) {
+	body, err := s.client.FetchStrict(url)
+	if err != nil {
+		return FetchResult{}, nil, err
+	}
+	var result []models.Stint
+	if err := json.Unmarshal(body, &result); err != nil {
+		return FetchResult{}, nil, err
+	}
+	return FetchResult{
+		Endpoint:   endpoint,
+		RequestKey: requestKey,
+		URL:        url,
+		Body:       body,
+		FetchedAt:  time.Now(),
+	}, result, nil
+}
+
+func (s *OpenF1Source) fetchPitStops(url, endpoint, requestKey string) (FetchResult, []models.Pit, error) {
+	body, err := s.client.FetchStrict(url)
+	if err != nil {
+		return FetchResult{}, nil, err
+	}
+	var result []models.Pit
+	if err := json.Unmarshal(body, &result); err != nil {
+		return FetchResult{}, nil, err
+	}
+	return FetchResult{
+		Endpoint:   endpoint,
+		RequestKey: requestKey,
+		URL:        url,
+		Body:       body,
+		FetchedAt:  time.Now(),
+	}, result, nil
+}
+
+func (s *OpenF1Source) fetchPositions(url, endpoint, requestKey string) (FetchResult, []models.Position, error) {
+	body, err := s.client.FetchStrict(url)
+	if err != nil {
+		return FetchResult{}, nil, err
+	}
+	var result []models.Position
+	if err := json.Unmarshal(body, &result); err != nil {
+		return FetchResult{}, nil, err
+	}
+	return FetchResult{
+		Endpoint:   endpoint,
+		RequestKey: requestKey,
+		URL:        url,
+		Body:       body,
+		FetchedAt:  time.Now(),
+	}, result, nil
+}
+
+func (s *OpenF1Source) fetchRaceControl(url, endpoint, requestKey string) (FetchResult, []models.RaceControl, error) {
+	body, err := s.client.FetchStrict(url)
+	if err != nil {
+		return FetchResult{}, nil, err
+	}
+	var result []models.RaceControl
+	if err := json.Unmarshal(body, &result); err != nil {
+		return FetchResult{}, nil, err
+	}
+	return FetchResult{
+		Endpoint:   endpoint,
+		RequestKey: requestKey,
+		URL:        url,
+		Body:       body,
+		FetchedAt:  time.Now(),
+	}, result, nil
+}
+
+func (s *OpenF1Source) fetchWeather(url, endpoint, requestKey string) (FetchResult, []models.Weather, error) {
+	body, err := s.client.FetchStrict(url)
+	if err != nil {
+		return FetchResult{}, nil, err
+	}
+	var result []models.Weather
+	if err := json.Unmarshal(body, &result); err != nil {
+		return FetchResult{}, nil, err
+	}
+	return FetchResult{
+		Endpoint:   endpoint,
+		RequestKey: requestKey,
+		URL:        url,
+		Body:       body,
+		FetchedAt:  time.Now(),
+	}, result, nil
+}
+
+func (s *OpenF1Source) fetchLaps(url, endpoint, requestKey string) (FetchResult, []models.Lap, error) {
+	body, err := s.client.FetchStrict(url)
+	if err != nil {
+		return FetchResult{}, nil, err
+	}
+	var result []models.Lap
+	if err := json.Unmarshal(body, &result); err != nil {
+		return FetchResult{}, nil, err
+	}
+	return FetchResult{
+		Endpoint:   endpoint,
+		RequestKey: requestKey,
+		URL:        url,
+		Body:       body,
+		FetchedAt:  time.Now(),
+	}, result, nil
+}
+
 func meetingToStore(m models.Meeting) store.Meeting {
 	return store.Meeting{
 		MeetingKey:          int(m.MeetingKey),
@@ -245,6 +389,101 @@ func startingGridToStore(g models.StartingGrid) store.StartingGridEntry {
 		Position:     g.Position,
 		LapDuration:  g.LapDuration,
 	}
+}
+
+func stintToStore(st models.Stint) store.Stint {
+	return store.Stint{
+		SessionKey:     st.SessionKey,
+		DriverNumber:   st.DriverNumber,
+		MeetingKey:     st.MeetingKey,
+		StintNumber:    st.StintNumber,
+		Compound:       string(st.Compound),
+		LapStart:       st.LapStart,
+		LapEnd:         st.LapEnd,
+		TyreAgeAtStart: st.TyreAgeAtStart,
+	}
+}
+
+func pitStopToStore(p models.Pit) store.PitStop {
+	stopDuration := p.StopDuration
+	if stopDuration == 0 {
+		stopDuration = p.PitDuration
+	}
+	return store.PitStop{
+		SessionKey:   p.SessionKey,
+		DriverNumber: p.DriverNumber,
+		MeetingKey:   p.MeetingKey,
+		LapNumber:    p.LapNumber,
+		Date:         p.Date,
+		PitDuration:  p.PitDuration,
+		LaneDuration: p.LaneDuration,
+		StopDuration: stopDuration,
+	}
+}
+
+func positionToStore(p models.Position) store.PositionSample {
+	return store.PositionSample{
+		SessionKey:   p.SessionKey,
+		DriverNumber: p.DriverNumber,
+		MeetingKey:   p.MeetingKey,
+		Date:         p.Date,
+		Position:     p.Position,
+	}
+}
+
+func raceControlToStore(rc models.RaceControl) store.RaceControlMessage {
+	return store.RaceControlMessage{
+		SessionKey:      rc.SessionKey,
+		MeetingKey:      rc.MeetingKey,
+		Date:            rc.Date,
+		Category:        string(rc.Category),
+		Flag:            string(rc.Flag),
+		Message:         rc.Message,
+		Scope:           rc.Scope,
+		DriverNumber:    rc.DriverNumber,
+		LapNumber:       rc.LapNumber,
+		Sector:          rc.Sector,
+		QualifyingPhase: rc.QualifyingPhase,
+	}
+}
+
+func weatherToStore(w models.Weather) store.WeatherSample {
+	return store.WeatherSample{
+		SessionKey:       w.SessionKey,
+		MeetingKey:       w.MeetingKey,
+		Date:             w.Date,
+		AirTemperature:   w.AirTemperature,
+		TrackTemperature: w.TrackTemperature,
+		Humidity:         w.Humidity,
+		Pressure:         w.Pressure,
+		Rainfall:         w.Rainfall,
+		WindDirection:    w.WindDirection,
+		WindSpeed:        w.WindSpeed,
+	}
+}
+
+func lapToStore(l models.Lap) store.Lap {
+	lap := store.Lap{
+		SessionKey:   l.SessionKey,
+		DriverNumber: l.DriverNumber,
+		MeetingKey:   l.MeetingKey,
+		LapNumber:    l.LapNumber,
+		DateStart:    l.DateStart,
+		IsPitOutLap:  l.IsPitOutLap,
+	}
+	if l.LapDuration != nil {
+		lap.LapDuration = *l.LapDuration
+	}
+	if l.DurationSector1 != nil {
+		lap.DurationSector1 = *l.DurationSector1
+	}
+	if l.DurationSector2 != nil {
+		lap.DurationSector2 = *l.DurationSector2
+	}
+	if l.DurationSector3 != nil {
+		lap.DurationSector3 = *l.DurationSector3
+	}
+	return lap
 }
 
 func jsonField(v any) string {

@@ -63,8 +63,11 @@ not implementation tickets yet.
   next frontend slice for strategy, position, and richer Race Hub views.
 - [15 Phase 7 Analytics Data Foundation](15-phase-7-analytics-data-foundation.md):
   backend slice for laps, stints, pits, race control, weather, and positions.
-- [Cursor Phase 7 Prompt](cursor-phase-7-analytics-data-foundation-prompt.md):
-  current handoff prompt for the next Cursor backend phase.
+- [16 Phase 8 Analytics Visuals](16-phase-8-analytics-visuals.md): frontend
+  slice for turning the newly available analytics datasets into useful Race Hub
+  views.
+- [Claude Phase 8 Prompt](claude-phase-8-analytics-visuals-prompt.md): current
+  handoff prompt for the next Claude frontend phase.
 
 ## External References
 

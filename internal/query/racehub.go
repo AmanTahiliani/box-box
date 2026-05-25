@@ -46,6 +46,12 @@ type RaceHub struct {
 	Drivers      []models.Driver        `json:"drivers"`
 	Results      []EnrichedResult       `json:"results"`
 	StartingGrid []EnrichedGrid         `json:"starting_grid"`
+	Stints       []models.Stint         `json:"stints"`
+	PitStops     []models.Pit           `json:"pit_stops"`
+	Positions    []models.Position      `json:"positions"`
+	RaceControl  []models.RaceControl   `json:"race_control"`
+	Weather      []models.Weather       `json:"weather"`
+	Laps         []models.Lap           `json:"laps"`
 }
 
 // GetRaceHub loads ingested Race Hub datasets for a session from the local store.
@@ -58,10 +64,22 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 			"drivers":       missingDataset(),
 			"results":       missingDataset(),
 			"starting_grid": missingDataset(),
+			"stints":        missingDataset(),
+			"pit_stops":     missingDataset(),
+			"positions":     missingDataset(),
+			"race_control":  missingDataset(),
+			"weather":       missingDataset(),
+			"laps":          missingDataset(),
 		},
 		Drivers:      []models.Driver{},
 		Results:      []EnrichedResult{},
 		StartingGrid: []EnrichedGrid{},
+		Stints:       []models.Stint{},
+		PitStops:     []models.Pit{},
+		Positions:    []models.Position{},
+		RaceControl:  []models.RaceControl{},
+		Weather:      []models.Weather{},
+		Laps:         []models.Lap{},
 	}
 
 	sess, err := s.store.GetSession(sessionKey)
@@ -148,6 +166,78 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 		}
 		hub.StartingGrid = enriched
 		hub.Datasets["starting_grid"] = availableLocal(len(enriched))
+	}
+
+	stints, err := s.store.ListStints(sessionKey)
+	if err != nil {
+		return RaceHub{}, err
+	}
+	if len(stints) > 0 {
+		hub.Stints = make([]models.Stint, 0, len(stints))
+		for _, st := range stints {
+			hub.Stints = append(hub.Stints, stintToModel(st))
+		}
+		hub.Datasets["stints"] = availableLocal(len(hub.Stints))
+	}
+
+	pitStops, err := s.store.ListPitStops(sessionKey)
+	if err != nil {
+		return RaceHub{}, err
+	}
+	if len(pitStops) > 0 {
+		hub.PitStops = make([]models.Pit, 0, len(pitStops))
+		for _, p := range pitStops {
+			hub.PitStops = append(hub.PitStops, pitStopToModel(p))
+		}
+		hub.Datasets["pit_stops"] = availableLocal(len(hub.PitStops))
+	}
+
+	positions, err := s.store.ListPositionSamples(sessionKey)
+	if err != nil {
+		return RaceHub{}, err
+	}
+	if len(positions) > 0 {
+		hub.Positions = make([]models.Position, 0, len(positions))
+		for _, p := range positions {
+			hub.Positions = append(hub.Positions, positionToModel(p))
+		}
+		hub.Datasets["positions"] = availableLocal(len(hub.Positions))
+	}
+
+	raceControl, err := s.store.ListRaceControlMessages(sessionKey)
+	if err != nil {
+		return RaceHub{}, err
+	}
+	if len(raceControl) > 0 {
+		hub.RaceControl = make([]models.RaceControl, 0, len(raceControl))
+		for _, rc := range raceControl {
+			hub.RaceControl = append(hub.RaceControl, raceControlToModel(rc))
+		}
+		hub.Datasets["race_control"] = availableLocal(len(hub.RaceControl))
+	}
+
+	weather, err := s.store.ListWeatherSamples(sessionKey)
+	if err != nil {
+		return RaceHub{}, err
+	}
+	if len(weather) > 0 {
+		hub.Weather = make([]models.Weather, 0, len(weather))
+		for _, w := range weather {
+			hub.Weather = append(hub.Weather, weatherToModel(w))
+		}
+		hub.Datasets["weather"] = availableLocal(len(hub.Weather))
+	}
+
+	laps, err := s.store.ListLaps(sessionKey)
+	if err != nil {
+		return RaceHub{}, err
+	}
+	if len(laps) > 0 {
+		hub.Laps = make([]models.Lap, 0, len(laps))
+		for _, l := range laps {
+			hub.Laps = append(hub.Laps, lapToModel(l))
+		}
+		hub.Datasets["laps"] = availableLocal(len(hub.Laps))
 	}
 
 	hub.Source = responseSource(hub.Datasets)

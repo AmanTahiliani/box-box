@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/AmanTahiliani/box-box/internal/api"
@@ -88,7 +89,9 @@ func (s *Server) Start() error {
 
 	// Start background goroutines.
 	go s.hub.run()
-	go s.runLiveFeeds()
+	if os.Getenv("BOXBOX_DISABLE_LIVE") != "1" {
+		go s.runLiveFeeds()
+	}
 
 	return http.ListenAndServe(s.addr, withCORS(withLogging(mux)))
 }

@@ -42,6 +42,12 @@ type Summary struct {
 	Drivers        int      `json:"drivers"`
 	SessionResults int      `json:"session_results"`
 	StartingGrid   int      `json:"starting_grid"`
+	Stints         int      `json:"stints"`
+	PitStops       int      `json:"pit_stops"`
+	Positions      int      `json:"positions"`
+	RaceControl    int      `json:"race_control"`
+	Weather        int      `json:"weather"`
+	Laps           int      `json:"laps"`
 	RawPayloads    int      `json:"raw_payloads"`
 	RawInserted    int      `json:"raw_inserted"`
 	Errors         []string `json:"errors,omitempty"`
@@ -363,6 +369,26 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 	} else {
 		summary.StartingGrid = len(grid)
 	}
+	s.delay()
+
+	if err := s.ingestStints(&summary, meetingKey, sk); err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
+	if err := s.ingestPitStops(&summary, meetingKey, sk); err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
+	if err := s.ingestPositions(&summary, meetingKey, sk); err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
+	if err := s.ingestRaceControl(&summary, meetingKey, sk); err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
+	if err := s.ingestWeather(&summary, meetingKey, sk); err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
+	if err := s.ingestLaps(&summary, meetingKey, sk); err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
 
 	summary.Status = statusForDryRun(s.opts.DryRun)
 	s.finishRun(runID, summary)
@@ -414,6 +440,150 @@ func (s *Service) delay() {
 	if s.opts.RequestDelay > 0 {
 		time.Sleep(s.opts.RequestDelay)
 	}
+}
+
+func (s *Service) ingestStints(summary *Summary, meetingKey, sessionKey int) error {
+	s.opts.Progress.Step("fetching stints for session %d", sessionKey)
+	fetch, stints, err := fetchWithRetry(s, func() (FetchResult, []models.Stint, error) {
+		return s.source.FetchStintsForSession(sessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	return s.storeAnalyticsFetch(summary, fetch, meetingKey, sessionKey, func() error {
+		for _, st := range stints {
+			if err := s.store.UpsertStint(stintToStore(st)); err != nil {
+				return err
+			}
+			summary.Stints++
+		}
+		return nil
+	}, func() { summary.Stints = len(stints) })
+}
+
+func (s *Service) ingestPitStops(summary *Summary, meetingKey, sessionKey int) error {
+	s.opts.Progress.Step("fetching pit stops for session %d", sessionKey)
+	fetch, pits, err := fetchWithRetry(s, func() (FetchResult, []models.Pit, error) {
+		return s.source.FetchPitStopsForSession(sessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	return s.storeAnalyticsFetch(summary, fetch, meetingKey, sessionKey, func() error {
+		for _, p := range pits {
+			if err := s.store.UpsertPitStop(pitStopToStore(p)); err != nil {
+				return err
+			}
+			summary.PitStops++
+		}
+		return nil
+	}, func() { summary.PitStops = len(pits) })
+}
+
+func (s *Service) ingestPositions(summary *Summary, meetingKey, sessionKey int) error {
+	s.opts.Progress.Step("fetching positions for session %d", sessionKey)
+	fetch, positions, err := fetchWithRetry(s, func() (FetchResult, []models.Position, error) {
+		return s.source.FetchPositionsForSession(sessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	return s.storeAnalyticsFetch(summary, fetch, meetingKey, sessionKey, func() error {
+		for _, p := range positions {
+			if err := s.store.UpsertPositionSample(positionToStore(p)); err != nil {
+				return err
+			}
+			summary.Positions++
+		}
+		return nil
+	}, func() { summary.Positions = len(positions) })
+}
+
+func (s *Service) ingestRaceControl(summary *Summary, meetingKey, sessionKey int) error {
+	s.opts.Progress.Step("fetching race control for session %d", sessionKey)
+	fetch, messages, err := fetchWithRetry(s, func() (FetchResult, []models.RaceControl, error) {
+		return s.source.FetchRaceControlForSession(sessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	return s.storeAnalyticsFetch(summary, fetch, meetingKey, sessionKey, func() error {
+		for _, rc := range messages {
+			if err := s.store.UpsertRaceControlMessage(raceControlToStore(rc)); err != nil {
+				return err
+			}
+			summary.RaceControl++
+		}
+		return nil
+	}, func() { summary.RaceControl = len(messages) })
+}
+
+func (s *Service) ingestWeather(summary *Summary, meetingKey, sessionKey int) error {
+	s.opts.Progress.Step("fetching weather for session %d", sessionKey)
+	fetch, samples, err := fetchWithRetry(s, func() (FetchResult, []models.Weather, error) {
+		return s.source.FetchWeatherForSession(sessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	return s.storeAnalyticsFetch(summary, fetch, meetingKey, sessionKey, func() error {
+		for _, w := range samples {
+			if err := s.store.UpsertWeatherSample(weatherToStore(w)); err != nil {
+				return err
+			}
+			summary.Weather++
+		}
+		return nil
+	}, func() { summary.Weather = len(samples) })
+}
+
+func (s *Service) ingestLaps(summary *Summary, meetingKey, sessionKey int) error {
+	s.opts.Progress.Step("fetching laps for session %d", sessionKey)
+	fetch, laps, err := fetchWithRetry(s, func() (FetchResult, []models.Lap, error) {
+		return s.source.FetchLapsForSession(sessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	return s.storeAnalyticsFetch(summary, fetch, meetingKey, sessionKey, func() error {
+		for _, l := range laps {
+			if err := s.store.UpsertLap(lapToStore(l)); err != nil {
+				return err
+			}
+			summary.Laps++
+		}
+		return nil
+	}, func() { summary.Laps = len(laps) })
+}
+
+func (s *Service) storeAnalyticsFetch(
+	summary *Summary,
+	fetch FetchResult,
+	meetingKey, sessionKey int,
+	storeRows func() error,
+	setDryRunCount func(),
+) error {
+	mk := meetingKey
+	sk := sessionKey
+	summary.RawPayloads++
+	if s.opts.DryRun {
+		setDryRunCount()
+		s.delay()
+		return nil
+	}
+
+	inserted, err := s.storeRaw(fetch, &mk, &sk)
+	if err != nil {
+		return err
+	}
+	if inserted {
+		summary.RawInserted++
+	}
+	if err := storeRows(); err != nil {
+		return err
+	}
+	s.delay()
+	return nil
 }
 
 func statusForDryRun(dryRun bool) string {
