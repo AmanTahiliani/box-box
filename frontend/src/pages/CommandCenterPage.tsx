@@ -16,6 +16,7 @@ import {
 } from '../lib/schedule'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import type { Meeting, Session, Weekend, WeekendSession } from '../types'
+import { PaddockBriefing } from '../components/PaddockBriefing'
 
 type WeekendStatusKind = 'live' | 'current' | 'next' | 'recent' | 'fallback'
 
@@ -355,6 +356,8 @@ export function CommandCenterPage() {
           )}
         </section>
       )}
+
+      <PaddockBriefing />
     </div>
   )
 }

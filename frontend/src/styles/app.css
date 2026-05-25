@@ -2297,3 +2297,76 @@ a { color: inherit; text-decoration: none; }
   .cc-empty-actions { grid-template-columns: 1fr; }
   .cc-empty-title { font-size: 19px; }
 }
+
+/* ── Paddock Briefing ── */
+.cc-briefing {
+  margin-top: var(--s7);
+}
+
+.briefing-state {
+  margin-top: var(--s7);
+}
+
+.briefing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s4);
+}
+
+.briefing-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--s4);
+  border-radius: 2px;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.briefing-card:hover {
+  background: var(--surface-h);
+  border-color: var(--border-2);
+}
+
+.briefing-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10px;
+  color: var(--text-3);
+  margin-bottom: var(--s3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.briefing-source {
+  color: var(--text-2);
+  font-weight: 700;
+}
+
+.briefing-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: var(--s3);
+  color: var(--text);
+}
+
+.briefing-summary {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: var(--s4);
+  flex-grow: 1;
+}
+
+.briefing-cat {
+  font-size: 9px;
+  color: var(--text-3);
+  align-self: flex-start;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

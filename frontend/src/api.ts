@@ -1,4 +1,4 @@
-import type { LiveStateResponse, Meeting, RaceHub, Weekend } from './types'
+import type { LiveStateResponse, Meeting, NewsItem, RaceHub, Weekend } from './types'
 
 export async function fetchRaceHub(sessionKey: number): Promise<RaceHub> {
   const res = await fetch(`/api/v1/race-hub?session_key=${sessionKey}`)
@@ -36,6 +36,21 @@ export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
 
 export async function fetchLiveState(): Promise<LiveStateResponse> {
   const res = await fetch('/api/v1/live/state')
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+export async function fetchNews(limit?: number, source?: string): Promise<NewsItem[]> {
+  const params = new URLSearchParams()
+  if (limit) params.set('limit', limit.toString())
+  if (source) params.set('source', source)
+  
+  const query = params.toString()
+  const url = query ? `/api/v1/news?${query}` : '/api/v1/news'
+  
+  const res = await fetch(url)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

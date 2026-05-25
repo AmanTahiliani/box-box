@@ -266,3 +266,13 @@ export interface LiveStreamData {
   ClockExtrapolating: boolean
   Stints: Record<string, LiveStintData[]>
 }
+
+export interface NewsItem {
+  source: string
+  title: string
+  url: string
+  published_at?: string
+  summary?: string
+  category?: string
+  fetched_at: string
+}
