@@ -217,7 +217,7 @@ func (s *Service) IngestMeeting(meetingKey int) (Summary, error) {
 	partialSessions := 0
 	for _, sess := range sessions {
 		s.opts.Progress.Step("ingesting Race Hub datasets for session %d (%s)", sess.SessionKey, sess.SessionName)
-		sessSummary, err := s.ingestSessionDatasets(sess.SessionKey, meetingKey)
+		sessSummary, err := s.ingestSessionDatasets(sess)
 		ss := SessionSummary{
 			SessionKey:  sess.SessionKey,
 			SessionName: sess.SessionName,
@@ -332,7 +332,7 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 		summary.Sessions++
 	}
 
-	datasetSummary, err := s.ingestSessionDatasets(sessionKey, meetingKey)
+	datasetSummary, err := s.ingestSessionDatasets(sess)
 	summary.mergeCounts(datasetSummary)
 	summary.Errors = append(summary.Errors, datasetSummary.Errors...)
 	if err != nil {
@@ -345,7 +345,9 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 	return summary, nil
 }
 
-func (s *Service) ingestSessionDatasets(sessionKey, meetingKey int) (Summary, error) {
+func (s *Service) ingestSessionDatasets(sess models.Session) (Summary, error) {
+	sessionKey := sess.SessionKey
+	meetingKey := sess.MeetingKey
 	summary := Summary{
 		ScopeType: "session",
 		ScopeKey:  fmt.Sprintf("%d", sessionKey),
@@ -410,37 +412,13 @@ func (s *Service) ingestSessionDatasets(sessionKey, meetingKey int) (Summary, er
 	}
 	s.delay()
 
-	s.opts.Progress.Step("fetching starting grid for session %d", sessionKey)
-	gridFetch, grid, err := fetchWithRetry(s, func() (FetchResult, []models.StartingGrid, error) {
-		return s.source.FetchStartingGrid(sessionKey)
-	})
-	if err != nil {
-		return summary, err
-	}
-	summary.RawPayloads++
-	if !s.opts.DryRun {
-		inserted, err := s.storeRaw(gridFetch, &meetingKey, &sk)
-		if err != nil {
-			return summary, err
-		}
-		if inserted {
-			summary.RawInserted++
-		}
-		for _, g := range grid {
-			if err := s.store.UpsertStartingGridEntry(startingGridToStore(g)); err != nil {
-				return summary, err
-			}
-			summary.StartingGrid++
-		}
-	} else {
-		summary.StartingGrid = len(grid)
-	}
-	s.delay()
-
 	optionalIngests := []struct {
 		name string
 		run  func(*Summary, int, int) error
 	}{
+		{name: "starting_grid", run: func(summary *Summary, meetingKey, sessionKey int) error {
+			return s.ingestStartingGrid(summary, sess)
+		}},
 		{name: "stints", run: s.ingestStints},
 		{name: "pit_stops", run: s.ingestPitStops},
 		{name: "positions", run: s.ingestPositions},
@@ -532,6 +510,86 @@ func (s *Service) delay() {
 	if s.opts.RequestDelay > 0 {
 		time.Sleep(s.opts.RequestDelay)
 	}
+}
+
+func (s *Service) ingestStartingGrid(summary *Summary, sess models.Session) error {
+	sessionKey := sess.SessionKey
+	meetingKey := sess.MeetingKey
+	sourceSessionKey, err := s.startingGridSourceSessionKey(sess)
+	if err != nil {
+		return err
+	}
+
+	if sourceSessionKey == sessionKey {
+		s.opts.Progress.Step("fetching starting grid for session %d", sessionKey)
+	} else {
+		s.opts.Progress.Step("fetching starting grid for session %d from qualifying session %d", sessionKey, sourceSessionKey)
+	}
+	fetch, grid, err := fetchWithRetry(s, func() (FetchResult, []models.StartingGrid, error) {
+		return s.source.FetchStartingGrid(sourceSessionKey)
+	})
+	if err != nil {
+		return err
+	}
+	if sourceSessionKey != sessionKey {
+		fetch.RequestKey = fmt.Sprintf("%s;target_session_key=%d", fetch.RequestKey, sessionKey)
+	}
+
+	mk := meetingKey
+	sk := sessionKey
+	summary.RawPayloads++
+	if s.opts.DryRun {
+		summary.StartingGrid = len(grid)
+		s.delay()
+		return nil
+	}
+
+	inserted, err := s.storeRaw(fetch, &mk, &sk)
+	if err != nil {
+		return err
+	}
+	if inserted {
+		summary.RawInserted++
+	}
+	for _, g := range grid {
+		g.SessionKey = sessionKey
+		g.MeetingKey = meetingKey
+		if err := s.store.UpsertStartingGridEntry(startingGridToStore(g)); err != nil {
+			return err
+		}
+		summary.StartingGrid++
+	}
+	s.delay()
+	return nil
+}
+
+func (s *Service) startingGridSourceSessionKey(sess models.Session) (int, error) {
+	if !isRaceSession(sess) {
+		return sess.SessionKey, nil
+	}
+
+	_, sessions, err := fetchWithRetry(s, func() (FetchResult, []models.Session, error) {
+		return s.source.FetchSessionsForMeeting(sess.MeetingKey)
+	})
+	if err != nil {
+		return 0, err
+	}
+	s.delay()
+
+	for _, candidate := range sessions {
+		if isQualifyingSession(candidate) {
+			return candidate.SessionKey, nil
+		}
+	}
+	return 0, fmt.Errorf("no qualifying session found for meeting %d", sess.MeetingKey)
+}
+
+func isRaceSession(sess models.Session) bool {
+	return strings.EqualFold(sess.SessionType, "Race") || strings.EqualFold(sess.SessionName, "Race")
+}
+
+func isQualifyingSession(sess models.Session) bool {
+	return strings.EqualFold(sess.SessionType, "Qualifying") || strings.EqualFold(sess.SessionName, "Qualifying")
 }
 
 func (s *Service) ingestStints(summary *Summary, meetingKey, sessionKey int) error {

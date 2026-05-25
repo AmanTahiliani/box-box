@@ -443,6 +443,56 @@ func TestSessionResultAndStartingGridUpsertRead(t *testing.T) {
 	}
 }
 
+func TestListSessionResultsSortsNonFinishersLast(t *testing.T) {
+	s := openTestStore(t)
+
+	meetingKey := 1230
+	sessionKey := 9473
+
+	if err := s.UpsertMeeting(Meeting{
+		MeetingKey:  meetingKey,
+		MeetingName: "Test GP",
+		Year:        2025,
+	}); err != nil {
+		t.Fatalf("UpsertMeeting() error = %v", err)
+	}
+	if err := s.UpsertSession(Session{
+		SessionKey:  sessionKey,
+		MeetingKey:  meetingKey,
+		SessionName: "Race",
+		SessionType: "Race",
+	}); err != nil {
+		t.Fatalf("UpsertSession() error = %v", err)
+	}
+
+	entries := []SessionResult{
+		{SessionKey: sessionKey, DriverNumber: 55, MeetingKey: meetingKey, Position: 0, DNF: true},
+		{SessionKey: sessionKey, DriverNumber: 10, MeetingKey: meetingKey, Position: 0, DNS: true},
+		{SessionKey: sessionKey, DriverNumber: 1, MeetingKey: meetingKey, Position: 1, Points: 25},
+		{SessionKey: sessionKey, DriverNumber: 44, MeetingKey: meetingKey, Position: 2, Points: 18},
+	}
+	for _, r := range entries {
+		if err := s.UpsertSessionResult(r); err != nil {
+			t.Fatalf("UpsertSessionResult(%d) error = %v", r.DriverNumber, err)
+		}
+	}
+
+	results, err := s.ListSessionResults(sessionKey)
+	if err != nil {
+		t.Fatalf("ListSessionResults() error = %v", err)
+	}
+	if len(results) != len(entries) {
+		t.Fatalf("ListSessionResults() len = %d, want %d", len(results), len(entries))
+	}
+
+	wantOrder := []int{1, 44, 10, 55}
+	for i, want := range wantOrder {
+		if results[i].DriverNumber != want {
+			t.Fatalf("results[%d].DriverNumber = %d, want %d", i, results[i].DriverNumber, want)
+		}
+	}
+}
+
 func TestAnalyticsUpsertRead(t *testing.T) {
 	s := openTestStore(t)
 

@@ -199,6 +199,7 @@ func openTestStore(t *testing.T) *store.Store {
 func testSessionFixtures() (int, int, *fakeSource) {
 	const meetingKey = 1229
 	const sessionKey = 9472
+	const qualifyingKey = 9471
 
 	src := newFakeSource()
 	src.meetingsByKey[meetingKey] = []models.Meeting{{
@@ -221,6 +222,16 @@ func testSessionFixtures() (int, int, *fakeSource) {
 		SessionType: "Race",
 		CircuitKey:  10,
 	}}
+	src.sessionsByMeeting[meetingKey] = []models.Session{
+		{
+			SessionKey:  qualifyingKey,
+			MeetingKey:  meetingKey,
+			SessionName: "Qualifying",
+			SessionType: "Qualifying",
+			CircuitKey:  10,
+		},
+		src.sessionsByKey[sessionKey][0],
+	}
 	src.drivers[sessionKey] = []models.Driver{
 		{
 			DriverNumber: 1,
@@ -243,9 +254,9 @@ func testSessionFixtures() (int, int, *fakeSource) {
 		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, Position: 1, Points: 25, NumberOfLaps: 78},
 		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 44, Position: 2, Points: 18, NumberOfLaps: 78, GapToLeader: 1.5},
 	}
-	src.grid[sessionKey] = []models.StartingGrid{
-		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, Position: 1, LapDuration: 71.234},
-		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 44, Position: 2, LapDuration: 71.456},
+	src.grid[qualifyingKey] = []models.StartingGrid{
+		{SessionKey: qualifyingKey, MeetingKey: meetingKey, DriverNumber: 1, Position: 1, LapDuration: 71.234},
+		{SessionKey: qualifyingKey, MeetingKey: meetingKey, DriverNumber: 44, Position: 2, LapDuration: 71.456},
 	}
 	src.stints[sessionKey] = []models.Stint{
 		{SessionKey: sessionKey, MeetingKey: meetingKey, DriverNumber: 1, StintNumber: 1, Compound: models.CompoundMedium, LapStart: 1, LapEnd: 30},
@@ -363,6 +374,11 @@ func TestIngestSessionWritesDomainAndRawRows(t *testing.T) {
 	if len(grid) != 2 {
 		t.Fatalf("starting grid = %d, want 2", len(grid))
 	}
+	for _, g := range grid {
+		if g.SessionKey != sessionKey {
+			t.Fatalf("starting grid row session_key = %d, want race session %d", g.SessionKey, sessionKey)
+		}
+	}
 
 	raw, err := st.ListRawPayloadsBySession(sessionKey)
 	if err != nil {
@@ -370,6 +386,18 @@ func TestIngestSessionWritesDomainAndRawRows(t *testing.T) {
 	}
 	if len(raw) != 11 {
 		t.Fatalf("raw payloads = %d, want 11", len(raw))
+	}
+	foundGridRaw := false
+	for _, p := range raw {
+		if p.Endpoint == "starting_grid" {
+			foundGridRaw = true
+			if p.RequestKey != "session_key=9471;target_session_key=9472" {
+				t.Fatalf("starting grid raw request key = %q, want qualifying source and race target", p.RequestKey)
+			}
+		}
+	}
+	if !foundGridRaw {
+		t.Fatal("raw payloads missing starting_grid")
 	}
 
 	stints, err := st.ListStints(sessionKey)
@@ -518,6 +546,38 @@ func TestOptionalAnalyticsErrorMakesSessionPartialAndContinues(t *testing.T) {
 	positions, err := st.ListPositionSamples(sessionKey)
 	if err != nil || len(positions) != 3 {
 		t.Fatalf("positions = %+v, err = %v, want 3 preserved", positions, err)
+	}
+}
+
+func TestStartingGridErrorMakesSessionPartialAndContinues(t *testing.T) {
+	_, sessionKey, src := testSessionFixtures()
+	src.failOn = "starting_grid"
+	st := openTestStore(t)
+
+	opts := DefaultOptions()
+	opts.RequestDelay = 0
+	svc := NewService(st, src, opts)
+
+	summary, err := svc.IngestSession(sessionKey)
+	if err != nil {
+		t.Fatalf("IngestSession() error = %v, want nil partial result", err)
+	}
+	if summary.Status != "partial" {
+		t.Fatalf("summary.Status = %q, want partial", summary.Status)
+	}
+	if len(summary.Errors) != 1 {
+		t.Fatalf("summary.Errors = %v, want 1 starting_grid error", summary.Errors)
+	}
+	if summary.StartingGrid != 0 {
+		t.Fatalf("summary.StartingGrid = %d, want 0 for failed starting_grid", summary.StartingGrid)
+	}
+	if summary.Stints != 2 || summary.PitStops != 1 || summary.Positions != 3 || summary.RaceControl != 1 || summary.Weather != 1 || summary.Laps != 1 {
+		t.Fatalf("analytics counts after starting_grid failure = %+v, want remaining analytics preserved", summary)
+	}
+
+	stints, err := st.ListStints(sessionKey)
+	if err != nil || len(stints) != 2 {
+		t.Fatalf("stints = %+v, err = %v, want 2 preserved", stints, err)
 	}
 }
 

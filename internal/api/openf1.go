@@ -358,6 +358,7 @@ func (c *OpenF1Client) GetSessionResult(sessionKey int) ([]models.SessionResult,
 	if err := json.NewDecoder(body).Decode(&result); err != nil {
 		return nil, err
 	}
+	models.SortSessionResults(result)
 	return result, nil
 }
 

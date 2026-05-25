@@ -64,3 +64,12 @@ export function positionClass(pos: number): string {
   if (pos === 3) return 'pos-p3'
   return 'pos-n'
 }
+
+/** Classified finish order; position 0 (DNF/DNS) sorts last. */
+export function finishPositionOrder(pos: number): number {
+  return pos > 0 ? pos : 9999
+}
+
+export function compareFinishPosition(a: number, b: number): number {
+  return finishPositionOrder(a) - finishPositionOrder(b)
+}

@@ -1,4 +1,5 @@
 import type { EnrichedResult, Stint, PitStop } from '../types'
+import { compareFinishPosition } from '../utils'
 
 const COMPOUND_COLORS: Record<string, string> = {
   SOFT: '#e8002d',
@@ -84,7 +85,10 @@ export function StrategyView({ results, stints, pit_stops, hasStints }: Props) {
     )
   }
 
-  const sortedDrivers = [...results].sort((a, b) => a.position - b.position)
+  const sortedDrivers = [...results].sort((a, b) => {
+    const cmp = compareFinishPosition(a.position, b.position)
+    return cmp !== 0 ? cmp : a.driver_number - b.driver_number
+  })
   const totalLaps = Math.max(
     ...stints.map((s) => s.lap_end),
     ...results.map((r) => r.number_of_laps),

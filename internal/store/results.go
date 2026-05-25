@@ -183,7 +183,7 @@ func (s *Store) ListSessionResults(sessionKey int) ([]SessionResult, error) {
 		       number_of_laps, duration_json, gap_to_leader_json, dnf, dns, dsq
 		FROM session_results
 		WHERE session_key = ?
-		ORDER BY position ASC, driver_number ASC
+		ORDER BY CASE WHEN position > 0 THEN position ELSE 9999 END ASC, driver_number ASC
 	`, sessionKey)
 	if err != nil {
 		return nil, err
