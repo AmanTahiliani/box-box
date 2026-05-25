@@ -74,6 +74,13 @@ export function compareFinishPosition(a: number, b: number): number {
   return finishPositionOrder(a) - finishPositionOrder(b)
 }
 
+export function stripHtml(html: string): string {
+  if (!html) return ''
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return div.textContent ?? ''
+}
+
 export function timeAgo(dateStr: string): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)

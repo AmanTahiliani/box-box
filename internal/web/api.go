@@ -1,15 +1,19 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	readability "codeberg.org/readeck/go-readability/v2"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/query"
@@ -131,6 +135,80 @@ func (s *Server) handleNews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, items)
+}
+
+// --- /api/v1/news/article ---
+
+type articleResponse struct {
+	Title    string `json:"title"`
+	Byline   string `json:"byline,omitempty"`
+	Excerpt  string `json:"excerpt,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
+	Content  string `json:"content"`
+	SiteName string `json:"site_name,omitempty"`
+}
+
+func (s *Server) handleNewsArticle(w http.ResponseWriter, r *http.Request) {
+	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if rawURL == "" {
+		http.Error(w, "url required", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+
+	withCtx := readability.RequestWith(func(req *http.Request) {
+		*req = *req.WithContext(ctx)
+	})
+	article, err := readability.FromURL(rawURL, 20*time.Second, withCtx)
+	if err != nil {
+		writeError(w, fmt.Errorf("article fetch: %w", err), http.StatusBadGateway, false)
+		return
+	}
+
+	var buf strings.Builder
+	if article.Node != nil {
+		if rerr := article.RenderHTML(&buf); rerr != nil {
+			writeError(w, rerr, http.StatusInternalServerError, false)
+			return
+		}
+	}
+
+	writeJSON(w, articleResponse{
+		Title:    article.Title(),
+		Byline:   article.Byline(),
+		Excerpt:  article.Excerpt(),
+		ImageURL: article.ImageURL(),
+		Content:  buf.String(),
+		SiteName: article.SiteName(),
+	})
+}
+
+// --- /api/v1/news/read ---
+
+func (s *Server) handleNewsRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.hasLocalQuery() {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+		http.Error(w, "url required", http.StatusBadRequest)
+		return
+	}
+	if err := s.query.MarkNewsRead(body.URL); err != nil {
+		writeError(w, err, http.StatusInternalServerError, false)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- /api/v1/drivers ---

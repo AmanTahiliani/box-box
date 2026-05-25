@@ -4,6 +4,7 @@ import { CommandCenterPage } from './pages/CommandCenterPage'
 import { RaceHubPage } from './pages/RaceHubPage'
 import { DataLibraryPage } from './pages/DataLibraryPage'
 import { LiveTimingPage } from './pages/LiveTimingPage'
+import { BriefingPage } from './pages/BriefingPage'
 
 type RaceHubSearch = {
   session_key?: number
@@ -56,12 +57,19 @@ export const liveTimingRoute = createRoute({
   component: LiveTimingPage,
 })
 
+export const briefingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/briefing',
+  component: BriefingPage,
+})
+
 const routeTree = rootRoute.addChildren([
   commandCenterRoute,
   raceHubRoute,
   adminRoute,
   dataLibraryRoute,
   liveTimingRoute,
+  briefingRoute,
 ])
 
 export const router = createRouter({ routeTree })

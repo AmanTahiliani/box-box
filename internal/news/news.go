@@ -10,30 +10,35 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/html"
 )
 
 const UserAgent = "box-box/phase-19b-rss-spike"
 
 // Source describes a feed that can be fetched and normalized.
 type Source struct {
-	ID       string
-	Name     string
-	URL      string
-	Category string
+	ID          string
+	Name        string
+	URL         string
+	Category    string
+	SkipSummary bool // omit summary for sources where it's useless (e.g. YouTube)
 }
 
 // Item is the normalized shape consumed by storage and API layers.
 type Item struct {
-	Source      string
-	Title       string
-	URL         string
-	PublishedAt time.Time
-	Summary     string
-	Category    string
-	FetchedAt   time.Time
+	Source        string
+	Title         string
+	URL           string
+	PublishedAt   time.Time
+	Summary       string
+	Category      string
+	FetchedAt     time.Time
+	OGImageURL    string
+	OGDescription string
 }
 
-// DefaultSources are free RSS/Atom feeds worth using for the Paddock Briefing spike.
+// DefaultSources are free RSS/Atom feeds for the Paddock Briefing.
 var DefaultSources = []Source{
 	{ID: "fia", Name: "FIA", URL: "https://www.fia.com/rss/news", Category: "official"},
 	{ID: "bbc-f1", Name: "BBC Sport F1", URL: "https://feeds.bbci.co.uk/sport/formula1", Category: "news"},
@@ -41,7 +46,7 @@ var DefaultSources = []Source{
 	{ID: "racefans-f1", Name: "RaceFans F1", URL: "https://www.racefans.net/category/f1-news/feed/", Category: "news"},
 	{ID: "guardian-f1", Name: "Guardian Formula One", URL: "https://www.theguardian.com/sport/formulaone/rss", Category: "news"},
 	{ID: "racer-f1", Name: "RACER F1", URL: "https://racer.com/f1/feed", Category: "news"},
-	{ID: "f1-youtube", Name: "Formula 1 YouTube", URL: "https://www.youtube.com/feeds/videos.xml?channel_id=UCB_qr75-ydFVKSF9Dmo6izg", Category: "video"},
+	{ID: "f1-youtube", Name: "Formula 1 YouTube", URL: "https://www.youtube.com/feeds/videos.xml?channel_id=UCB_qr75-ydFVKSF9Dmo6izg", Category: "video", SkipSummary: true},
 }
 
 // Fetch retrieves and parses one RSS or Atom feed with the provided HTTP client.
@@ -86,6 +91,83 @@ func Parse(source Source, r io.Reader, fetchedAt time.Time) ([]Item, error) {
 		return nil, fmt.Errorf("parse %s: no RSS items or Atom entries found", source.ID)
 	}
 	return normalizeAtom(source, atom.Entries, fetchedAt), nil
+}
+
+// FetchOGMeta fetches only the <head> of a page and extracts og:image and og:description.
+// It reads at most 64 KB to avoid full-page downloads.
+func FetchOGMeta(ctx context.Context, client *http.Client, rawURL string) (imageURL, description string, err error) {
+	if client == nil {
+		client = &http.Client{Timeout: 8 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("og fetch %s: status %d", rawURL, resp.StatusCode)
+	}
+
+	limited := io.LimitReader(resp.Body, 64<<10)
+	tokenizer := html.NewTokenizer(limited)
+
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		if tt == html.EndTagToken {
+			tag, _ := tokenizer.TagName()
+			if string(tag) == "head" {
+				break
+			}
+		}
+		if tt != html.SelfClosingTagToken && tt != html.StartTagToken {
+			continue
+		}
+
+		tag, hasAttr := tokenizer.TagName()
+		if !hasAttr || string(tag) != "meta" {
+			continue
+		}
+
+		var property, name, content string
+		for {
+			k, v, more := tokenizer.TagAttr()
+			switch string(k) {
+			case "property":
+				property = string(v)
+			case "name":
+				name = string(v)
+			case "content":
+				content = string(v)
+			}
+			if !more {
+				break
+			}
+		}
+
+		switch {
+		case property == "og:image" && imageURL == "":
+			imageURL = strings.TrimSpace(content)
+		case property == "og:description" && description == "":
+			description = stripHTML(content)
+		case name == "description" && description == "":
+			description = stripHTML(content)
+		}
+
+		if imageURL != "" && description != "" {
+			break
+		}
+	}
+
+	return imageURL, description, nil
 }
 
 // DeduplicateByURL keeps the newest instance of each canonical URL.
@@ -157,12 +239,16 @@ func normalizeRSS(source Source, raw []rssItem, fetchedAt time.Time) []Item {
 		if link == "" {
 			link = strings.TrimSpace(entry.GUID)
 		}
+		summary := ""
+		if !source.SkipSummary {
+			summary = stripHTML(entry.Description)
+		}
 		items = append(items, Item{
 			Source:      source.ID,
 			Title:       cleanText(entry.Title),
 			URL:         link,
 			PublishedAt: parseFeedTime(entry.PubDate),
-			Summary:     cleanText(entry.Description),
+			Summary:     summary,
 			Category:    firstNonEmpty(entry.Categories, source.Category),
 			FetchedAt:   fetchedAt,
 		})
@@ -177,12 +263,17 @@ func normalizeAtom(source Source, raw []atomEntry, fetchedAt time.Time) []Item {
 		if len(entry.Categories) > 0 {
 			category = firstNonEmpty([]string{entry.Categories[0].Label, entry.Categories[0].Term}, source.Category)
 		}
+		summary := ""
+		if !source.SkipSummary {
+			raw := firstNonEmpty([]string{entry.Summary, entry.Content}, "")
+			summary = stripHTML(raw)
+		}
 		items = append(items, Item{
 			Source:      source.ID,
 			Title:       cleanText(entry.Title),
 			URL:         atomEntryURL(entry),
 			PublishedAt: parseFeedTime(firstNonEmpty([]string{entry.Published, entry.Updated}, "")),
-			Summary:     cleanText(firstNonEmpty([]string{entry.Summary, entry.Content}, "")),
+			Summary:     summary,
 			Category:    category,
 			FetchedAt:   fetchedAt,
 		})
@@ -221,6 +312,33 @@ func parseFeedTime(value string) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+// stripHTML removes HTML tags and decodes entities, inserting line breaks for
+// block-level elements so the resulting text remains readable as prose.
+func stripHTML(value string) string {
+	if value == "" {
+		return ""
+	}
+	tokenizer := html.NewTokenizer(strings.NewReader(value))
+	var b strings.Builder
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		switch tt {
+		case html.TextToken:
+			b.WriteString(tokenizer.Token().Data)
+		case html.StartTagToken, html.EndTagToken, html.SelfClosingTagToken:
+			tag, _ := tokenizer.TagName()
+			switch string(tag) {
+			case "p", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "div", "blockquote", "tr":
+				b.WriteByte('\n')
+			}
+		}
+	}
+	return cleanText(b.String())
 }
 
 func cleanText(value string) string {

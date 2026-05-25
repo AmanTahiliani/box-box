@@ -190,12 +190,13 @@ func runNewsIngestion(dryRun bool, dbPath string) error {
 		fmt.Fprintf(os.Stderr, "news: refreshing feeds into %s\n", path)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	result, err := news.Refresh(ctx, st, news.RefreshOptions{
 		Client:   &http.Client{Timeout: 10 * time.Second},
 		DryRun:   dryRun,
 		Progress: os.Stderr,
+		EnrichOG: !dryRun,
 	})
 	fmt.Fprintf(
 		os.Stderr,

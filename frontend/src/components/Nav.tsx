@@ -16,6 +16,9 @@ export function Nav() {
         <Link to="/race-hub" search={{}} activeProps={{ className: 'active' }}>
           Race Hub
         </Link>
+        <Link to="/briefing" activeProps={{ className: 'active' }}>
+          Briefing
+        </Link>
       </div>
       <div className="nav-utility">
         <Link to="/admin" className="nav-utility-link" activeProps={{ className: 'nav-utility-link active' }}>

@@ -275,4 +275,16 @@ export interface NewsItem {
   summary?: string
   category?: string
   fetched_at: string
+  og_image_url?: string
+  og_description?: string
+  read_at?: string
+}
+
+export interface ArticleContent {
+  title: string
+  byline?: string
+  excerpt?: string
+  image_url?: string
+  content: string
+  site_name?: string
 }

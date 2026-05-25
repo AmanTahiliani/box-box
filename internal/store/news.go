@@ -41,18 +41,23 @@ func (s *Store) UpsertNewsSource(src NewsSource) error {
 }
 
 // UpsertNewsItem inserts or updates a normalized feed item.
+// read_at is never overwritten by a re-fetch.
+// og_image_url and og_description preserve an existing value when the new one is empty.
 func (s *Store) UpsertNewsItem(item NewsItem) error {
 	_, err := s.db.Exec(`
 		INSERT INTO news_items (
-			url, source, title, published_at, summary, category, fetched_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
+			url, source, title, published_at, summary, category, fetched_at,
+			og_image_url, og_description
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(url) DO UPDATE SET
-			source = excluded.source,
-			title = excluded.title,
-			published_at = excluded.published_at,
-			summary = excluded.summary,
-			category = excluded.category,
-			fetched_at = excluded.fetched_at
+			source        = excluded.source,
+			title         = excluded.title,
+			published_at  = excluded.published_at,
+			summary       = excluded.summary,
+			category      = excluded.category,
+			fetched_at    = excluded.fetched_at,
+			og_image_url  = COALESCE(excluded.og_image_url, news_items.og_image_url),
+			og_description= COALESCE(excluded.og_description, news_items.og_description)
 	`,
 		item.URL,
 		item.Source,
@@ -61,11 +66,22 @@ func (s *Store) UpsertNewsItem(item NewsItem) error {
 		nullString(item.Summary),
 		nullString(item.Category),
 		item.FetchedAt.Unix(),
+		nullString(item.OGImageURL),
+		nullString(item.OGDescription),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert news item: %w", err)
 	}
 	return nil
+}
+
+// MarkNewsItemRead sets read_at to now for the given URL.
+func (s *Store) MarkNewsItemRead(url string) error {
+	_, err := s.db.Exec(
+		`UPDATE news_items SET read_at = ? WHERE url = ?`,
+		time.Now().Unix(), url,
+	)
+	return err
 }
 
 // ListNewsItems returns newest cached news items, optionally filtered by source.
@@ -75,7 +91,8 @@ func (s *Store) ListNewsItems(limit int, source string) ([]NewsItem, error) {
 	}
 
 	query := `
-		SELECT url, source, title, published_at, summary, category, fetched_at
+		SELECT url, source, title, published_at, summary, category, fetched_at,
+		       og_image_url, og_description, read_at
 		FROM news_items
 	`
 	var args []any
@@ -95,8 +112,8 @@ func (s *Store) ListNewsItems(limit int, source string) ([]NewsItem, error) {
 	var out []NewsItem
 	for rows.Next() {
 		var item NewsItem
-		var published sql.NullInt64
-		var summary, category sql.NullString
+		var published, readAt sql.NullInt64
+		var summary, category, ogImage, ogDesc sql.NullString
 		var fetched int64
 		if err := rows.Scan(
 			&item.URL,
@@ -106,6 +123,9 @@ func (s *Store) ListNewsItems(limit int, source string) ([]NewsItem, error) {
 			&summary,
 			&category,
 			&fetched,
+			&ogImage,
+			&ogDesc,
+			&readAt,
 		); err != nil {
 			return nil, err
 		}
@@ -113,6 +133,9 @@ func (s *Store) ListNewsItems(limit int, source string) ([]NewsItem, error) {
 		item.Summary = summary.String
 		item.Category = category.String
 		item.FetchedAt = time.Unix(fetched, 0).UTC()
+		item.OGImageURL = ogImage.String
+		item.OGDescription = ogDesc.String
+		item.ReadAt = nullTimePtr(readAt)
 		out = append(out, item)
 	}
 	return out, rows.Err()
