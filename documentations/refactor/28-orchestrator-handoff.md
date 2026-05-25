@@ -62,24 +62,22 @@ Known test note: do not run Playwright suites that share the same seeded SQLite 
 
 ## Recent Commits
 
-- `571edb9 Add visual regression coverage`
-- `e539abc Add command center screen`
-- `9532206 Polish live timing UI`
 - `a0f135a Update operator documentation`
 - `79b0b9f Rework command center for race weekends`
 - `84a8827 Add paddock briefing RSS backend spike`
+- `ee88a07 Add paddock briefing feed ingestion`
+- `Rework Race Hub as weekend workspace` (latest Phase 19 commit)
 
-## Current Uncommitted Work
+## Current State
 
-Two phases are currently uncommitted and need review/integration. Review and
-commit Phase 19 first, then Phase 20, or stage hunks carefully if separating the
-shared README/refactor README edits.
+Phase 19 and Phase 20 have been reviewed and committed. Start new work from a
+clean tree unless `git status --short` shows user changes made after this
+handoff.
 
-### Phase 19: Weekend Workspace / Race Hub Flow V1
+## Completed Phase 19: Weekend Workspace / Race Hub Flow V1
 
-Claude has completed Phase 19. It is currently uncommitted and needs review.
-
-Claude reported these Phase 19 changes:
+Claude implemented, and Codex reviewed/committed, a Race Hub redesign that turns
+`/race-hub` into a Weekend Workspace.
 
 - New:
   - `frontend/src/components/OverviewView.tsx`
@@ -97,7 +95,7 @@ Claude reported these Phase 19 changes:
   - root `README.md`
   - `documentations/refactor/README.md`
 
-Claude reported these UX changes:
+UX changes:
 
 - Race Hub is now a Weekend Workspace.
 - Compact GP identity band with country decal/accent strip.
@@ -111,32 +109,34 @@ Claude reported these UX changes:
 - `/race-hub?session_key=9472` still works and loads Bahrain GP 2024 seeded session.
 - Bare `/race-hub` now resolves to a focus weekend/session via `pickFocusMeeting` and navigation replace.
 
-Claude reported these tests:
+Verification run by Codex before commit:
 
-- `npm --prefix frontend test -- --run` passed, 98 tests.
-- `npm --prefix frontend run build` passed.
-- `npm run test:e2e` passed, 18 tests.
-- `npm run test:e2e:prod` passed, 6 tests.
-- `npm run test:visual` passed, 12 screenshots after regenerating race-hub baselines.
-- `npm run test:visual:prod` passed, 12 screenshots.
+- `npm --prefix frontend test -- --run`
+- `npm --prefix frontend run build`
+- `npm run test:e2e`
+- `npm run test:e2e:prod`
+- `npm run test:visual`
+- `npm run test:visual:prod`
 
-### Phase 20: Paddock Briefing Ingestion CLI
+Small review fix included: `frontend/src/test/setup.ts` stubs
+`window.scrollTo` so TanStack Router scroll restoration does not spam jsdom test
+stderr.
 
-A backend subagent implemented Phase 20 after the RSS backend spike. It is also
-currently uncommitted and needs review.
+## Completed Phase 20: Paddock Briefing Ingestion CLI
 
-Reported Phase 20 changes:
+A backend subagent implemented, and Codex reviewed/committed, Phase 20 after the
+RSS backend spike.
+
+Phase 20 changes:
 
 - Modified:
   - `cmd/main.go`
-  - `README.md`
-  - `documentations/refactor/README.md`
 - New:
   - `internal/news/refresh.go`
   - `internal/news/refresh_test.go`
   - `documentations/refactor/29-phase-20-paddock-briefing-ingestion.md`
 
-Implemented behavior:
+Behavior:
 
 - Adds `--ingest-news` as a CLI mode.
 - Keeps it mutually exclusive with `--ingest-year`, `--ingest-meeting`, and
@@ -159,81 +159,24 @@ go run ./cmd/main.go --dry-run --ingest-news
 go run ./cmd/main.go --ingest-news --db /tmp/boxbox.db
 ```
 
-Phase 20 verification already run by Codex:
+Verification run by Codex before commit:
 
 ```bash
 go test ./cmd/... ./internal/news ./internal/store
-go test ./internal/web ./internal/query
-go test ./...
 git diff --check
 ```
 
 ## Immediate Task
 
-Start by reviewing and committing Phase 19. Then review and commit Phase 20.
-Do not start new implementation until both are accepted and committed.
-
-1. Inspect working tree:
+Start with a quick sync:
 
 ```bash
 git status --short
 git diff --stat
-git diff --name-only
 ```
 
-2. Review Claude’s Phase 19 work quickly but responsibly:
-
-- Check `RaceHubPage.tsx`, `OverviewView.tsx`, `WeekendSwitcher.tsx`, `TabBar.tsx`, `DatasetStatusView.tsx`, `app.css`, route/test updates, docs.
-- Make sure no admin/CLI guidance leaked back into Race Hub.
-- Make sure `/race-hub?session_key=9472` compatibility is preserved.
-- Make sure `/admin` remains the admin/data-health surface.
-- Confirm visual tests and docs match the changed UX.
-
-3. Run a focused verification pass. At minimum:
-
-```bash
-npm --prefix frontend test -- --run
-npm --prefix frontend run build
-npm run test:e2e
-npm run test:visual
-```
-
-If time allows or if production behavior changed:
-
-```bash
-npm run test:e2e:prod
-npm run test:visual:prod
-```
-
-4. Patch only small issues if found.
-5. Stage only Phase 19 files.
-6. Commit with a message like:
-
-```bash
-git commit -m "Rework Race Hub as weekend workspace"
-```
-
-Then review Phase 20:
-
-1. Check `cmd/main.go`, `internal/news/refresh.go`,
-   `internal/news/refresh_test.go`,
-   `documentations/refactor/29-phase-20-paddock-briefing-ingestion.md`, and the
-   README/refactor README hunks.
-2. Confirm the CLI mode does not interfere with OpenF1 ingestion modes or web/TUI
-   startup.
-3. Confirm no live internet tests were added.
-4. Re-run targeted backend tests if needed:
-
-```bash
-go test ./cmd/... ./internal/news ./internal/store
-go test ./...
-```
-
-5. Stage Phase 20 files/hunks and commit with a message like:
-
-```bash
-git commit -m "Add paddock briefing feed ingestion"
-```
+Then continue with the next requested phase. The most natural next phase is
+Phase 21: Paddock Briefing UI, unless the user wants to deepen Race Story first.
 
 ## RSS / Paddock Briefing Context
 

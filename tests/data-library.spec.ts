@@ -37,6 +37,7 @@ test.describe('Admin · Data Health', () => {
 
   test('direct race hub session link still works', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
-    await expect(page.getByText('Final Classification')).toBeVisible()
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page.getByTestId(`rh-session-${FULL_SESSION}`)).toBeVisible()
   })
 })

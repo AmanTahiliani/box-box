@@ -13,7 +13,7 @@ test.describe('Command Center', () => {
   })
 
   test('nav link reaches command center from race hub', async ({ page }) => {
-    await page.goto('/race-hub')
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
     await page.getByRole('link', { name: 'Command' }).click()
     await expect(page).toHaveURL('/')
     await expect(page.getByTestId('command-center')).toBeVisible()
@@ -24,12 +24,14 @@ test.describe('Command Center', () => {
     await expect(page.getByTestId('cc-action-race-hub')).toContainText(String(FULL_SESSION))
     await page.getByTestId('cc-action-race-hub').click()
     await expect(page).toHaveURL(new RegExp(`/race-hub\\?session_key=${FULL_SESSION}`))
-    await expect(page.getByText('Final Classification')).toBeVisible()
+    await expect(page.getByTestId('rh-identity')).toBeVisible()
+    await expect(page.getByTestId(`rh-session-${FULL_SESSION}`)).toBeVisible()
   })
 
   test('existing routes continue to work', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
-    await expect(page.getByText('Final Classification')).toBeVisible()
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page.getByTestId('rh-overview')).toBeVisible()
 
     await page.goto('/admin')
     await expect(page.getByTestId('data-library')).toBeVisible()

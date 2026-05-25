@@ -3,35 +3,34 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { TabBar } from '../components/TabBar'
 
 describe('TabBar', () => {
-  it('renders all Race Hub tabs', () => {
-    render(<TabBar active="results" onChange={() => {}} />)
-    expect(screen.getByRole('tab', { name: 'Results' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Grid' })).toBeInTheDocument()
+  it('renders all Race Hub workspace tabs', () => {
+    render(<TabBar active="overview" onChange={() => {}} />)
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Race Story' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Strategy' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Positions' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Laps' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Lap Data' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Conditions' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Race Control' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Weather' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Datasets' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Data Status' })).toBeInTheDocument()
   })
 
   it('marks the active tab with aria-selected', () => {
-    render(<TabBar active="grid" onChange={() => {}} />)
-    expect(screen.getByRole('tab', { name: 'Grid' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'Results' })).toHaveAttribute('aria-selected', 'false')
+    render(<TabBar active="strategy" onChange={() => {}} />)
+    expect(screen.getByRole('tab', { name: 'Strategy' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'false')
   })
 
   it('applies active class only to the active tab', () => {
-    render(<TabBar active="strategy" onChange={() => {}} />)
-    const strategy = screen.getByRole('tab', { name: 'Strategy' })
-    const results = screen.getByRole('tab', { name: 'Results' })
-    expect(strategy.className).toContain('active')
-    expect(results.className).not.toContain('active')
+    render(<TabBar active="conditions" onChange={() => {}} />)
+    const active = screen.getByRole('tab', { name: 'Conditions' })
+    const inactive = screen.getByRole('tab', { name: 'Overview' })
+    expect(active.className).toContain('active')
+    expect(inactive.className).not.toContain('active')
   })
 
   it('calls onChange with the correct tab id when clicked', () => {
     const onChange = vi.fn()
-    render(<TabBar active="results" onChange={onChange} />)
+    render(<TabBar active="overview" onChange={onChange} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Race Control' }))
     expect(onChange).toHaveBeenCalledWith('race_control')
   })

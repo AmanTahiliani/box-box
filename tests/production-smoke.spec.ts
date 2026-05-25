@@ -10,9 +10,14 @@ test.describe('Production serving (Go + built React)', () => {
     await expect(page.getByTestId('cc-session-9472')).toBeVisible()
   })
 
-  test('serves race hub with classification from built assets', async ({ page }) => {
+  test('serves race hub workspace from built assets', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
 
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page.getByTestId('rh-identity')).toBeVisible()
+    await expect(page.getByTestId(`rh-session-${FULL_SESSION}`)).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Race Story' }).click()
     await expect(page.getByText('Final Classification')).toBeVisible()
     await expect(page.locator('.drv-code', { hasText: 'VER' })).toBeVisible()
   })

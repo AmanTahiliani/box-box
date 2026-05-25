@@ -110,16 +110,16 @@ BOXBOX_API_PORT=18080 npm run dev --prefix frontend
 | Route | Purpose |
 | --- | --- |
 | `/` | **Command Center** — fan-facing race-weekend home with GP identity, live status, session schedule, and analysis links |
-| `/race-hub?session_key=<key>` | **Race Hub** — classification, grid, strategy, positions, laps, race control, weather (from local DB) |
+| `/race-hub?session_key=<key>` | **Race Hub** — weekend workspace with session rail and Overview / Race Story / Strategy / Lap Data / Conditions / Race Control / Data Status tabs. Bare `/race-hub` auto-resolves to the focus session. |
 | `/admin` | **Admin / Data Health** — ingestion coverage, local data status, and suggested CLI commands |
 | `/data-library` | Legacy alias for Admin / Data Health |
 | `/live` | **Live Timing** — timing tower and race control via SSE when a session is live |
 
 Example after seeding: `http://localhost:5173/race-hub?session_key=9472`
 
-## Ingest historical data (OpenF1 → domain DB)
+## Ingest historical data and briefing feeds
 
-Ingestion is a **CLI mode** on the same binary. Only one of `--ingest-year`, `--ingest-meeting`, or `--ingest-session` may be set per run.
+Ingestion is a **CLI mode** on the same binary. Only one of `--ingest-year`, `--ingest-meeting`, `--ingest-session`, or `--ingest-news` may be set per run.
 
 ```bash
 # Season: discover and store meeting metadata (2023+)
@@ -133,6 +133,9 @@ go run ./cmd/main.go --ingest-session 9472
 
 # Preview without writing
 go run ./cmd/main.go --dry-run --ingest-meeting 1229
+
+# Refresh Paddock Briefing RSS/Atom feeds
+go run ./cmd/main.go --ingest-news
 
 # Custom DB path (default: ~/.local/share/box-box/boxbox.db)
 go run ./cmd/main.go --ingest-meeting 1229 --db /tmp/boxbox.db

@@ -1602,6 +1602,620 @@ a { color: inherit; text-decoration: none; }
 
 .mono { font-family: var(--f-mono); }
 
+/* ── Race Hub Weekend Workspace ── */
+.rh-page {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: var(--s5) var(--s6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  --gp-accent: var(--red);
+}
+
+.rh-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+
+.rh-topbar-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.rh-topbar-spacer { flex: 1; }
+
+.rh-switcher-toggle {
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--f-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+.rh-switcher-toggle:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+  background: var(--surface-h);
+}
+.rh-switcher-toggle.active {
+  color: var(--text);
+  border-color: var(--gp-accent);
+  background: var(--surface-h);
+}
+
+/* GP identity band (compact) */
+.rh-identity {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  min-height: 96px;
+}
+
+.rh-identity-accent {
+  width: 5px;
+  background: var(--gp-accent);
+  flex-shrink: 0;
+}
+
+.rh-identity-body {
+  flex: 1;
+  padding: var(--s4) var(--s5);
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  min-width: 0;
+}
+
+.rh-identity-decal {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  color: var(--text);
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.rh-identity-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rh-identity-name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.rh-identity-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.rh-identity-dates { color: var(--text-2); }
+
+/* Session rail */
+.rh-session-rail {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  gap: var(--s3);
+  padding-bottom: var(--s2);
+}
+.rh-session-rail::-webkit-scrollbar { height: 4px; }
+.rh-session-rail::-webkit-scrollbar-thumb { background: var(--border-2); }
+
+.rh-session-chip {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 2px var(--s3);
+  flex: 0 0 auto;
+  min-width: 168px;
+  padding: var(--s3) var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: background 0.1s, border-color 0.1s;
+}
+.rh-session-chip:hover {
+  background: var(--surface-h);
+  border-color: var(--border-2);
+}
+.rh-session-chip.active {
+  background: rgba(225, 6, 0, 0.05);
+  border-color: var(--gp-accent);
+  box-shadow: inset 3px 0 0 var(--gp-accent);
+}
+
+.rh-session-chip .rh-session-abbrev {
+  grid-row: 1 / span 3;
+  align-self: center;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 7px;
+  min-width: 36px;
+  text-align: center;
+}
+.rh-session-chip.active .rh-session-abbrev {
+  color: var(--gp-accent);
+  border-color: var(--gp-accent);
+}
+
+.rh-session-chip .rh-session-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rh-session-chip .rh-session-time {
+  font-size: 10px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rh-session-chip .rh-session-cov {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* Active session sub-bar */
+.rh-active-bar {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.rh-active-bar .rh-active-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.rh-active-bar .rh-active-meta,
+.rh-active-bar .rh-active-cov {
+  font-size: 11px;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.rh-active-bar .rh-active-key {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.05em;
+}
+
+/* Race Story sub-controls */
+.rh-story-controls {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  margin-bottom: var(--s4);
+  overflow: hidden;
+}
+.rh-story-btn {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.rh-story-btn:last-child { border-right: none; }
+.rh-story-btn:hover { color: var(--text-2); }
+.rh-story-btn.active {
+  color: var(--text);
+  background: var(--surface-h);
+  box-shadow: inset 0 -2px 0 var(--gp-accent);
+}
+
+/* Overview tab */
+.rh-overview { display: flex; flex-direction: column; gap: var(--s5); }
+
+.rh-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--s3);
+}
+
+.rh-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gp-accent);
+  border-radius: 4px;
+  min-width: 0;
+}
+.rh-stat-card.rh-stat-empty { border-left-color: var(--border-2); }
+
+.rh-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.rh-stat-primary {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--f-mono);
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.rh-stat-secondary {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-stat-tertiary {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-stat-highlight {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rh-podium-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+.rh-podium-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: var(--s3);
+  align-items: baseline;
+  font-size: 12px;
+}
+.rh-podium-pos { color: var(--text-3); }
+.rh-podium-p1 .rh-podium-pos { color: #ffd700; font-weight: 700; }
+.rh-podium-p2 .rh-podium-pos { color: #c0c0c0; font-weight: 700; }
+.rh-podium-p3 .rh-podium-pos { color: #cd7f32; font-weight: 700; }
+.rh-podium-driver { font-weight: 700; font-family: var(--f-mono); }
+.rh-podium-gap { color: var(--text-3); font-size: 11px; }
+
+.rh-overview-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--s4);
+}
+
+.rh-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: var(--s4);
+  min-width: 0;
+}
+
+.rh-empty-line { font-size: 11px; color: var(--text-3); }
+
+.rh-condition-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+.rh-condition-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  min-width: 64px;
+}
+.rh-condition-chip.rh-condition-wet { border-color: var(--tyre-wet); }
+.rh-condition-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rh-condition-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--f-mono);
+  color: var(--text);
+}
+
+.rh-rc-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.rh-rc-row {
+  display: grid;
+  grid-template-columns: 50px 60px 1fr;
+  gap: var(--s3);
+  align-items: baseline;
+  font-size: 11px;
+}
+.rh-rc-time { color: var(--text-3); }
+.rh-rc-flag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.rh-rc-flag-yellow { color: var(--yellow); }
+.rh-rc-flag-red { color: var(--red); }
+.rh-rc-flag-green { color: var(--green); }
+.rh-rc-flag-blue { color: #3a6cf5; }
+.rh-rc-msg { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+
+.rh-coverage-meter {
+  height: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: var(--s3);
+}
+.rh-coverage-fill {
+  height: 100%;
+  background: var(--gp-accent);
+  transition: width 0.2s ease-out;
+}
+
+.rh-inline-link {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rh-inline-link:hover { color: var(--text); }
+
+/* Weekend switcher overlay panel */
+.rh-switcher {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: var(--s4);
+}
+.rh-switcher-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s4);
+}
+.rh-switcher-years {
+  display: flex;
+  gap: var(--s2);
+  margin-right: auto;
+}
+.rh-switcher-year {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--f-mono);
+  font-weight: 700;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.rh-switcher-year:hover { color: var(--text-2); }
+.rh-switcher-year.active {
+  color: var(--text);
+  border-color: var(--gp-accent);
+  background: var(--surface-h);
+}
+.rh-switcher-close {
+  padding: 3px 10px;
+  font-size: 10px;
+  font-family: var(--f-mono);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.rh-switcher-close:hover { color: var(--text); border-color: var(--border-2); }
+.rh-switcher-empty {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: var(--s3) 0;
+}
+.rh-switcher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--s3);
+}
+.rh-switcher-mtg {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rh-switcher-mtg.current { border-color: var(--gp-accent); }
+.rh-switcher-mtg-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rh-switcher-mtg-head:hover { background: var(--surface-h); }
+.rh-switcher-decal {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-2);
+  min-width: 28px;
+}
+.rh-switcher-mtg-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rh-switcher-mtg-meta {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.rh-switcher-sessions {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--s2) var(--s2);
+}
+.rh-switcher-session {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: var(--s3);
+  align-items: center;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.rh-switcher-session:hover { background: var(--surface-h); }
+.rh-switcher-session.active {
+  background: rgba(225, 6, 0, 0.05);
+  box-shadow: inset 3px 0 0 var(--gp-accent);
+}
+.rh-switcher-sess-abbrev {
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 1px 4px;
+}
+.rh-switcher-sess-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rh-switcher-sess-cov {
+  font-size: 10px;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Race Hub empty state */
+.rh-empty { max-width: 720px; gap: var(--s5); }
+.rh-empty-band {
+  padding: var(--s6) var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gp-accent);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.rh-empty-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rh-empty-title { font-size: 22px; font-weight: 700; }
+.rh-empty-sub { font-size: 13px; color: var(--text-2); max-width: 56ch; }
+.rh-empty-actions { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.rh-empty-action {
+  padding: var(--s3) var(--s4);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.rh-empty-action:hover { background: var(--surface-h); border-color: var(--border-2); }
+
+@media (max-width: 900px) {
+  .rh-overview-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .rh-page { padding: var(--s4); gap: var(--s4); }
+  .rh-identity-body { padding: var(--s3) var(--s4); gap: var(--s3); }
+  .rh-identity-decal { font-size: 28px; }
+  .rh-identity-name { font-size: 17px; }
+  .rh-session-chip { min-width: 152px; }
+  .rh-stat-primary { font-size: 18px; }
+  .rh-active-bar .rh-active-key { margin-left: 0; }
+  .rh-switcher-grid { grid-template-columns: 1fr; }
+}
+
 /* Tablet */
 @media (max-width: 900px) {
   .cc-band-row {

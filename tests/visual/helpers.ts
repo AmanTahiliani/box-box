@@ -24,8 +24,10 @@ export async function gotoCommandCenterReady(page: Page): Promise<void> {
 
 export async function gotoRaceHubReady(page: Page, sessionKey = FULL_SESSION): Promise<void> {
   await page.goto(`/race-hub?session_key=${sessionKey}`)
-  await expect(page.getByText('Final Classification')).toBeVisible()
-  await expect(page.locator('.drv-code', { hasText: 'VER' })).toBeVisible()
+  await expect(page.getByTestId('race-hub')).toBeVisible()
+  await expect(page.getByTestId('rh-identity')).toBeVisible()
+  await expect(page.getByTestId(`rh-session-${sessionKey}`)).toBeVisible()
+  await expect(page.getByTestId('rh-overview')).toBeVisible()
   await waitForScreenshotReady(page)
 }
 

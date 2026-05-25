@@ -1,37 +1,54 @@
+import { Link } from '@tanstack/react-router'
+import { RACE_HUB_DATASETS } from '../lib/coverage'
 import type { DatasetInfo } from '../types'
 
 interface Props {
   datasets: Record<string, DatasetInfo>
 }
 
-const KNOWN_DATASETS: { key: string; label: string }[] = [
-  { key: 'meeting', label: 'Meeting' },
-  { key: 'session', label: 'Session' },
-  { key: 'drivers', label: 'Drivers' },
-  { key: 'results', label: 'Results' },
-  { key: 'starting_grid', label: 'Starting Grid' },
-]
+const DATASET_LABELS: Record<string, string> = {
+  meeting: 'Meeting',
+  session: 'Session',
+  drivers: 'Drivers',
+  results: 'Results',
+  starting_grid: 'Starting Grid',
+  stints: 'Stints',
+  pit_stops: 'Pit Stops',
+  positions: 'Positions',
+  race_control: 'Race Control',
+  weather: 'Weather',
+  laps: 'Laps',
+}
 
 export function DatasetStatusView({ datasets }: Props) {
-  const entries = KNOWN_DATASETS.map(({ key, label }) => ({
+  const entries = RACE_HUB_DATASETS.map((key) => ({
     key,
-    label,
+    label: DATASET_LABELS[key] ?? key,
     info: datasets[key] as DatasetInfo | undefined,
   }))
-
   const available = entries.filter((e) => e.info?.status === 'available').length
   const total = entries.length
+  const missing = total - available
 
   return (
-    <div>
+    <div data-testid="rh-data-status">
+      <div className="rh-coverage-meter" aria-hidden="true">
+        <div
+          className="rh-coverage-fill"
+          style={{ width: `${(available / total) * 100}%` }}
+        />
+      </div>
       <div className="ds-legend">
-        <span>
-          {available}/{total} datasets available locally
+        <span className="mono" style={{ color: 'var(--text-2)' }}>
+          {available}/{total} datasets local
         </span>
-        {available < total && (
-          <span>
-            Re-run <code>box-box --ingest-session &lt;key&gt;</code> after backend
-            support exists for missing datasets.
+        {missing > 0 && (
+          <span style={{ color: 'var(--text-3)' }}>
+            {missing} dataset{missing === 1 ? '' : 's'} still missing —{' '}
+            <Link to="/admin" className="rh-inline-link">
+              manage ingestion
+            </Link>
+            .
           </span>
         )}
       </div>

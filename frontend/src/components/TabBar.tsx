@@ -1,22 +1,20 @@
 export type Tab =
-  | 'results'
-  | 'grid'
+  | 'overview'
+  | 'race_story'
   | 'strategy'
-  | 'positions'
-  | 'laps'
+  | 'lap_data'
+  | 'conditions'
   | 'race_control'
-  | 'weather'
-  | 'datasets'
+  | 'data_status'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'results', label: 'Results' },
-  { id: 'grid', label: 'Grid' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'race_story', label: 'Race Story' },
   { id: 'strategy', label: 'Strategy' },
-  { id: 'positions', label: 'Positions' },
-  { id: 'laps', label: 'Laps' },
+  { id: 'lap_data', label: 'Lap Data' },
+  { id: 'conditions', label: 'Conditions' },
   { id: 'race_control', label: 'Race Control' },
-  { id: 'weather', label: 'Weather' },
-  { id: 'datasets', label: 'Datasets' },
+  { id: 'data_status', label: 'Data Status' },
 ]
 
 interface Props {
