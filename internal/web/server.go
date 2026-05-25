@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/AmanTahiliani/box-box/internal/api"
+	"github.com/AmanTahiliani/box-box/internal/query"
+	"github.com/AmanTahiliani/box-box/internal/store"
 )
 
 //go:embed assets
@@ -17,17 +19,23 @@ var assetsFS embed.FS
 // Server is the box-box web companion HTTP server.
 type Server struct {
 	client *api.OpenF1Client
+	query  *query.Service
 	hub    *SSEHub
 	addr   string
 }
 
 // NewServer creates a new Server. Call Start() to begin serving.
-func NewServer(client *api.OpenF1Client, port int) *Server {
-	return &Server{
+// When st is non-nil, local-first read models are available from the domain DB.
+func NewServer(client *api.OpenF1Client, port int, st *store.Store) *Server {
+	s := &Server{
 		client: client,
 		hub:    newSSEHub(),
 		addr:   fmt.Sprintf(":%d", port),
 	}
+	if st != nil {
+		s.query = query.NewService(st)
+	}
+	return s
 }
 
 // Start registers routes, launches background goroutines, and begins serving.
@@ -36,6 +44,7 @@ func (s *Server) Start() error {
 
 	// REST API — /api/v1/laps/comparison must be registered before /api/v1/laps
 	// because Go's ServeMux uses longest-prefix matching.
+	mux.HandleFunc("/api/v1/race-hub", s.handleRaceHub)
 	mux.HandleFunc("/api/v1/meetings", s.handleMeetings)
 	mux.HandleFunc("/api/v1/sessions", s.handleSessions)
 	mux.HandleFunc("/api/v1/drivers", s.handleDrivers)

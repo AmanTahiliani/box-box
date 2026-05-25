@@ -1,7 +1,9 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
+	"github.com/AmanTahiliani/box-box/internal/query"
 )
 
 // writeJSON writes v as JSON with status 200.
@@ -32,6 +35,34 @@ func (s *Server) handleMeetings(w http.ResponseWriter, r *http.Request) {
 	if year == 0 {
 		year = time.Now().Year()
 	}
+
+	switch parseSourceMode(r) {
+	case sourceLocal:
+		if !s.hasLocalQuery() {
+			writeJSON(w, []models.Meeting{})
+			return
+		}
+		meetings, err := s.query.ListMeetingsByYear(year)
+		if err != nil {
+			writeError(w, err, http.StatusInternalServerError, false)
+			return
+		}
+		writeJSON(w, meetings)
+		return
+	case sourceAuto:
+		if s.hasLocalQuery() {
+			meetings, err := s.query.ListMeetingsByYear(year)
+			if err != nil {
+				writeError(w, err, http.StatusInternalServerError, false)
+				return
+			}
+			if len(meetings) > 0 {
+				writeJSON(w, meetings)
+				return
+			}
+		}
+	}
+
 	meetings, err := s.client.GetMeetingsForYear(year)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
@@ -48,6 +79,34 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "meeting_key required", http.StatusBadRequest)
 		return
 	}
+
+	switch parseSourceMode(r) {
+	case sourceLocal:
+		if !s.hasLocalQuery() {
+			writeJSON(w, []models.Session{})
+			return
+		}
+		sessions, err := s.query.ListSessionsByMeeting(meetingKey)
+		if err != nil {
+			writeError(w, err, http.StatusInternalServerError, false)
+			return
+		}
+		writeJSON(w, sessions)
+		return
+	case sourceAuto:
+		if s.hasLocalQuery() {
+			sessions, err := s.query.ListSessionsByMeeting(meetingKey)
+			if err != nil {
+				writeError(w, err, http.StatusInternalServerError, false)
+				return
+			}
+			if len(sessions) > 0 {
+				writeJSON(w, sessions)
+				return
+			}
+		}
+	}
+
 	sessions, err := s.client.GetSessionsForMeeting(meetingKey)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
@@ -64,6 +123,38 @@ func (s *Server) handleDrivers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session_key required", http.StatusBadRequest)
 		return
 	}
+
+	switch parseSourceMode(r) {
+	case sourceLocal:
+		if !s.hasLocalQuery() {
+			writeJSON(w, []models.Driver{})
+			return
+		}
+		drivers, err := s.query.ListDrivers(sessionKey)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeJSON(w, []models.Driver{})
+				return
+			}
+			writeError(w, err, http.StatusInternalServerError, false)
+			return
+		}
+		writeJSON(w, drivers)
+		return
+	case sourceAuto:
+		if s.hasLocalQuery() {
+			drivers, err := s.query.ListDrivers(sessionKey)
+			if err == nil && len(drivers) > 0 {
+				writeJSON(w, drivers)
+				return
+			}
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				writeError(w, err, http.StatusInternalServerError, false)
+				return
+			}
+		}
+	}
+
 	drivers, err := s.client.GetDriversForSession(sessionKey)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
@@ -87,6 +178,33 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 	if err != nil || sessionKey == 0 {
 		http.Error(w, "session_key required", http.StatusBadRequest)
 		return
+	}
+
+	switch parseSourceMode(r) {
+	case sourceLocal:
+		if !s.hasLocalQuery() {
+			writeJSON(w, []resultWithDriver{})
+			return
+		}
+		results, err := s.query.ListResults(sessionKey)
+		if err != nil {
+			writeError(w, err, http.StatusInternalServerError, false)
+			return
+		}
+		writeJSON(w, enrichedResultsToAPI(results))
+		return
+	case sourceAuto:
+		if s.hasLocalQuery() {
+			results, err := s.query.ListResults(sessionKey)
+			if err == nil && len(results) > 0 {
+				writeJSON(w, enrichedResultsToAPI(results))
+				return
+			}
+			if err != nil {
+				writeError(w, err, http.StatusInternalServerError, false)
+				return
+			}
+		}
 	}
 
 	var (
@@ -135,6 +253,33 @@ func (s *Server) handleGrid(w http.ResponseWriter, r *http.Request) {
 	if err != nil || sessionKey == 0 {
 		http.Error(w, "session_key required", http.StatusBadRequest)
 		return
+	}
+
+	switch parseSourceMode(r) {
+	case sourceLocal:
+		if !s.hasLocalQuery() {
+			writeJSON(w, []gridWithDriver{})
+			return
+		}
+		grid, err := s.query.ListStartingGrid(sessionKey)
+		if err != nil {
+			writeError(w, err, http.StatusInternalServerError, false)
+			return
+		}
+		writeJSON(w, enrichedGridToAPI(grid))
+		return
+	case sourceAuto:
+		if s.hasLocalQuery() {
+			grid, err := s.query.ListStartingGrid(sessionKey)
+			if err == nil && len(grid) > 0 {
+				writeJSON(w, enrichedGridToAPI(grid))
+				return
+			}
+			if err != nil {
+				writeError(w, err, http.StatusInternalServerError, false)
+				return
+			}
+		}
 	}
 
 	var (
@@ -667,9 +812,9 @@ type comparisonDriver struct {
 }
 
 type lapsComparisonResponse struct {
-	SessionKey int              `json:"session_key"`
-	SCPeriods  []scPeriod       `json:"sc_periods"`
-	PitLaps    map[string][]int `json:"pit_laps"`
+	SessionKey int                `json:"session_key"`
+	SCPeriods  []scPeriod         `json:"sc_periods"`
+	PitLaps    map[string][]int   `json:"pit_laps"`
 	Drivers    []comparisonDriver `json:"drivers"`
 }
 
@@ -783,4 +928,32 @@ func buildDriverMap(drivers []models.Driver) map[int]models.Driver {
 		m[d.DriverNumber] = d
 	}
 	return m
+}
+
+func enrichedResultsToAPI(results []query.EnrichedResult) []resultWithDriver {
+	out := make([]resultWithDriver, 0, len(results))
+	for _, res := range results {
+		out = append(out, resultWithDriver{
+			SessionResult: res.SessionResult,
+			NameAcronym:   res.NameAcronym,
+			FullName:      res.FullName,
+			TeamName:      res.TeamName,
+			TeamColour:    res.TeamColour,
+		})
+	}
+	return out
+}
+
+func enrichedGridToAPI(grid []query.EnrichedGrid) []gridWithDriver {
+	out := make([]gridWithDriver, 0, len(grid))
+	for _, g := range grid {
+		out = append(out, gridWithDriver{
+			StartingGrid: g.StartingGrid,
+			NameAcronym:  g.NameAcronym,
+			FullName:     g.FullName,
+			TeamName:     g.TeamName,
+			TeamColour:   g.TeamColour,
+		})
+	}
+	return out
 }

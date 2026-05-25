@@ -57,8 +57,10 @@ not implementation tickets yet.
   coding slice for OpenF1-to-store ingestion orchestration.
 - [12 Phase 4 Local-First Web API](12-phase-4-local-first-web-api.md): fourth
   coding slice for store-backed Race Hub read models and Web API metadata.
-- [Cursor Phase 4 Prompt](cursor-phase-4-local-first-web-api-prompt.md):
-  current handoff prompt for the next Cursor backend phase.
+- [13 Phase 5 React Race Hub](13-phase-5-react-race-hub.md): first frontend
+  implementation slice for the production Web UI.
+- [Claude Phase 5 Prompt](claude-phase-5-react-race-hub-prompt.md): current
+  handoff prompt for Claude to begin React/frontend work.
 
 ## External References
 

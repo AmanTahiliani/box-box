@@ -140,6 +140,11 @@ TUI requirements during v1:
 - Use TanStack Query for server data.
 - Use D3 for strategy, position evolution, and lap comparison visuals.
 - Keep the old Web UI available until the replacement route is credible.
+- This is the first frontend phase. Use Claude for this phase.
+- See [13 Phase 5 React Race Hub](13-phase-5-react-race-hub.md) for the
+  implementation brief and
+  [Claude Phase 5 Prompt](claude-phase-5-react-race-hub-prompt.md) for the
+  frontend-agent handoff.
 
 ## Ingestion Rate-Limit Defaults
 

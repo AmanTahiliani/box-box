@@ -61,7 +61,20 @@ func main() {
 	if *webMode {
 		log.SetOutput(os.Stderr) // web mode logs to stderr, not file
 		fmt.Printf("box-box web  →  http://localhost:%d\n", *port)
-		srv := web.NewServer(client, *port)
+
+		var domainStore *store.Store
+		db := *dbPath
+		if db == "" {
+			db = store.DefaultDBPath()
+		}
+		if st, err := store.Open(db); err != nil {
+			log.Printf("web: domain database unavailable (%s): %v", db, err)
+		} else {
+			domainStore = st
+			defer domainStore.Close()
+		}
+
+		srv := web.NewServer(client, *port, domainStore)
 		log.Fatal(srv.Start())
 		return
 	}
