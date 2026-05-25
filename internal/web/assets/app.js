@@ -600,9 +600,44 @@ function livePage() {
     },
 
     get sortedDrivers() {
-      return Object.values(this.drivers)
-        .filter(d => d.Position > 0)
-        .sort((a, b) => a.Position - b.Position);
+      const merged = {};
+      for (const num of Object.keys(this.drivers)) {
+        merged[num] = { ...this.drivers[num] };
+      }
+      for (const num of Object.keys(this.driverInfo)) {
+        if (!merged[num]) {
+          merged[num] = { RacingNumber: num, Position: 0 };
+        }
+      }
+
+      const all = Object.values(merged);
+
+      all.sort((a, b) => {
+        const pi = a.Position || 0;
+        const pj = b.Position || 0;
+        
+        if (pi > 0 && pj > 0) return pi - pj;
+        if (pi > 0) return -1;
+        if (pj > 0) return 1;
+
+        const ti = a.BestLapTime || '';
+        const tj = b.BestLapTime || '';
+        if (ti && tj) return ti.localeCompare(tj);
+        if (ti) return -1;
+        if (tj) return 1;
+
+        const ni = parseInt(a.RacingNumber) || 0;
+        const nj = parseInt(b.RacingNumber) || 0;
+        return ni - nj;
+      });
+
+      all.forEach((d, i) => {
+        if (!d.Position) {
+          d.Position = i + 1;
+        }
+      });
+
+      return all;
     },
 
     driverTla(num) {

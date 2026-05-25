@@ -142,29 +142,31 @@
             <div class="skeleton" style="height:36px;margin-bottom:4px;"></div>
           </template>
         </div>
-        <table class="data-table" x-show="!resultsLoading && results.length">
-          <thead>
-            <tr>
-              <th>POS</th><th>DRIVER</th><th>TEAM</th><th>TIME / GAP</th><th>PTS</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="r in results" :key="r.driver_number">
-              <tr :style="`--team-color:#${r.team_colour}`">
-                <td class="pos-cell">
-                  <span x-text="r.position||'-'"></span>
-                  <span x-show="r.dnf" class="badge dnf">DNF</span>
-                  <span x-show="r.dns" class="badge dns">DNS</span>
-                  <span x-show="r.dsq" class="badge dsq">DSQ</span>
-                </td>
-                <td><span class="team-swatch"></span><span x-text="r.full_name||r.driver_number"></span></td>
-                <td x-text="r.team_name||'-'"></td>
-                <td x-text="fmtDuration(r.duration)"></td>
-                <td x-text="r.points||0"></td>
+        <div class="table-scroll" x-show="!resultsLoading && results.length">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>POS</th><th>DRIVER</th><th>TEAM</th><th>TIME / GAP</th><th>PTS</th>
               </tr>
-            </template>
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              <template x-for="r in results" :key="r.driver_number">
+                <tr :style="`--team-color:#${r.team_colour}`">
+                  <td class="pos-cell">
+                    <span x-text="r.position||'-'"></span>
+                    <span x-show="r.dnf" class="badge dnf">DNF</span>
+                    <span x-show="r.dns" class="badge dns">DNS</span>
+                    <span x-show="r.dsq" class="badge dsq">DSQ</span>
+                  </td>
+                  <td><span class="team-swatch"></span><span x-text="r.full_name||r.driver_number"></span></td>
+                  <td x-text="r.team_name||'-'"></td>
+                  <td x-text="fmtDuration(r.duration)"></td>
+                  <td x-text="r.points||0"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
         <div x-show="!resultsLoading && !results.length" class="empty-msg">No results available.</div>
       </div>
 
@@ -243,31 +245,36 @@
           <span class="clock" x-text="clockDisplay"></span>
         </div>
 
-        <table class="timing-tower">
-          <thead>
-            <tr><th>POS</th><th>Δ</th><th>DRIVER</th><th>TYRE</th><th>LAST LAP</th><th>GAP</th><th>BEST</th></tr>
-          </thead>
-          <tbody>
-            <template x-for="d in sortedDrivers" :key="d.RacingNumber">
-              <tr :class="{in-pit: d.InPit, retired: d.Retired, pit-out: d.PitOut}"
-                  :style="`--team-color:#${driverTeamColor(d.RacingNumber)}`">
-                <td class="pos-cell" x-text="d.Position"></td>
-                <td class="pos-delta" x-text="posDelta(d)"></td>
-                <td><span class="team-swatch"></span><span x-text="driverTla(d.RacingNumber)"></span>
-                    <span x-show="d.InPit" class="badge pit">PIT</span>
-                    <span x-show="d.Retired" class="badge out">OUT</span>
-                </td>
-                <td>
-                  <span class="tyre-badge" :class="tyreClass(d.RacingNumber)"
-                        x-text="tyreLabel(d.RacingNumber)"></span>
-                </td>
-                <td :class="{pb: d.LastLapPB, ob: d.LastLapOB}" x-text="d.LastLapTime||'-'"></td>
-                <td x-text="d.GapToLeader||'-'"></td>
-                <td :class="{ob: d.BestLapOB}" x-text="d.BestLapTime||'-'"></td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="timing-tower">
+            <thead>
+              <tr><th>POS</th><th>Δ</th><th>DRIVER</th><th>TYRE</th><th>LAST LAP</th><th>GAP</th><th>BEST</th></tr>
+            </thead>
+            <tbody>
+              <template x-for="d in sortedDrivers" :key="d.RacingNumber">
+                <tr :class="{in-pit: d.InPit, retired: d.Retired, pit-out: d.PitOut}"
+                    :style="`--team-color:#${driverTeamColor(d.RacingNumber)}`">
+                  <td class="pos-cell" x-text="d.Position"></td>
+                  <td class="pos-delta" x-text="posDelta(d)"></td>
+                  <td>
+                    <div class="driver-cell">
+                      <span class="team-swatch"></span><span x-text="driverTla(d.RacingNumber)"></span>
+                      <span x-show="d.InPit" class="badge pit">PIT</span>
+                      <span x-show="d.Retired" class="badge out">OUT</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="tyre-badge" :class="tyreClass(d.RacingNumber)"
+                          x-text="tyreLabel(d.RacingNumber)"></span>
+                  </td>
+                  <td :class="{pb: d.LastLapPB, ob: d.LastLapOB}" x-text="d.LastLapTime||'-'"></td>
+                  <td x-text="d.GapToLeader||'-'"></td>
+                  <td :class="{ob: d.BestLapOB}" x-text="d.BestLapTime||'-'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
 
         <!-- Race control messages -->
         <div class="rc-panel" x-show="rcMessages.length">

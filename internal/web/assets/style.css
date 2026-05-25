@@ -566,8 +566,9 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.85rem;
 }
 .timing-tower {
-  width: calc(100% - 3rem);
-  margin: 0 1.5rem 1.5rem;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto 1.5rem;
   border-collapse: collapse;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
@@ -585,7 +586,7 @@ a { color: inherit; text-decoration: none; }
 }
 .timing-tower td {
   border-bottom: 1px solid var(--surface-3);
-  padding: 0.45rem 0.75rem;
+  padding: 0.35rem 0.6rem;
   vertical-align: middle;
 }
 .timing-tower .in-pit td   { background: rgba(0,51,102,0.25); }
@@ -682,6 +683,7 @@ a { color: inherit; text-decoration: none; }
 #laps-chart,
 #telemetry-chart,
 #track-chart {
+  overflow-x: auto;
   padding: 0 1.5rem 1.5rem;
 }
 #strategy-chart svg,
@@ -878,4 +880,80 @@ a { color: inherit; text-decoration: none; }
   .constructor-row {
     grid-template-columns: 44px 1fr 80px 55px 55px;
   }
+}
+
+/* ---- Scrollable table wrapper ---- */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 1.5rem 1.5rem;
+}
+.table-scroll .data-table,
+.table-scroll .timing-tower {
+  margin: 0;
+  width: 100%;
+}
+
+/* ============================================================
+   Mobile responsive overrides (≤ 640px)
+   ============================================================ */
+@media (max-width: 640px) {
+  /* Reduce global horizontal padding */
+  .home-hero       { padding: 0.75rem; }
+  .meetings-grid   { padding: 0 0.75rem 1.5rem; }
+  .section-label   { padding: 0.75rem 0.75rem 0.5rem; }
+  .page-header     { padding: 0.75rem 0.75rem 0.5rem; flex-wrap: wrap; gap: 0.5rem; }
+  .year-selector   { margin-left: 0; }
+  .session-pills   { padding: 0.5rem 0.75rem; }
+  .driver-selector { padding: 0.5rem 0.75rem 0.75rem; }
+  .table-scroll    { margin: 0 0.75rem 1.5rem; }
+  .rc-panel        { margin: 0 0.75rem 1.5rem; }
+  .standings-table { padding: 0 0.75rem 1.5rem; }
+  .skeleton-wrap   { padding: 0.75rem; }
+  .empty-msg       { padding: 2rem 0.75rem; }
+
+  /* Charts */
+  #strategy-chart,
+  #laps-chart,
+  #telemetry-chart,
+  #track-chart     { padding: 0 0.75rem 1.5rem; }
+
+  /* Nav */
+  .nav             { gap: 0.75rem; padding: 0.6rem 0.75rem; }
+
+  /* Tabs — allow horizontal scroll so all tabs are reachable */
+  .tabs            { overflow-x: auto; padding: 0 0.75rem; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab             { padding: 0.6rem 0.75rem; font-size: 0.78rem; white-space: nowrap; }
+
+  /* Stale banner */
+  .stale-banner    { padding: 0.5rem 0.75rem; flex-wrap: wrap; }
+
+  /* Live timing meta row */
+  .live-meta       { gap: 0.5rem; padding: 0.5rem 0.75rem; flex-wrap: wrap; }
+  .clock           { margin-left: 0; }
+
+  /* Tighten table cell padding */
+  .data-table th,
+  .data-table td   { padding: 0.6rem 0.6rem; }
+  .timing-tower th,
+  .timing-tower td { padding: 0.4rem 0.5rem; }
+
+  /* Hide TEAM column in race results table */
+  .data-table th:nth-child(3),
+  .data-table td:nth-child(3) { display: none; }
+
+  /* Hide BEST LAP column in timing tower */
+  .timing-tower th:nth-child(7),
+  .timing-tower td:nth-child(7) { display: none; }
+
+  /* Scale down hero text */
+  .next-race-name      { font-size: 1.35rem; }
+  .next-race-countdown { font-size: 1.6rem; }
+}
+
+@media (max-width: 420px) {
+  /* Hide position delta column on very small phones to save space */
+  .timing-tower th:nth-child(2),
+  .timing-tower td:nth-child(2) { display: none; }
 }

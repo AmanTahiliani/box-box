@@ -1616,34 +1616,14 @@ func (m OfficialLiveModel) renderDriverRow(d LiveDriverData, idx int, fpq bool, 
 	tlaStr := tlaStyle.Render(padRight(tla, 4))
 	tyreStr := m.renderTyreIndicator(d.RacingNumber)
 
-	if d.Retired {
-		row := fmt.Sprintf("  %s %s  %s  %s  %s  %s",
-			posStr, deltaStr, colorBar, tlaStr,
-			styleDNF.Render("RET"), styleMuted.Render("Retired"))
-		if idx == m.cursor {
-			return styleSelected.Render(row)
-		}
-		if d.KnockedOut {
-			return styleMuted.Render(row)
-		}
-		return row
-	}
-
-	if d.InPit {
-		row := fmt.Sprintf("  %s %s  %s  %s  %s  %s  %s",
-			posStr, deltaStr, colorBar, tlaStr, tyreStr,
-			styleSafetyCar.Render(padRight("PIT", 10)),
-			m.renderGapStr(d, fpq))
-		if idx == m.cursor {
-			return styleSelected.Render(row)
-		}
-		return row
-	}
-
 	// Last lap time coloring
 	lastLapRaw := d.LastLapTime
 	lastLap := padRight(lastLapRaw, 10)
-	if lastLapRaw != "" {
+	if d.Retired {
+		lastLap = padRightVisible(styleDNF.Render("RET"), 10)
+	} else if d.InPit {
+		lastLap = padRightVisible(styleSafetyCar.Render("PIT"), 10)
+	} else if lastLapRaw != "" {
 		if d.LastLapOB {
 			lastLap = padRightVisible(stylePurple.Render(lastLapRaw), 10)
 		} else if d.LastLapPB {
@@ -1652,6 +1632,11 @@ func (m OfficialLiveModel) renderDriverRow(d LiveDriverData, idx int, fpq bool, 
 	}
 
 	var row string
+	gapStr := m.renderGapStr(d, fpq)
+	if d.Retired {
+		gapStr = padRightVisible(styleMuted.Render("Retired"), 10)
+	}
+
 	if m.showSectors {
 		timeCol := lastLap
 		if fpq {
@@ -1663,7 +1648,7 @@ func (m OfficialLiveModel) renderDriverRow(d LiveDriverData, idx int, fpq bool, 
 			m.renderSector(d.Sectors[0]),
 			m.renderSector(d.Sectors[1]),
 			m.renderSector(d.Sectors[2]),
-			m.renderGapStr(d, fpq))
+			gapStr)
 	} else if fpq {
 		// FP / Qualifying: show BEST lap as primary, LAST as secondary
 		bestLap := m.renderBestLapTime(d, overallBest)
@@ -1677,7 +1662,7 @@ func (m OfficialLiveModel) renderDriverRow(d LiveDriverData, idx int, fpq bool, 
 			flyingIndicator,
 			bestLap,
 			lastLap,
-			m.renderGapStr(d, fpq))
+			gapStr)
 		// Highlight danger zone (cutoff) in qualifying
 		if d.Cutoff && idx != m.cursor {
 			row = lipgloss.NewStyle().Foreground(lipgloss.Color(colorOrange)).Render(row)
@@ -1692,10 +1677,12 @@ func (m OfficialLiveModel) renderDriverRow(d LiveDriverData, idx int, fpq bool, 
 			posStr, deltaStr, colorBar, tlaStr, tyreStr,
 			m.renderTyreAge(d.RacingNumber),
 			lastLap,
-			m.renderGapStr(d, fpq),
+			gapStr,
 			m.renderIntvStr(d),
 			padRightVisible(trend, 8))
 	}
+
+	// Removed lines are embedded in the previous chunk.
 
 	if idx == m.cursor {
 		return styleSelected.Render(row)
@@ -1762,13 +1749,19 @@ func (m OfficialLiveModel) renderTyreIndicator(num string) string {
 	}
 
 	compound := strings.ToUpper(tyre.Compound)
-	abbrev, style := compoundAbbrevStyle(compound)
+	abbrev, fgStyle := compoundAbbrevStyle(compound)
+
+	bgStyle := lipgloss.NewStyle().Background(fgStyle.GetForeground()).Foreground(lipgloss.Color("#000")).Bold(true)
+	if strings.Contains(compound, "WET") {
+		bgStyle = bgStyle.Foreground(lipgloss.Color("#fff"))
+	}
 
 	newMark := " "
 	if tyre.New {
-		newMark = style.Render("*")
+		newMark = "*"
 	}
-	return padRightVisible(style.Render("●")+" "+abbrev+newMark, 5)
+	text := fmt.Sprintf(" %s%s ", abbrev, newMark)
+	return padRightVisible(bgStyle.Render(text), 5)
 }
 
 func (m OfficialLiveModel) renderTyreAge(num string) string {
