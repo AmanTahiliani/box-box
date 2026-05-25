@@ -89,6 +89,53 @@ func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
+// FetchStrict performs a GET using the HTTP cache for fresh entries only.
+// Unlike get(), it never falls back to expired cache on failure — intended
+// for ingestion workflows that need authoritative responses or explicit errors.
+func (c *OpenF1Client) FetchStrict(url string) ([]byte, error) {
+	if cachedData, ok := c.cache.Get(url); ok {
+		return cachedData, nil
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			var apiErr struct {
+				Detail string `json:"detail"`
+			}
+			if json.Unmarshal(data, &apiErr) == nil && apiErr.Detail != "" {
+				detail := strings.ToLower(apiErr.Detail)
+				if strings.Contains(detail, "live") && strings.Contains(detail, "session") {
+					return nil, fmt.Errorf("%w", ErrLiveSessionLocked)
+				}
+				return nil, fmt.Errorf("openf1 API: %s", apiErr.Detail)
+			}
+		}
+		return nil, fmt.Errorf("openf1 API returned status %d for %s", resp.StatusCode, url)
+	}
+
+	_ = c.cache.Set(url, data)
+	return data, nil
+}
+
 // tryStale attempts to return stale cached data when a live request has failed.
 // If stale data exists it sets the client's stale flag and returns the data.
 // Otherwise it returns the original error unchanged so callers can handle it.

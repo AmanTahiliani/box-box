@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>box-box — Command Center</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Command Center Layout ── */
+    .cc-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr 260px;
+      grid-template-rows: 1fr;
+      height: calc(100vh - 44px);
+    }
+
+    /* ── Left: Weekend Nav ── */
+    .cc-sidebar {
+      border-right: 1px solid var(--c-border);
+      padding: var(--s5);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s5);
+    }
+
+    .weekend-badge {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      font-size: 11px;
+      color: var(--c-text-2);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: var(--s1);
+    }
+
+    .session-list { display: flex; flex-direction: column; gap: 1px; }
+
+    .session-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      padding: 7px var(--s3);
+      border-radius: 2px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .session-row:hover { background: var(--c-surface-2); }
+    .session-row.active { background: var(--c-surface-2); }
+    .session-row.current { border-left: 2px solid var(--c-red); padding-left: calc(var(--s3) - 2px); }
+
+    .session-name { flex: 1; color: var(--c-text-2); }
+    .session-name.done { color: var(--c-text-3); }
+
+    .session-time {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      color: var(--c-text-3);
+    }
+
+    .year-switcher {
+      display: flex;
+      gap: 2px;
+    }
+
+    .year-btn {
+      padding: 3px 8px;
+      background: none;
+      border: 1px solid var(--c-border);
+      border-radius: 2px;
+      font-size: 11px;
+      color: var(--c-text-3);
+      transition: all 0.1s;
+    }
+
+    .year-btn.active {
+      background: var(--c-surface-2);
+      border-color: var(--c-border-2);
+      color: var(--c-text);
+    }
+
+    /* ── Center: Main Content ── */
+    .cc-main {
+      overflow-y: auto;
+      padding: var(--s5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--sec-gap);
+    }
+
+    .race-hero {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s4);
+    }
+
+    .race-location {
+      display: flex;
+      align-items: baseline;
+      gap: var(--s3);
+    }
+
+    .race-flag { font-size: 24px; line-height: 1; }
+
+    .race-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--c-text);
+    }
+
+    .race-meta {
+      font-size: 12px;
+      color: var(--c-text-3);
+    }
+
+    .race-round {
+      display: inline-block;
+      padding: 2px 7px;
+      border: 1px solid var(--c-border-2);
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--c-text-3);
+    }
+
+    .countdown-section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s3);
+    }
+
+    .next-session-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--c-text-3);
+    }
+
+    .next-session-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--c-red);
+    }
+
+    .schedule-table th:first-child,
+    .schedule-table td:first-child { padding-left: 0; }
+
+    .session-status-cell {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .weather-strip {
+      display: flex;
+      gap: var(--s5);
+      padding: var(--s3) var(--s4);
+      background: var(--c-surface);
+      border: 1px solid var(--c-border);
+    }
+
+    .wx-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .wx-label {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--c-text-3);
+    }
+
+    .wx-val {
+      font-family: var(--f-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--c-text);
+    }
+
+    /* ── Right: Championship + Data ── */
+    .cc-right {
+      border-left: 1px solid var(--c-border);
+      padding: var(--s5);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s5);
+    }
+
+    .champ-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: var(--s3);
+    }
+
+    .champ-tab-btn {
+      padding: 3px 8px;
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--c-text-3);
+      transition: all 0.1s;
+    }
+
+    .champ-tab-btn.active {
+      color: var(--c-text);
+      border-color: var(--c-border-2);
+      background: var(--c-surface-2);
+    }
+
+    .champ-table { width: 100%; font-size: 11px; }
+
+    .champ-row {
+      display: grid;
+      grid-template-columns: 20px 1fr 48px;
+      align-items: center;
+      gap: var(--s2);
+      padding: 5px 0;
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .champ-row:last-child { border-bottom: none; }
+
+    .champ-pos { font-family: var(--f-mono); color: var(--c-text-3); font-size: 11px; text-align: right; }
+    .champ-name { font-weight: 600; }
+    .champ-pts { font-family: var(--f-mono); font-weight: 700; text-align: right; }
+
+    .data-avail-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .avail-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      padding: 5px 0;
+      border-bottom: 1px solid var(--c-border);
+      font-size: 11px;
+    }
+
+    .avail-row:last-child { border-bottom: none; }
+
+    .avail-name { flex: 1; color: var(--c-text-2); }
+    .avail-count { font-family: var(--f-mono); font-size: 10px; color: var(--c-text-3); }
+
+    /* ── Responsive ── */
+    /* ── iPad: 2-col, hide left sidebar ── */
+    @media (min-width: 769px) and (max-width: 1100px) {
+      .cc-layout { grid-template-columns: 1fr 260px; }
+      .cc-sidebar { display: none; }
+    }
+
+    /* ── Phone: full-width stacked ── */
+    @media (max-width: 768px) {
+      .cc-layout { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; }
+      .cc-sidebar { display: none; }
+      .cc-right { border-left: none; border-top: 1px solid var(--c-border); }
+      /* On phone, show session list inline inside main */
+      .cc-mobile-sessions { display: flex !important; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="app-nav">
+    <a href="index.html" class="nav-logo">box<em>-</em>box</a>
+    <div class="nav-links">
+      <a href="command-center.html" class="active">Command Center</a>
+      <a href="live-timing.html">Live</a>
+      <a href="race-hub.html">Race Hub</a>
+      <a href="data-library.html">Data Library</a>
+    </div>
+    <div class="nav-right">
+      <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+      <div class="density-toggle">
+        <button class="active" onclick="setDensity('default',this)">D</button>
+        <button onclick="setDensity('compact',this)">C</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="cc-layout">
+
+    <!-- ── Left: Weekend sessions ── -->
+    <aside class="cc-sidebar">
+      <div>
+        <div class="weekend-badge">
+          <span class="dot local"></span>
+          Monaco 2025
+        </div>
+        <div class="year-switcher" style="margin-bottom: var(--s4)">
+          <button class="year-btn active">2025</button>
+          <button class="year-btn">2024</button>
+          <button class="year-btn">2023</button>
+        </div>
+        <div class="session-list">
+          <div class="session-row">
+            <span class="dot local"></span>
+            <span class="session-name done">FP1</span>
+            <span class="session-time">Thu 11:30</span>
+          </div>
+          <div class="session-row">
+            <span class="dot local"></span>
+            <span class="session-name done">FP2</span>
+            <span class="session-time">Thu 15:00</span>
+          </div>
+          <div class="session-row">
+            <span class="dot local"></span>
+            <span class="session-name done">FP3</span>
+            <span class="session-time">Sat 11:30</span>
+          </div>
+          <div class="session-row">
+            <span class="dot local"></span>
+            <span class="session-name done">Qualifying</span>
+            <span class="session-time">Sat 15:00</span>
+          </div>
+          <div class="session-row current active">
+            <span class="dot live"></span>
+            <span class="session-name" style="color: var(--c-red); font-weight: 600;">Race</span>
+            <span class="session-time" style="color: var(--c-red);">LIVE</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Upcoming</span>
+        </div>
+        <div class="session-list">
+          <div class="session-row">
+            <span class="dot upcoming"></span>
+            <span class="session-name done">Canada GP</span>
+            <span class="session-time">Jun 13</span>
+          </div>
+          <div class="session-row">
+            <span class="dot upcoming"></span>
+            <span class="session-name done">Austria GP</span>
+            <span class="session-time">Jun 27</span>
+          </div>
+          <div class="session-row">
+            <span class="dot upcoming"></span>
+            <span class="session-name done">British GP</span>
+            <span class="session-time">Jul 4</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Center: Race weekend hero ── -->
+    <main class="cc-main">
+
+      <!-- Hero -->
+      <div class="race-hero">
+        <div style="display:flex; align-items:center; gap: var(--s3)">
+          <span class="race-round">Round 8</span>
+          <span class="badge live">
+            <span class="dot live"></span>
+            Race In Progress
+          </span>
+          <a href="live-timing.html" style="margin-left:auto; font-size:11px; color:var(--c-text-2); border:1px solid var(--c-border); padding: 3px 10px; border-radius:2px; font-weight:600; letter-spacing:0.04em;">Open Live →</a>
+        </div>
+
+        <div class="race-location">
+          <span class="race-flag">🇲🇨</span>
+          <div>
+            <div class="race-name">Monaco Grand Prix</div>
+            <div class="race-meta">Circuit de Monaco · Monte Carlo · 22–25 May 2025</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inline session list: visible on phone/iPad where sidebar is hidden -->
+      <div class="cc-mobile-sessions" style="display:none; gap:2px; flex-wrap:wrap; margin-top:var(--s1)">
+        <span style="font-size:10px; color:var(--c-text-3); margin-right:var(--s2); align-self:center; text-transform:uppercase; letter-spacing:.08em;">Weekend</span>
+        <span class="badge local">FP1 ✓</span>
+        <span class="badge local">FP2 ✓</span>
+        <span class="badge local">FP3 ✓</span>
+        <span class="badge local">Qual ✓</span>
+        <span class="badge live">Race ●</span>
+      </div>
+
+      <!-- Live race state / countdown if not live -->
+      <div style="padding: var(--s4); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid var(--c-red);">
+        <div style="display:flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--s3)">
+          <span style="font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color: var(--c-red)">Race — In Progress</span>
+          <a href="live-timing.html" style="font-size:11px; color: var(--c-text-2); border: 1px solid var(--c-border); padding: 2px 8px; border-radius:2px;">Open Live Timing →</a>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: var(--s4)">
+          <div>
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--c-text-3); margin-bottom:3px">Lap</div>
+            <div style="font-family: var(--f-mono); font-size:22px; font-weight:700; color: var(--c-text)">45<span style="font-size:14px; color: var(--c-text-3)">/78</span></div>
+          </div>
+          <div>
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--c-text-3); margin-bottom:3px">Leader</div>
+            <div style="font-size:18px; font-weight:700; color: var(--t-fer)">LEC</div>
+          </div>
+          <div>
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--c-text-3); margin-bottom:3px">Gap P1–P2</div>
+            <div style="font-family: var(--f-mono); font-size:20px; font-weight:700; color:var(--c-text)">+3.4s</div>
+          </div>
+          <div>
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--c-text-3); margin-bottom:3px">Track</div>
+            <div style="font-size:13px; font-weight:700;" class="track-green">● GREEN</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule -->
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Weekend Schedule</span>
+          <span class="sec-meta">Circuit de Monaco · 3.337 km · 78 laps</span>
+        </div>
+        <table class="data-table schedule-table">
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>Date</th>
+              <th>Local Time</th>
+              <th>UTC</th>
+              <th>Status</th>
+              <th>Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="font-weight:600">FP1</span></td>
+              <td class="t3">Thu 22 May</td>
+              <td class="mono t2">11:30</td>
+              <td class="mono t3">09:30</td>
+              <td><span class="badge local">Done</span></td>
+              <td><span class="badge local">Full</span></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:600">FP2</span></td>
+              <td class="t3">Thu 22 May</td>
+              <td class="mono t2">15:00</td>
+              <td class="mono t3">13:00</td>
+              <td><span class="badge local">Done</span></td>
+              <td><span class="badge local">Full</span></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:600">FP3</span></td>
+              <td class="t3">Sat 24 May</td>
+              <td class="mono t2">11:30</td>
+              <td class="mono t3">09:30</td>
+              <td><span class="badge local">Done</span></td>
+              <td><span class="badge local">Full</span></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:600">Qualifying</span></td>
+              <td class="t3">Sat 24 May</td>
+              <td class="mono t2">15:00</td>
+              <td class="mono t3">13:00</td>
+              <td><span class="badge local">Done</span></td>
+              <td><span class="badge local">Full</span></td>
+            </tr>
+            <tr>
+              <td><span style="font-weight:600; color: var(--c-red)">Race</span></td>
+              <td class="t3">Sun 25 May</td>
+              <td class="mono" style="color:var(--c-red)">14:00</td>
+              <td class="mono t3">12:00</td>
+              <td><span class="badge live">Live</span></td>
+              <td><span class="badge live">Streaming</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Weather -->
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Weather</span>
+          <span class="sec-meta">Race day · updated 2 min ago</span>
+        </div>
+        <div class="weather-strip">
+          <div class="wx-item">
+            <span class="wx-label">Air</span>
+            <span class="wx-val">24°C</span>
+          </div>
+          <div class="wx-item">
+            <span class="wx-label">Track</span>
+            <span class="wx-val">36°C</span>
+          </div>
+          <div class="wx-item">
+            <span class="wx-label">Humidity</span>
+            <span class="wx-val">62%</span>
+          </div>
+          <div class="wx-item">
+            <span class="wx-label">Wind</span>
+            <span class="wx-val">7 km/h</span>
+          </div>
+          <div class="wx-item">
+            <span class="wx-label">Direction</span>
+            <span class="wx-val">NW</span>
+          </div>
+          <div class="wx-item">
+            <span class="wx-label">Rain Risk</span>
+            <span class="wx-val t-green">2%</span>
+          </div>
+          <div class="wx-item">
+            <span class="wx-label">Pressure</span>
+            <span class="wx-val">1014 hPa</span>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ── Right: Championship + Data ── -->
+    <aside class="cc-right">
+
+      <!-- Championship -->
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Championship</span>
+          <span class="sec-meta">After R7</span>
+        </div>
+        <div class="champ-tabs">
+          <button class="champ-tab-btn active" onclick="switchChamp('drivers', this)">Drivers</button>
+          <button class="champ-tab-btn" onclick="switchChamp('constructors', this)">Constructors</button>
+        </div>
+
+        <div id="champ-drivers">
+          <div class="champ-row">
+            <span class="champ-pos">1</span>
+            <span class="champ-name" style="color: var(--t-rb)">Verstappen</span>
+            <span class="champ-pts">138</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">2</span>
+            <span class="champ-name" style="color: var(--t-mcl)">Norris</span>
+            <span class="champ-pts">116</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">3</span>
+            <span class="champ-name" style="color: var(--t-fer)">Leclerc</span>
+            <span class="champ-pts">98</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">4</span>
+            <span class="champ-name" style="color: var(--t-mcl)">Piastri</span>
+            <span class="champ-pts">86</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">5</span>
+            <span class="champ-name" style="color: var(--t-mer)">Russell</span>
+            <span class="champ-pts">74</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">6</span>
+            <span class="champ-name" style="color: var(--t-fer)">Hamilton</span>
+            <span class="champ-pts">62</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">7</span>
+            <span class="champ-name" style="color: var(--t-am)">Alonso</span>
+            <span class="champ-pts">41</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">8</span>
+            <span class="champ-name" style="color: var(--t-wil)">Sainz</span>
+            <span class="champ-pts">34</span>
+          </div>
+        </div>
+
+        <div id="champ-constructors" style="display:none">
+          <div class="champ-row">
+            <span class="champ-pos">1</span>
+            <span class="champ-name" style="color: var(--t-mcl)">McLaren</span>
+            <span class="champ-pts">202</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">2</span>
+            <span class="champ-name" style="color: var(--t-rb)">Red Bull</span>
+            <span class="champ-pts">186</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">3</span>
+            <span class="champ-name" style="color: var(--t-fer)">Ferrari</span>
+            <span class="champ-pts">162</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">4</span>
+            <span class="champ-name" style="color: var(--t-mer)">Mercedes</span>
+            <span class="champ-pts">136</span>
+          </div>
+          <div class="champ-row">
+            <span class="champ-pos">5</span>
+            <span class="champ-name" style="color: var(--t-am)">Aston Martin</span>
+            <span class="champ-pts">54</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data availability -->
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Local Data</span>
+          <a href="data-library.html" style="font-size:10px; color: var(--c-text-3); margin-left: auto">View all →</a>
+        </div>
+        <div class="data-avail-list">
+          <div class="avail-row">
+            <span class="dot local"></span>
+            <span class="avail-name">Bahrain GP</span>
+            <span class="avail-count t-green">Full</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot local"></span>
+            <span class="avail-name">Saudi Arabia GP</span>
+            <span class="avail-count t-green">Full</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot local"></span>
+            <span class="avail-name">Australian GP</span>
+            <span class="avail-count t-green">Full</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot partial"></span>
+            <span class="avail-name">Japanese GP</span>
+            <span class="avail-count t-yellow">Partial</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot partial"></span>
+            <span class="avail-name">Chinese GP</span>
+            <span class="avail-count t-yellow">Partial</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot local"></span>
+            <span class="avail-name">Miami GP</span>
+            <span class="avail-count t-green">Full</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot local"></span>
+            <span class="avail-name">Emilia Romagna GP</span>
+            <span class="avail-count t-green">Full</span>
+          </div>
+          <div class="avail-row">
+            <span class="dot live"></span>
+            <span class="avail-name">Monaco GP</span>
+            <span class="avail-count t-red">Live</span>
+          </div>
+        </div>
+        <div style="margin-top: var(--s3); padding: var(--s3) var(--s3); background: var(--c-surface-2); border: 1px solid var(--c-border); font-size: 10px; color: var(--c-text-3)">
+          <span style="color: var(--c-yellow)">⚠</span>
+          2 weekends have partial data.
+          <a href="data-library.html" style="color: var(--c-text-2); text-decoration: underline; text-underline-offset: 2px;">View ingest commands</a>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <script>
+    function setDensity(mode, btn) {
+      document.querySelectorAll('.density-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.documentElement.classList.toggle('compact', mode === 'compact');
+    }
+
+    function switchChamp(tab, btn) {
+      document.querySelectorAll('.champ-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('champ-drivers').style.display = tab === 'drivers' ? '' : 'none';
+      document.getElementById('champ-constructors').style.display = tab === 'constructors' ? '' : 'none';
+    }
+  </script>
+</body>
+</html>

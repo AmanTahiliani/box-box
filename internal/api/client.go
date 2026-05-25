@@ -38,6 +38,11 @@ func NewOpenF1ClientWithKey(url string, timeout time.Duration, apiKey string) *O
 	}
 }
 
+// BaseURL returns the configured OpenF1 API root URL.
+func (c *OpenF1Client) BaseURL() string {
+	return c.url
+}
+
 // Cache returns the underlying Cache so callers can access track outline
 // storage and other persistent data directly.
 func (c *OpenF1Client) Cache() *Cache {

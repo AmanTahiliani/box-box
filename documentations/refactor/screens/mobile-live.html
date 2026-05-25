@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>box-box · Live Timing — Phone Layout</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ─── Phone Live Layout ───────────────────────────────────────────────── */
+  /* This file demonstrates the phone layout model in isolation.
+     The real responsive live-timing.html collapses to this at <768px.
+     Reading this file answers: "What exactly does the phone experience look like?" */
+
+  body {
+    margin: 0;
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  /* Simulate phone chrome — constrain to 390px centered */
+  .phone-frame {
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--c-bg);
+    border-left: 1px solid var(--c-border-2);
+    border-right: 1px solid var(--c-border-2);
+  }
+
+  /* Demo note outside phone frame */
+  .demo-meta {
+    text-align: center;
+    padding: 12px 16px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--c-text-3);
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .demo-meta a { color: var(--c-text-2); text-decoration: none; }
+  .demo-meta a:hover { color: var(--c-text); }
+
+  /* ─── Session Banner (phone variant) ─────────────────────────────────── */
+  /* Compact — session name + lap + track status only.
+     Other fields (temps, DRS, fastest lap) are not shown on phone. */
+  .sb {
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+    padding: 0 12px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .sb-live-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--c-red);
+    flex-shrink: 0;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  .sb-session {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--c-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+  .sb-lap {
+    font-size: 12px;
+    color: var(--c-text-2);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .sb-lap span { color: var(--c-text); font-weight: 600; }
+  .sb-track-status {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .sb-track-status.green { background: rgba(0,204,106,0.15); color: var(--c-green); }
+  .sb-track-status.yellow { background: rgba(255,214,0,0.15); color: var(--c-yellow); }
+  .sb-track-status.sc { background: rgba(255,214,0,0.2); color: var(--c-yellow); }
+  .sb-track-status.red { background: rgba(225,6,0,0.15); color: var(--c-red); }
+  .sb-disconnected {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: rgba(225,6,0,0.2);
+    color: var(--c-red);
+    animation: blink 1s step-end infinite;
+    flex-shrink: 0;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ─── Panel Container ─────────────────────────────────────────────────── */
+  /* Each panel occupies the full space between banner and tab bar.
+     Only one panel is visible at a time. */
+  .panel-area {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    /* bottom padding = tab bar height so content is not obscured */
+    padding-bottom: 54px;
+  }
+
+  .phone-panel {
+    display: none;
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .phone-panel.active { display: block; }
+
+  /* ─── PANEL: Tower ────────────────────────────────────────────────────── */
+  /* Phone columns: P · Driver · Gap · Tyre · Last
+     Hidden: Interval, Age, Best, Sectors */
+  .tower-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .tower-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--c-bg);
+    border-bottom: 1px solid var(--c-border);
+    padding: 5px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--c-text-3);
+    text-align: right;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .tower-table thead th.col-driver { text-align: left; }
+  .tower-table tbody tr {
+    border-bottom: 1px solid var(--c-border);
+    height: 38px;
+  }
+  .tower-table tbody tr:hover { background: var(--c-surface); }
+  .tower-table tbody tr.pinned { background: rgba(255,255,255,0.03); }
+  .tower-table td {
+    padding: 0 8px;
+    text-align: right;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .td-pos {
+    width: 26px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-text);
+    text-align: center;
+  }
+  .td-driver {
+    text-align: left;
+    min-width: 0;
+  }
+  .driver-cell {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .team-bar {
+    width: 3px;
+    height: 22px;
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+  .driver-code {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--c-text);
+    letter-spacing: 0.02em;
+  }
+  .td-gap { font-size: 12px; color: var(--c-text-2); min-width: 58px; }
+  .td-gap.leader { color: var(--c-text); font-weight: 600; font-size: 10px; letter-spacing: 0.05em; }
+  .td-tyre {
+    width: 32px;
+  }
+  .tyre-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .tyre-badge.S { background: rgba(232,0,45,0.18); color: var(--tyre-s); }
+  .tyre-badge.M { background: rgba(200,180,0,0.18); color: var(--tyre-m); }
+  .tyre-badge.H { background: rgba(184,184,184,0.15); color: var(--tyre-h); }
+  .td-last { font-size: 12px; color: var(--c-text); min-width: 58px; }
+  .td-last.pb { color: var(--c-green); }
+  .td-last.ob { color: var(--c-purple); }
+
+  /* Special states */
+  .row-pit td { opacity: 0.55; }
+  .row-pit .driver-code::after {
+    content: " PIT";
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--c-yellow);
+    letter-spacing: 0.08em;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+  .row-fl td.td-last { color: var(--c-purple); }
+  .row-dnf td { opacity: 0.35; text-decoration: line-through; text-decoration-color: var(--c-border-2); }
+
+  /* ─── PANEL: Race Control ─────────────────────────────────────────────── */
+  .rc-panel { padding: 0; }
+  .rc-panel-header {
+    padding: 10px 12px 8px;
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--c-border);
+    position: sticky;
+    top: 0;
+    background: var(--c-bg);
+    z-index: 10;
+  }
+  .rc-list { list-style: none; margin: 0; padding: 0; }
+  .rc-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--c-border);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .rc-item:last-child { border-bottom: none; }
+  .rc-lap {
+    font-size: 10px;
+    color: var(--c-text-3);
+    white-space: nowrap;
+    padding-top: 1px;
+    flex-shrink: 0;
+    min-width: 32px;
+  }
+  .rc-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+  .rc-text { color: var(--c-text-2); flex: 1; }
+  .rc-text strong { color: var(--c-text); }
+
+  .rc-item.sc .rc-dot { background: var(--c-yellow); }
+  .rc-item.sc .rc-text { color: var(--c-yellow); }
+  .rc-item.vsc .rc-dot { background: var(--c-yellow); }
+  .rc-item.vsc .rc-text { color: var(--c-yellow); }
+  .rc-item.drs .rc-dot { background: var(--c-green); }
+  .rc-item.penalty .rc-dot { background: var(--c-red); }
+  .rc-item.fl .rc-dot { background: var(--c-purple); }
+  .rc-item.fl .rc-text { color: var(--c-purple); }
+  .rc-item.flag .rc-dot { background: var(--c-red); }
+  .rc-item.flag .rc-text { color: var(--c-red); }
+  .rc-item.info .rc-dot { background: var(--c-text-3); }
+
+  /* ─── PANEL: Battles + Pit ─────────────────────────────────────────────── */
+  .battles-section {
+    padding: 10px 12px 0;
+  }
+  .section-label {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .battle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--c-border);
+    font-size: 12px;
+  }
+  .battle-row:last-child { border-bottom: none; }
+  .battle-driver {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 52px;
+  }
+  .bd-bar {
+    width: 3px; height: 18px;
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+  .bd-code {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--c-text);
+    letter-spacing: 0.02em;
+  }
+  .battle-vs { color: var(--c-text-3); font-size: 10px; }
+  .battle-gap { color: var(--c-text); font-weight: 600; font-size: 13px; min-width: 50px; text-align: right; }
+  .battle-trend { margin-left: auto; font-size: 12px; }
+  .battle-trend.closing { color: var(--c-red); }
+  .battle-trend.stable { color: var(--c-text-3); }
+  .battle-trend.opening { color: var(--c-text-3); }
+
+  .pit-section {
+    padding: 10px 12px 0;
+    margin-top: 4px;
+    border-top: 1px solid var(--c-border);
+  }
+  .pit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--c-border);
+    font-size: 12px;
+  }
+  .pit-row:last-child { border-bottom: none; }
+  .pit-driver {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+  }
+  .pit-tyre-age { color: var(--c-text-3); font-size: 11px; margin-left: 2px; }
+  .pit-status-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .pit-status-badge.open { background: rgba(0,204,106,0.12); color: var(--c-green); }
+  .pit-status-badge.soon { background: rgba(255,214,0,0.12); color: var(--c-yellow); }
+  .pit-status-badge.overdue { background: rgba(255,140,0,0.12); color: #ff8c00; }
+  .pit-status-badge.done { background: rgba(255,255,255,0.04); color: var(--c-text-3); }
+
+  /* ─── Bottom Tab Bar ─────────────────────────────────────────────────── */
+  .tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 390px;
+    height: 54px;
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border-2);
+    display: flex;
+    align-items: stretch;
+    z-index: 50;
+  }
+  .tab-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    color: var(--c-text-3);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    transition: color 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tab-btn .tab-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+  .tab-btn.active {
+    color: var(--c-text);
+  }
+  .tab-btn.active .tab-icon { color: var(--c-red); }
+  .tab-btn:hover { color: var(--c-text-2); }
+
+  /* RC badge — unread count */
+  .tab-badge {
+    position: relative;
+  }
+  .tab-badge::after {
+    content: "3";
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    background: var(--c-red);
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  /* ─── Disconnected banner (full-panel overlay) ────────────────────────── */
+  /* This is what happens when SSE drops. Not just the status in the banner —
+     a real-estate banner below the session bar. */
+  .disconnect-banner {
+    display: none; /* toggle .show to show */
+    background: rgba(225,6,0,0.12);
+    border-bottom: 1px solid rgba(225,6,0,0.3);
+    padding: 8px 12px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--c-red);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .disconnect-banner.show { display: flex; }
+  .disconnect-banner svg { flex-shrink: 0; }
+  .reconnect-btn {
+    margin-left: auto;
+    background: rgba(225,6,0,0.15);
+    border: 1px solid rgba(225,6,0,0.35);
+    color: var(--c-red);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="demo-meta">
+  Mobile Live Layout Demo · 390px phone viewport ·
+  <a href="live-timing.html">← full responsive version</a> ·
+  <a href="index.html">index</a>
+</div>
+
+<!-- ─── Phone Frame ──────────────────────────────────────────────────────── -->
+<div class="phone-frame">
+
+  <!-- Session Banner (phone variant: session name + lap + track status) -->
+  <div class="sb">
+    <div class="sb-live-dot"></div>
+    <div class="sb-session">Monaco GP — Race</div>
+    <div class="sb-lap">Lap <span>47</span>/78</div>
+    <div class="sb-track-status sc">SC</div>
+  </div>
+
+  <!-- Disconnected state banner (hidden by default — uncomment class to preview) -->
+  <div class="disconnect-banner">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 1L13 12H1L7 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+      <path d="M7 5.5V8.5M7 10V10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    SSE disconnected — data may be stale
+    <button class="reconnect-btn">Reconnect</button>
+  </div>
+
+  <!-- Panel area — only one .phone-panel.active at a time -->
+  <div class="panel-area">
+
+    <!-- PANEL: Timing Tower (default active) -->
+    <div id="panel-tower" class="phone-panel active">
+      <table class="tower-table">
+        <thead>
+          <tr>
+            <th style="width:26px; text-align:center;">P</th>
+            <th class="col-driver" style="min-width:90px;">Driver</th>
+            <th style="min-width:58px;">Gap</th>
+            <th style="width:36px;">Tyre</th>
+            <th style="min-width:58px;">Last</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- P1 - Leclerc -->
+          <tr class="row-fl">
+            <td class="td-pos">1</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-fer);"></div>
+                <span class="driver-code">LEC</span>
+              </div>
+            </td>
+            <td class="td-gap leader">LEADER</td>
+            <td class="td-tyre"><span class="tyre-badge M">M</span></td>
+            <td class="td-last ob">1:14.812</td>
+          </tr>
+          <!-- P2 - Verstappen -->
+          <tr>
+            <td class="td-pos">2</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-rb);"></div>
+                <span class="driver-code">VER</span>
+              </div>
+            </td>
+            <td class="td-gap">+3.456</td>
+            <td class="td-tyre"><span class="tyre-badge M">M</span></td>
+            <td class="td-last">1:15.203</td>
+          </tr>
+          <!-- P3 - Norris (in pits during SC) -->
+          <tr class="row-pit">
+            <td class="td-pos">3</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-mcl);"></div>
+                <span class="driver-code">NOR</span>
+              </div>
+            </td>
+            <td class="td-gap">+8.102</td>
+            <td class="td-tyre"><span class="tyre-badge S">S</span></td>
+            <td class="td-last">1:16.044</td>
+          </tr>
+          <!-- P4 - Hamilton -->
+          <tr>
+            <td class="td-pos">4</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-fer);"></div>
+                <span class="driver-code">HAM</span>
+              </div>
+            </td>
+            <td class="td-gap">+11.723</td>
+            <td class="td-tyre"><span class="tyre-badge H">H</span></td>
+            <td class="td-last pb">1:15.991</td>
+          </tr>
+          <!-- P5 - Russell -->
+          <tr>
+            <td class="td-pos">5</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-mer);"></div>
+                <span class="driver-code">RUS</span>
+              </div>
+            </td>
+            <td class="td-gap">+14.088</td>
+            <td class="td-tyre"><span class="tyre-badge M">M</span></td>
+            <td class="td-last">1:16.388</td>
+          </tr>
+          <!-- P6 - Piastri -->
+          <tr>
+            <td class="td-pos">6</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-mcl);"></div>
+                <span class="driver-code">PIA</span>
+              </div>
+            </td>
+            <td class="td-gap">+18.430</td>
+            <td class="td-tyre"><span class="tyre-badge S">S</span></td>
+            <td class="td-last">1:16.701</td>
+          </tr>
+          <!-- P7 - Sainz -->
+          <tr>
+            <td class="td-pos">7</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: rgba(255,255,255,0.25);"></div>
+                <span class="driver-code">SAI</span>
+              </div>
+            </td>
+            <td class="td-gap">+22.115</td>
+            <td class="td-tyre"><span class="tyre-badge H">H</span></td>
+            <td class="td-last">1:16.924</td>
+          </tr>
+          <!-- P8 - Antonelli -->
+          <tr>
+            <td class="td-pos">8</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: var(--t-mer);"></div>
+                <span class="driver-code">ANT</span>
+              </div>
+            </td>
+            <td class="td-gap">+27.660</td>
+            <td class="td-tyre"><span class="tyre-badge M">M</span></td>
+            <td class="td-last">1:17.204</td>
+          </tr>
+          <!-- P9 - Alonso -->
+          <tr>
+            <td class="td-pos">9</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: rgba(0,143,93,0.9);"></div>
+                <span class="driver-code">ALO</span>
+              </div>
+            </td>
+            <td class="td-gap">+35.291</td>
+            <td class="td-tyre"><span class="tyre-badge H">H</span></td>
+            <td class="td-last">1:17.450</td>
+          </tr>
+          <!-- P10 - Gasly -->
+          <tr>
+            <td class="td-pos">10</td>
+            <td class="td-driver">
+              <div class="driver-cell">
+                <div class="team-bar" style="background: rgba(0,144,209,0.85);"></div>
+                <span class="driver-code">GAS</span>
+              </div>
+            </td>
+            <td class="td-gap">+42.880</td>
+            <td class="td-tyre"><span class="tyre-badge M">M</span></td>
+            <td class="td-last">1:17.692</td>
+          </tr>
+          <!-- P11-P15 (midfield) -->
+          <tr>
+            <td class="td-pos">11</td>
+            <td class="td-driver"><div class="driver-cell"><div class="team-bar" style="background: rgba(100,192,84,0.85);"></div><span class="driver-code">OCO</span></div></td>
+            <td class="td-gap">+51.334</td>
+            <td class="td-tyre"><span class="tyre-badge H">H</span></td>
+            <td class="td-last">1:18.103</td>
+          </tr>
+          <tr>
+            <td class="td-pos">12</td>
+            <td class="td-driver"><div class="driver-cell"><div class="team-bar" style="background: rgba(100,192,84,0.85);"></div><span class="driver-code">HUL</span></div></td>
+            <td class="td-gap">+55.771</td>
+            <td class="td-tyre"><span class="tyre-badge S">S</span></td>
+            <td class="td-last">1:18.320</td>
+          </tr>
+          <tr>
+            <td class="td-pos">13</td>
+            <td class="td-driver"><div class="driver-cell"><div class="team-bar" style="background: rgba(90,90,100,0.7);"></div><span class="driver-code">STR</span></div></td>
+            <td class="td-gap">+1:04.2</td>
+            <td class="td-tyre"><span class="tyre-badge M">M</span></td>
+            <td class="td-last">1:18.890</td>
+          </tr>
+          <tr>
+            <td class="td-pos">14</td>
+            <td class="td-driver"><div class="driver-cell"><div class="team-bar" style="background: rgba(200,175,60,0.75);"></div><span class="driver-code">TSU</span></div></td>
+            <td class="td-gap">+1 LAP</td>
+            <td class="td-tyre"><span class="tyre-badge H">H</span></td>
+            <td class="td-last">1:19.210</td>
+          </tr>
+          <!-- P15 — DNF -->
+          <tr class="row-dnf">
+            <td class="td-pos" style="color: var(--c-text-3);">15</td>
+            <td class="td-driver"><div class="driver-cell"><div class="team-bar" style="background: rgba(255,255,255,0.12);"></div><span class="driver-code">ZHO</span></div></td>
+            <td class="td-gap" style="color: var(--c-text-3);">DNF</td>
+            <td class="td-tyre"><span class="tyre-badge S" style="opacity:0.4;">S</span></td>
+            <td class="td-last" style="color: var(--c-text-3);">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PANEL: Race Control -->
+    <div id="panel-rc" class="phone-panel">
+      <div class="rc-panel-header">Race Control</div>
+      <ul class="rc-list">
+        <li class="rc-item sc">
+          <span class="rc-lap">L47</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">SAFETY CAR DEPLOYED — Incident at Turn 10 (Bottas, Albon)</span>
+        </li>
+        <li class="rc-item sc">
+          <span class="rc-lap">L47</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">PIT LANE OPEN during Safety Car period</span>
+        </li>
+        <li class="rc-item penalty">
+          <span class="rc-lap">L44</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text"><strong>VER</strong> — 5 SECOND PENALTY · Causing a collision with NOR at T1</span>
+        </li>
+        <li class="rc-item drs">
+          <span class="rc-lap">L42</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">DRS ENABLED — Zones 1, 2 and 3</span>
+        </li>
+        <li class="rc-item fl">
+          <span class="rc-lap">L41</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text"><strong>LEC</strong> — FASTEST LAP · 1:12.456 on Lap 41</span>
+        </li>
+        <li class="rc-item flag">
+          <span class="rc-lap">L38</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">RED FLAG — Track debris at Casino corner, extraction in progress</span>
+        </li>
+        <li class="rc-item info">
+          <span class="rc-lap">L38</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">RACE SUSPENDED · All cars to proceed to pit lane</span>
+        </li>
+        <li class="rc-item info">
+          <span class="rc-lap">L36</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">Stewards investigating incident between ALO and STR — Turn 6</span>
+        </li>
+        <li class="rc-item vsc">
+          <span class="rc-lap">L31</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">VIRTUAL SAFETY CAR DEPLOYED — Bottas car recovered to pit lane</span>
+        </li>
+        <li class="rc-item vsc">
+          <span class="rc-lap">L33</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">VIRTUAL SAFETY CAR ENDING — Racing to resume next lap</span>
+        </li>
+        <li class="rc-item drs">
+          <span class="rc-lap">L34</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">DRS ENABLED — Zones 1, 2 and 3</span>
+        </li>
+        <li class="rc-item info">
+          <span class="rc-lap">L28</span>
+          <div class="rc-dot"></div>
+          <span class="rc-text">Weather: Track Temp 44°C / Air Temp 28°C / Humidity 62%</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- PANEL: Battles + Pit Window -->
+    <div id="panel-battles" class="phone-panel">
+      <div class="battles-section">
+        <div class="section-label">On-Track Battles</div>
+
+        <div class="battle-row">
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: var(--t-fer);"></div>
+            <span class="bd-code">LEC</span>
+          </div>
+          <span class="battle-vs">vs</span>
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: var(--t-rb);"></div>
+            <span class="bd-code">VER</span>
+          </div>
+          <span class="battle-gap">3.456s</span>
+          <span class="battle-trend closing">↓ closing</span>
+        </div>
+
+        <div class="battle-row">
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: var(--t-fer);"></div>
+            <span class="bd-code">HAM</span>
+          </div>
+          <span class="battle-vs">vs</span>
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: var(--t-mer);"></div>
+            <span class="bd-code">RUS</span>
+          </div>
+          <span class="battle-gap">2.365s</span>
+          <span class="battle-trend stable">— stable</span>
+        </div>
+
+        <div class="battle-row">
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: var(--t-mcl);"></div>
+            <span class="bd-code">PIA</span>
+          </div>
+          <span class="battle-vs">vs</span>
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: rgba(255,255,255,0.25);"></div>
+            <span class="bd-code">SAI</span>
+          </div>
+          <span class="battle-gap">4.315s</span>
+          <span class="battle-trend closing">↓ closing</span>
+        </div>
+
+        <div class="battle-row">
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: rgba(0,143,93,0.9);"></div>
+            <span class="bd-code">ALO</span>
+          </div>
+          <span class="battle-vs">vs</span>
+          <div class="battle-driver">
+            <div class="bd-bar" style="background: rgba(0,144,209,0.85);"></div>
+            <span class="bd-code">GAS</span>
+          </div>
+          <span class="battle-gap">6.411s</span>
+          <span class="battle-trend opening">↑ opening</span>
+        </div>
+      </div>
+
+      <!-- Pit Window below battles in same panel -->
+      <div class="pit-section">
+        <div class="section-label">Pit Window</div>
+
+        <div class="pit-row">
+          <div class="pit-driver">
+            <div class="bd-bar" style="background: var(--t-rb);"></div>
+            <span class="bd-code">VER</span>
+            <span class="tyre-badge M" style="width:18px;height:18px;font-size:10px;">M</span>
+            <span class="pit-tyre-age">+24</span>
+          </div>
+          <span class="pit-status-badge overdue">OVERDUE</span>
+        </div>
+
+        <div class="pit-row">
+          <div class="pit-driver">
+            <div class="bd-bar" style="background: var(--t-fer);"></div>
+            <span class="bd-code">HAM</span>
+            <span class="tyre-badge H" style="width:18px;height:18px;font-size:10px;">H</span>
+            <span class="pit-tyre-age">+31</span>
+          </div>
+          <span class="pit-status-badge soon">SOON</span>
+        </div>
+
+        <div class="pit-row">
+          <div class="pit-driver">
+            <div class="bd-bar" style="background: var(--t-mer);"></div>
+            <span class="bd-code">RUS</span>
+            <span class="tyre-badge M" style="width:18px;height:18px;font-size:10px;">M</span>
+            <span class="pit-tyre-age">+19</span>
+          </div>
+          <span class="pit-status-badge open">OPEN</span>
+        </div>
+
+        <div class="pit-row">
+          <div class="pit-driver">
+            <div class="bd-bar" style="background: rgba(0,143,93,0.9);"></div>
+            <span class="bd-code">ALO</span>
+            <span class="tyre-badge H" style="width:18px;height:18px;font-size:10px;">H</span>
+            <span class="pit-tyre-age">+38</span>
+          </div>
+          <span class="pit-status-badge overdue">OVERDUE</span>
+        </div>
+
+        <div class="pit-row">
+          <div class="pit-driver">
+            <div class="bd-bar" style="background: var(--t-fer);"></div>
+            <span class="bd-code">LEC</span>
+            <span class="tyre-badge M" style="width:18px;height:18px;font-size:10px;">M</span>
+            <span class="pit-tyre-age">+12</span>
+          </div>
+          <span class="pit-status-badge done">DONE</span>
+        </div>
+
+        <div class="pit-row">
+          <div class="pit-driver">
+            <div class="bd-bar" style="background: var(--t-mcl);"></div>
+            <span class="bd-code">NOR</span>
+            <span class="tyre-badge S" style="width:18px;height:18px;font-size:10px;">S</span>
+            <span class="pit-tyre-age">+1</span>
+          </div>
+          <span class="pit-status-badge done">DONE</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panel-area -->
+
+  <!-- Bottom Tab Bar (always visible, fixed) -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-tower" onclick="switchTab('tower', this)">
+      <span class="tab-icon">⊞</span>
+      Tower
+    </button>
+    <button class="tab-btn" id="tab-rc" onclick="switchTab('rc', this)">
+      <span class="tab-icon tab-badge">📻</span>
+      Race Ctrl
+    </button>
+    <button class="tab-btn" id="tab-battles" onclick="switchTab('battles', this)">
+      <span class="tab-icon">⚔</span>
+      Battles
+    </button>
+  </div>
+
+</div><!-- /phone-frame -->
+
+<script>
+  function switchTab(panel, btn) {
+    // Update tab button states
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Show/hide panels
+    document.querySelectorAll('.phone-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + panel).classList.add('active');
+
+    // Clear RC badge on visit
+    if (panel === 'rc') {
+      const badge = document.querySelector('.tab-badge');
+      if (badge) badge.style.setProperty('--badge-content', '""');
+      // In React: mark messages as read via callback
+    }
+  }
+
+  // Demo: toggle the disconnect state by pressing 'd'
+  document.addEventListener('keydown', e => {
+    if (e.key === 'd') {
+      const banner = document.querySelector('.disconnect-banner');
+      banner.classList.toggle('show');
+    }
+    if (e.key === 's') {
+      // Cycle track status for demo
+      const s = document.querySelector('.sb-track-status');
+      const states = ['green', 'sc', 'yellow', 'red'];
+      const labels = { green: 'GREEN', sc: 'SC', yellow: 'VSC', red: 'RED' };
+      const cur = states.findIndex(x => s.classList.contains(x));
+      const next = states[(cur + 1) % states.length];
+      states.forEach(st => s.classList.remove(st));
+      s.classList.add(next);
+      s.textContent = labels[next];
+    }
+  });
+</script>
+</body>
+</html>

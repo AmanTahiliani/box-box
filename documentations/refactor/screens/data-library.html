@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>box-box — Data Library</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ── Layout ── */
+    .dl-layout {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      height: calc(100vh - 44px);
+      overflow: hidden;
+    }
+
+    /* ── Left: Season nav ── */
+    .dl-nav {
+      border-right: 1px solid var(--c-border);
+      padding: var(--s5);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s5);
+    }
+
+    .season-list { display: flex; flex-direction: column; gap: 1px; }
+
+    .season-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      padding: 7px var(--s3);
+      border-radius: 2px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .season-row:hover  { background: var(--c-surface-2); }
+    .season-row.active { background: var(--c-surface-2); color: var(--c-text); }
+
+    .season-row-count {
+      margin-left: auto;
+      font-size: 10px;
+      font-family: var(--f-mono);
+      color: var(--c-text-3);
+    }
+
+    /* Summary stats */
+    .dl-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      border: 1px solid var(--c-border);
+    }
+
+    .dl-stat {
+      padding: var(--s3) var(--s3);
+      background: var(--c-surface);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .dl-stat-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--c-text-3);
+    }
+
+    .dl-stat-val {
+      font-family: var(--f-mono);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    /* ── Right: Content ── */
+    .dl-content {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Content header */
+    .dl-content-header {
+      display: flex;
+      align-items: center;
+      gap: var(--s4);
+      padding: var(--s3) var(--s5);
+      background: var(--c-surface);
+      border-bottom: 1px solid var(--c-border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    /* Content body split */
+    .dl-content-body {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Round table */
+    .dl-round-scroll {
+      overflow-y: auto;
+      border-right: 1px solid var(--c-border);
+    }
+
+    .rounds-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .rounds-table th {
+      position: sticky;
+      top: 0;
+      padding: var(--s1) var(--pad-h);
+      background: var(--c-surface);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--c-text-3);
+      border-bottom: 1px solid var(--c-border);
+      white-space: nowrap;
+      z-index: 10;
+    }
+
+    .rounds-table td {
+      padding: var(--pad-v) var(--pad-h);
+      border-bottom: 1px solid var(--c-border);
+      height: var(--row-h);
+      white-space: nowrap;
+    }
+
+    .rounds-table tbody tr { cursor: pointer; transition: background 0.08s; }
+    .rounds-table tbody tr:hover  { background: var(--c-surface-2); }
+    .rounds-table tbody tr.active { background: var(--c-surface-3); }
+    .rounds-table tbody tr:last-child td { border-bottom: none; }
+
+    .session-icons {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+    }
+
+    .si {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 700;
+      font-family: var(--f-mono);
+    }
+
+    .si.full    { background: rgba(0,204,106,0.2);  color: var(--c-green); }
+    .si.partial { background: rgba(255,214,0,0.2);  color: var(--c-yellow); }
+    .si.missing { background: rgba(50,50,50,0.5);   color: var(--c-text-3); }
+    .si.live    { background: rgba(225,6,0,0.2);    color: var(--c-red); }
+    .si.future  { background: rgba(40,40,40,0.5);   color: var(--c-text-3); }
+
+    /* ── Detail panel ── */
+    .dl-detail {
+      overflow-y: auto;
+      padding: var(--s4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--s4);
+    }
+
+    .detail-header {
+      display: flex;
+      flex-direction: column;
+      gap: var(--s2);
+      padding-bottom: var(--s4);
+      border-bottom: 1px solid var(--c-border);
+    }
+
+    .detail-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .detail-meta {
+      font-size: 11px;
+      color: var(--c-text-3);
+    }
+
+    .session-detail-row {
+      margin-bottom: var(--s4);
+    }
+
+    .session-detail-head {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      margin-bottom: var(--s2);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--c-text-2);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .ingest-btn {
+      margin-left: auto;
+      padding: 2px 8px;
+      background: none;
+      border: 1px solid var(--c-border-2);
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--c-text-3);
+      letter-spacing: 0.04em;
+      transition: all 0.1s;
+      text-transform: uppercase;
+    }
+
+    .ingest-btn:hover {
+      border-color: var(--c-green);
+      color: var(--c-green);
+    }
+
+    .dataset-list { display: flex; flex-direction: column; }
+
+    .ds-row {
+      display: flex;
+      align-items: center;
+      gap: var(--s2);
+      padding: 4px 0;
+      border-bottom: 1px solid var(--c-border);
+      font-size: 11px;
+    }
+
+    .ds-row:last-child { border-bottom: none; }
+    .ds-row-name { flex: 1; color: var(--c-text-2); font-family: var(--f-mono); font-size: 10px; }
+    .ds-row-time { font-family: var(--f-mono); font-size: 10px; color: var(--c-text-3); }
+
+    /* ── Responsive ── */
+    /* ── iPad ── */
+    @media (max-width: 900px) {
+      .dl-layout { grid-template-columns: 1fr; height: auto; overflow: auto; }
+      .dl-nav { border-right: none; border-bottom: 1px solid var(--c-border); padding: var(--s4); }
+      /* On iPad, show season as horizontal tabs */
+      .season-list { flex-direction: row; gap: var(--s2); }
+      .dl-content { height: auto; overflow: visible; }
+      .dl-content-body { grid-template-columns: 1fr; height: auto; overflow: visible; }
+      .dl-round-scroll { border-right: none; overflow: visible; }
+      .dl-detail { border-top: 1px solid var(--c-border); }
+    }
+
+    /* ── Phone ── */
+    @media (max-width: 480px) {
+      .dl-stats { grid-template-columns: repeat(4, 1fr); }
+      .dl-content-body { display: block; }
+      .dl-round-scroll .rounds-table td:nth-child(3),
+      .dl-round-scroll .rounds-table th:nth-child(3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="app-nav">
+    <a href="index.html" class="nav-logo">box<em>-</em>box</a>
+    <div class="nav-links">
+      <a href="command-center.html">Command Center</a>
+      <a href="live-timing.html">Live</a>
+      <a href="race-hub.html">Race Hub</a>
+      <a href="data-library.html" class="active">Data Library</a>
+    </div>
+    <div class="nav-right">
+      <div class="density-toggle">
+        <button class="active" onclick="setDensity('default',this)">D</button>
+        <button onclick="setDensity('compact',this)">C</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="dl-layout">
+
+    <!-- ── Left: season nav ── -->
+    <aside class="dl-nav">
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Seasons</span>
+        </div>
+        <div class="season-list">
+          <div class="season-row active" onclick="selectSeason(this, '2025')">
+            <span class="dot local"></span>
+            <span>2025</span>
+            <span class="season-row-count">7 / 24</span>
+          </div>
+          <div class="season-row" onclick="selectSeason(this, '2024')">
+            <span class="dot local"></span>
+            <span>2024</span>
+            <span class="season-row-count">24 / 24</span>
+          </div>
+          <div class="season-row" onclick="selectSeason(this, '2023')">
+            <span class="dot missing"></span>
+            <span>2023</span>
+            <span class="season-row-count">0 / 22</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-header">
+          <span class="sec-title">Storage</span>
+        </div>
+        <div style="font-size:11px; display:flex; flex-direction:column; gap:5px;">
+          <div class="flex ai-c gap-2">
+            <span class="t3">Database</span>
+            <span class="mono t2" style="margin-left:auto">~/.cache/box-box/db.sqlite</span>
+          </div>
+          <div class="flex ai-c gap-2">
+            <span class="t3">Size</span>
+            <span class="mono t2" style="margin-left:auto">142 MB</span>
+          </div>
+          <div class="flex ai-c gap-2">
+            <span class="t3">Raw payloads</span>
+            <span class="mono t2" style="margin-left:auto">89 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="dl-stats">
+          <div class="dl-stat">
+            <span class="dl-stat-label">Full</span>
+            <span class="dl-stat-val t-green">7</span>
+          </div>
+          <div class="dl-stat">
+            <span class="dl-stat-label">Partial</span>
+            <span class="dl-stat-val t-yellow">2</span>
+          </div>
+          <div class="dl-stat">
+            <span class="dl-stat-label">Missing</span>
+            <span class="dl-stat-val t3">15</span>
+          </div>
+          <div class="dl-stat">
+            <span class="dl-stat-label">Live</span>
+            <span class="dl-stat-val t-red">1</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Right: content ── -->
+    <div class="dl-content">
+
+      <!-- Content header -->
+      <div class="dl-content-header">
+        <span style="font-size:13px; font-weight:700">2025 Season</span>
+        <span class="t3" style="font-size:12px">24 rounds · 7 complete · 2 partial · 1 live</span>
+
+        <div style="margin-left:auto; display:flex; gap:var(--s2)">
+          <select style="background:var(--c-surface-2); border:1px solid var(--c-border); border-radius:2px; color:var(--c-text-2); font-size:11px; padding:3px 6px; font-family:var(--f-ui)">
+            <option>All rounds</option>
+            <option>Complete only</option>
+            <option>Partial / missing</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="dl-content-body">
+
+        <!-- Round table -->
+        <div class="dl-round-scroll">
+          <table class="rounds-table">
+            <thead>
+              <tr>
+                <th style="width:32px">Rnd</th>
+                <th>Weekend</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th class="hide-mobile">Sessions</th>
+                <th class="hide-mobile">Last Sync</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr onclick="selectRound(this,'bahrain')" class="active">
+                <td class="mono t3" style="text-align:center">1</td>
+                <td><span style="font-weight:600">🇧🇭 Bahrain GP</span></td>
+                <td class="mono t3">2 Mar</td>
+                <td><span class="badge local"><span class="dot local"></span>Full</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">2d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'saudi')">
+                <td class="mono t3" style="text-align:center">2</td>
+                <td><span style="font-weight:600">🇸🇦 Saudi Arabia GP</span></td>
+                <td class="mono t3">16 Mar</td>
+                <td><span class="badge local"><span class="dot local"></span>Full</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">5d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'australia')">
+                <td class="mono t3" style="text-align:center">3</td>
+                <td><span style="font-weight:600">🇦🇺 Australian GP</span></td>
+                <td class="mono t3">30 Mar</td>
+                <td><span class="badge local"><span class="dot local"></span>Full</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">8d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'japan')">
+                <td class="mono t3" style="text-align:center">4</td>
+                <td><span style="font-weight:600">🇯🇵 Japanese GP</span></td>
+                <td class="mono t3">13 Apr</td>
+                <td><span class="badge partial"><span class="dot partial"></span>Partial</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si partial">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">21d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'china')">
+                <td class="mono t3" style="text-align:center">5</td>
+                <td><span style="font-weight:600">🇨🇳 Chinese GP</span></td>
+                <td class="mono t3">20 Apr</td>
+                <td><span class="badge partial"><span class="dot partial"></span>Partial</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si missing">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">28d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'miami')">
+                <td class="mono t3" style="text-align:center">6</td>
+                <td><span style="font-weight:600">🇺🇸 Miami GP</span></td>
+                <td class="mono t3">4 May</td>
+                <td><span class="badge local"><span class="dot local"></span>Full</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">14d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'imola')">
+                <td class="mono t3" style="text-align:center">7</td>
+                <td><span style="font-weight:600">🇮🇹 Emilia Romagna GP</span></td>
+                <td class="mono t3">18 May</td>
+                <td><span class="badge local"><span class="dot local"></span>Full</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si full">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">3d ago</td>
+              </tr>
+              <tr onclick="selectRound(this,'monaco')">
+                <td class="mono t3" style="text-align:center">8</td>
+                <td><span style="font-weight:600">🇲🇨 Monaco GP</span></td>
+                <td class="mono t3">25 May</td>
+                <td><span class="badge live"><span class="dot live"></span>Live</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si full">F1</div>
+                    <div class="si full">F2</div>
+                    <div class="si full">F3</div>
+                    <div class="si full">Q</div>
+                    <div class="si live">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">Now</td>
+              </tr>
+              <tr onclick="selectRound(this,'canada')">
+                <td class="mono t3" style="text-align:center">9</td>
+                <td><span class="t3">🇨🇦 Canadian GP</span></td>
+                <td class="mono t3">13 Jun</td>
+                <td><span class="badge missing"><span class="dot missing"></span>Missing</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si future">F1</div>
+                    <div class="si future">F2</div>
+                    <div class="si future">F3</div>
+                    <div class="si future">Q</div>
+                    <div class="si future">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">—</td>
+              </tr>
+              <tr>
+                <td class="mono t3" style="text-align:center">10</td>
+                <td><span class="t3">🇦🇹 Austrian GP</span></td>
+                <td class="mono t3">27 Jun</td>
+                <td><span class="badge missing"><span class="dot missing"></span>Missing</span></td>
+                <td class="hide-mobile">
+                  <div class="session-icons">
+                    <div class="si future">F1</div>
+                    <div class="si future">F2</div>
+                    <div class="si future">F3</div>
+                    <div class="si future">Q</div>
+                    <div class="si future">R</div>
+                  </div>
+                </td>
+                <td class="mono t3 hide-mobile">—</td>
+              </tr>
+              <tr>
+                <td class="mono t3" style="text-align:center" colspan="6" style="text-align:left; padding: var(--s3) var(--pad-h); color:var(--c-text-3); font-size:11px">
+                  + 14 upcoming rounds not yet available
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Detail panel -->
+        <div class="dl-detail" id="detail-panel">
+
+          <div class="detail-header">
+            <div style="display:flex; align-items:center; gap:var(--s2)">
+              <span class="detail-title">🇧🇭 Bahrain Grand Prix</span>
+              <span class="badge local">Full</span>
+            </div>
+            <div class="detail-meta">Round 1 · 2 March 2025 · meeting_key 1230</div>
+            <div class="detail-meta">Ingested: 2 Mar 2025 18:42 · 142 MB across 5 sessions</div>
+          </div>
+
+          <!-- FP1 -->
+          <div class="session-detail-row">
+            <div class="session-detail-head">
+              <span class="dot local"></span> FP1
+              <span class="t3" style="font-weight:400; text-transform:none; letter-spacing:0">session_key 9120</span>
+            </div>
+            <div class="dataset-list">
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">laps</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">stints</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">weather</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot missing"></span><span class="ds-row-name">car_data_samples</span><span class="ds-row-time t3">not ingested</span></div>
+            </div>
+          </div>
+
+          <!-- Race -->
+          <div class="session-detail-row">
+            <div class="session-detail-head">
+              <span class="dot local"></span> Race
+              <span class="t3" style="font-weight:400; text-transform:none; letter-spacing:0">session_key 9125</span>
+              <button class="ingest-btn">↓ Refresh</button>
+            </div>
+            <div class="dataset-list">
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">session_results</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">starting_grid</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">laps</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">stints</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">pit_stops</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">positions</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">race_control</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot local"></span><span class="ds-row-name">weather</span><span class="ds-row-time">2d ago</span></div>
+              <div class="ds-row"><span class="dot missing"></span><span class="ds-row-name">car_data_samples</span><span class="ds-row-time t3">not ingested</span></div>
+              <div class="ds-row"><span class="dot missing"></span><span class="ds-row-name">location_samples</span><span class="ds-row-time t3">not ingested</span></div>
+              <div class="ds-row"><span class="dot missing"></span><span class="ds-row-name">team_radio</span><span class="ds-row-time t3">not ingested</span></div>
+            </div>
+          </div>
+
+          <!-- CLI -->
+          <div>
+            <div class="sec-header">
+              <span class="sec-title">Ingest Commands</span>
+            </div>
+            <div class="cli-block">
+              <div class="comment"># Full weekend ingest (all sessions, default datasets)</div>
+              <div class="cmd">box-box --ingest-meeting 1230</div>
+              <br>
+              <div class="comment"># Race session only</div>
+              <div class="cmd">box-box --ingest-session 9125</div>
+              <br>
+              <div class="comment"># High-volume telemetry (explicit, large download)</div>
+              <div class="cmd">box-box --ingest-session 9125 --datasets car_data,location</div>
+              <br>
+              <div class="comment"># Preview without downloading</div>
+              <div class="cmd">box-box --ingest-meeting 1230 --dry-run</div>
+            </div>
+          </div>
+
+        </div><!-- /dl-detail -->
+
+      </div><!-- /dl-content-body -->
+
+    </div><!-- /dl-content -->
+
+  </div><!-- /dl-layout -->
+
+  <script>
+    function setDensity(mode, btn) {
+      document.querySelectorAll('.density-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.documentElement.classList.toggle('compact', mode === 'compact');
+    }
+
+    function selectSeason(el, season) {
+      document.querySelectorAll('.season-row').forEach(r => r.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    function selectRound(row, id) {
+      document.querySelectorAll('.rounds-table tbody tr').forEach(r => r.classList.remove('active'));
+      row.classList.add('active');
+    }
+  </script>
+</body>
+</html>

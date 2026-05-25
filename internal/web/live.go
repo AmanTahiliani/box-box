@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AmanTahiliani/box-box/internal/ui"
+	"github.com/AmanTahiliani/box-box/internal/live"
 )
 
 // sseClient is a connected SSE subscriber.
@@ -30,7 +30,7 @@ type SSEHub struct {
 	broadcast  chan sseEvent
 
 	mu           sync.RWMutex
-	lastSnapshot *ui.LiveStreamData
+	lastSnapshot *live.LiveStreamData
 	isLive       bool
 }
 
@@ -87,7 +87,7 @@ func formatSSEFrame(event string, data []byte) []byte {
 }
 
 // Snapshot returns the latest live data snapshot and whether a session is active.
-func (h *SSEHub) Snapshot() (*ui.LiveStreamData, bool) {
+func (h *SSEHub) Snapshot() (*live.LiveStreamData, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.lastSnapshot, h.isLive
@@ -134,9 +134,9 @@ func (s *Server) signalRLoop() {
 // connectAndDrain establishes a SignalR connection and drains the data channel
 // until the feed goes silent for 60 seconds.
 func (s *Server) connectAndDrain() error {
-	dataChan := make(chan ui.LiveStreamData, 16)
+	dataChan := make(chan live.LiveStreamData, 16)
 
-	if err := ui.ConnectToF1LiveTiming(dataChan); err != nil {
+	if err := live.ConnectToF1LiveTiming(dataChan); err != nil {
 		return err
 	}
 	log.Printf("web: live feed connected")
