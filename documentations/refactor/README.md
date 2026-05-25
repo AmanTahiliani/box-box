@@ -73,8 +73,10 @@ not implementation tickets yet.
   adding local-first season/weekend navigation around Race Hub.
 - [19 Phase 11 Weekend Ingestion](19-phase-11-weekend-ingestion.md): backend
   slice for making one command ingest a whole race weekend into the local DB.
-- [Cursor Phase 11 Prompt](cursor-phase-11-weekend-ingestion-prompt.md):
-  current handoff prompt for the next backend phase.
+- [20 Phase 12 Data Library UI](20-phase-12-data-library-ui.md): frontend slice
+  for showing local ingestion coverage and next CLI actions.
+- [Cursor Phase 12 Prompt](cursor-phase-12-data-library-ui-prompt.md): current
+  handoff prompt for the next frontend phase.
 
 ## External References
 

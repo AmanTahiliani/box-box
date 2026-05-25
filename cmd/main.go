@@ -19,7 +19,7 @@ func main() {
 	webMode := flag.Bool("web", false, "Start web companion server instead of TUI")
 	port := flag.Int("port", 8080, "Port for web server (used with --web)")
 	ingestYear := flag.Int("ingest-year", 0, "Ingest OpenF1 meetings for a season year")
-	ingestMeeting := flag.Int("ingest-meeting", 0, "Ingest OpenF1 sessions for a meeting key")
+	ingestMeeting := flag.Int("ingest-meeting", 0, "Ingest meeting metadata and Race Hub datasets for all sessions")
 	ingestSession := flag.Int("ingest-session", 0, "Ingest Race Hub datasets for a session key")
 	dryRun := flag.Bool("dry-run", false, "Preview ingestion without writing domain rows")
 	dbPath := flag.String("db", "", "Domain database path (default: ~/.local/share/box-box/boxbox.db)")

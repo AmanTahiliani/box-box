@@ -31,26 +31,34 @@ func DefaultOptions() Options {
 	}
 }
 
+// SessionSummary captures the outcome of ingesting one session within a meeting run.
+type SessionSummary struct {
+	SessionKey  int     `json:"session_key"`
+	SessionName string  `json:"session_name,omitempty"`
+	Summary     Summary `json:"summary"`
+}
+
 // Summary captures the outcome of an ingestion run.
 type Summary struct {
-	ScopeType      string   `json:"scope_type"`
-	ScopeKey       string   `json:"scope_key"`
-	Status         string   `json:"status"`
-	DryRun         bool     `json:"dry_run"`
-	Meetings       int      `json:"meetings"`
-	Sessions       int      `json:"sessions"`
-	Drivers        int      `json:"drivers"`
-	SessionResults int      `json:"session_results"`
-	StartingGrid   int      `json:"starting_grid"`
-	Stints         int      `json:"stints"`
-	PitStops       int      `json:"pit_stops"`
-	Positions      int      `json:"positions"`
-	RaceControl    int      `json:"race_control"`
-	Weather        int      `json:"weather"`
-	Laps           int      `json:"laps"`
-	RawPayloads    int      `json:"raw_payloads"`
-	RawInserted    int      `json:"raw_inserted"`
-	Errors         []string `json:"errors,omitempty"`
+	ScopeType        string           `json:"scope_type"`
+	ScopeKey         string           `json:"scope_key"`
+	Status           string           `json:"status"`
+	DryRun           bool             `json:"dry_run"`
+	Meetings         int              `json:"meetings"`
+	Sessions         int              `json:"sessions"`
+	Drivers          int              `json:"drivers"`
+	SessionResults   int              `json:"session_results"`
+	StartingGrid     int              `json:"starting_grid"`
+	Stints           int              `json:"stints"`
+	PitStops         int              `json:"pit_stops"`
+	Positions        int              `json:"positions"`
+	RaceControl      int              `json:"race_control"`
+	Weather          int              `json:"weather"`
+	Laps             int              `json:"laps"`
+	RawPayloads      int              `json:"raw_payloads"`
+	RawInserted      int              `json:"raw_inserted"`
+	SessionSummaries []SessionSummary `json:"session_summaries,omitempty"`
+	Errors           []string         `json:"errors,omitempty"`
 }
 
 // Service orchestrates OpenF1-to-store ingestion workflows.
@@ -130,7 +138,7 @@ func (s *Service) IngestYear(year int) (Summary, error) {
 	return summary, nil
 }
 
-// IngestMeeting fetches meeting metadata and all sessions for a meeting key.
+// IngestMeeting fetches meeting metadata, all sessions, and Race Hub datasets for each session.
 func (s *Service) IngestMeeting(meetingKey int) (Summary, error) {
 	summary := Summary{
 		ScopeType: "meeting",
@@ -205,9 +213,37 @@ func (s *Service) IngestMeeting(meetingKey int) (Summary, error) {
 		summary.Sessions++
 	}
 
-	summary.Status = statusForDryRun(s.opts.DryRun)
+	sessionFailures := 0
+	for _, sess := range sessions {
+		s.opts.Progress.Step("ingesting Race Hub datasets for session %d (%s)", sess.SessionKey, sess.SessionName)
+		sessSummary, err := s.ingestSessionDatasets(sess.SessionKey, meetingKey)
+		ss := SessionSummary{
+			SessionKey:  sess.SessionKey,
+			SessionName: sess.SessionName,
+			Summary:     sessSummary,
+		}
+		if err != nil {
+			sessionFailures++
+			ss.Summary.Status = "failed"
+			ss.Summary.Errors = append(ss.Summary.Errors, err.Error())
+			summary.Errors = append(summary.Errors, fmt.Sprintf(
+				"session %d (%s): %v", sess.SessionKey, sess.SessionName, err,
+			))
+		}
+		summary.SessionSummaries = append(summary.SessionSummaries, ss)
+		summary.mergeCounts(sessSummary)
+	}
+
+	summary.Status = meetingStatus(sessionFailures, len(sessions), s.opts.DryRun)
 	s.finishRun(runID, summary)
 	s.opts.Progress.Summary(summary)
+
+	if sessionFailures > 0 {
+		return summary, fmt.Errorf(
+			"meeting %d: %d of %d session(s) failed",
+			meetingKey, sessionFailures, len(sessions),
+		)
+	}
 	return summary, nil
 }
 
@@ -287,28 +323,48 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 		summary.Sessions++
 	}
 
+	datasetSummary, err := s.ingestSessionDatasets(sessionKey, meetingKey)
+	summary.mergeCounts(datasetSummary)
+	if err != nil {
+		return s.finishFailed(runID, summary, err)
+	}
+
+	summary.Status = statusForDryRun(s.opts.DryRun)
+	s.finishRun(runID, summary)
+	s.opts.Progress.Summary(summary)
+	return summary, nil
+}
+
+func (s *Service) ingestSessionDatasets(sessionKey, meetingKey int) (Summary, error) {
+	summary := Summary{
+		ScopeType: "session",
+		ScopeKey:  fmt.Sprintf("%d", sessionKey),
+		DryRun:    s.opts.DryRun,
+	}
+	sk := sessionKey
+
 	s.opts.Progress.Step("fetching drivers for session %d", sessionKey)
 	driverFetch, drivers, err := fetchWithRetry(s, func() (FetchResult, []models.Driver, error) {
 		return s.source.FetchDriversForSession(sessionKey)
 	})
 	if err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	summary.RawPayloads++
 	if !s.opts.DryRun {
 		inserted, err := s.storeRaw(driverFetch, &meetingKey, &sk)
 		if err != nil {
-			return s.finishFailed(runID, summary, err)
+			return summary, err
 		}
 		if inserted {
 			summary.RawInserted++
 		}
 		for _, d := range drivers {
 			if err := s.store.UpsertDriver(driverToStore(d)); err != nil {
-				return s.finishFailed(runID, summary, err)
+				return summary, err
 			}
 			if err := s.store.UpsertSessionDriver(sessionDriverToStore(d)); err != nil {
-				return s.finishFailed(runID, summary, err)
+				return summary, err
 			}
 			summary.Drivers++
 		}
@@ -322,20 +378,20 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 		return s.source.FetchSessionResult(sessionKey)
 	})
 	if err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	summary.RawPayloads++
 	if !s.opts.DryRun {
 		inserted, err := s.storeRaw(resultFetch, &meetingKey, &sk)
 		if err != nil {
-			return s.finishFailed(runID, summary, err)
+			return summary, err
 		}
 		if inserted {
 			summary.RawInserted++
 		}
 		for _, r := range results {
 			if err := s.store.UpsertSessionResult(sessionResultToStore(r)); err != nil {
-				return s.finishFailed(runID, summary, err)
+				return summary, err
 			}
 			summary.SessionResults++
 		}
@@ -349,20 +405,20 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 		return s.source.FetchStartingGrid(sessionKey)
 	})
 	if err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	summary.RawPayloads++
 	if !s.opts.DryRun {
 		inserted, err := s.storeRaw(gridFetch, &meetingKey, &sk)
 		if err != nil {
-			return s.finishFailed(runID, summary, err)
+			return summary, err
 		}
 		if inserted {
 			summary.RawInserted++
 		}
 		for _, g := range grid {
 			if err := s.store.UpsertStartingGridEntry(startingGridToStore(g)); err != nil {
-				return s.finishFailed(runID, summary, err)
+				return summary, err
 			}
 			summary.StartingGrid++
 		}
@@ -372,28 +428,53 @@ func (s *Service) IngestSession(sessionKey int) (Summary, error) {
 	s.delay()
 
 	if err := s.ingestStints(&summary, meetingKey, sk); err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	if err := s.ingestPitStops(&summary, meetingKey, sk); err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	if err := s.ingestPositions(&summary, meetingKey, sk); err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	if err := s.ingestRaceControl(&summary, meetingKey, sk); err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	if err := s.ingestWeather(&summary, meetingKey, sk); err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 	if err := s.ingestLaps(&summary, meetingKey, sk); err != nil {
-		return s.finishFailed(runID, summary, err)
+		return summary, err
 	}
 
 	summary.Status = statusForDryRun(s.opts.DryRun)
-	s.finishRun(runID, summary)
-	s.opts.Progress.Summary(summary)
 	return summary, nil
+}
+
+func (s *Summary) mergeCounts(other Summary) {
+	s.Drivers += other.Drivers
+	s.SessionResults += other.SessionResults
+	s.StartingGrid += other.StartingGrid
+	s.Stints += other.Stints
+	s.PitStops += other.PitStops
+	s.Positions += other.Positions
+	s.RaceControl += other.RaceControl
+	s.Weather += other.Weather
+	s.Laps += other.Laps
+	s.RawPayloads += other.RawPayloads
+	s.RawInserted += other.RawInserted
+}
+
+func meetingStatus(sessionFailures, sessionTotal int, dryRun bool) string {
+	if dryRun {
+		return "dry_run"
+	}
+	if sessionFailures == 0 {
+		return "completed"
+	}
+	if sessionFailures == sessionTotal {
+		return "failed"
+	}
+	return "partial"
 }
 
 func (s *Service) beginRun(scopeType, scopeKey string) (int64, error) {

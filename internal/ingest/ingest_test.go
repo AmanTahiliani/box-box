@@ -28,6 +28,7 @@ type fakeSource struct {
 	weather           map[int][]models.Weather
 	laps              map[int][]models.Lap
 	failOn            string
+	failSession       map[int]string
 	liveLockout       bool
 }
 
@@ -54,6 +55,16 @@ func (f *fakeSource) maybeFail(endpoint string) error {
 		return fmt.Errorf("%w", api.ErrLiveSessionLocked)
 	}
 	if f.failOn == endpoint {
+		return errors.New("simulated fetch failure")
+	}
+	return nil
+}
+
+func (f *fakeSource) maybeFailSession(sessionKey int, endpoint string) error {
+	if err := f.maybeFail(endpoint); err != nil {
+		return err
+	}
+	if f.failSession != nil && f.failSession[sessionKey] == endpoint {
 		return errors.New("simulated fetch failure")
 	}
 	return nil
@@ -103,7 +114,7 @@ func (f *fakeSource) FetchSessionsForSessionKey(sessionKey int) (FetchResult, []
 }
 
 func (f *fakeSource) FetchDriversForSession(sessionKey int) (FetchResult, []models.Driver, error) {
-	if err := f.maybeFail("drivers"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "drivers"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.drivers[sessionKey]
@@ -111,7 +122,7 @@ func (f *fakeSource) FetchDriversForSession(sessionKey int) (FetchResult, []mode
 }
 
 func (f *fakeSource) FetchSessionResult(sessionKey int) (FetchResult, []models.SessionResult, error) {
-	if err := f.maybeFail("session_result"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "session_result"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.results[sessionKey]
@@ -119,7 +130,7 @@ func (f *fakeSource) FetchSessionResult(sessionKey int) (FetchResult, []models.S
 }
 
 func (f *fakeSource) FetchStartingGrid(sessionKey int) (FetchResult, []models.StartingGrid, error) {
-	if err := f.maybeFail("starting_grid"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "starting_grid"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.grid[sessionKey]
@@ -127,7 +138,7 @@ func (f *fakeSource) FetchStartingGrid(sessionKey int) (FetchResult, []models.St
 }
 
 func (f *fakeSource) FetchStintsForSession(sessionKey int) (FetchResult, []models.Stint, error) {
-	if err := f.maybeFail("stints"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "stints"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.stints[sessionKey]
@@ -135,7 +146,7 @@ func (f *fakeSource) FetchStintsForSession(sessionKey int) (FetchResult, []model
 }
 
 func (f *fakeSource) FetchPitStopsForSession(sessionKey int) (FetchResult, []models.Pit, error) {
-	if err := f.maybeFail("pit"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "pit"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.pitStops[sessionKey]
@@ -143,7 +154,7 @@ func (f *fakeSource) FetchPitStopsForSession(sessionKey int) (FetchResult, []mod
 }
 
 func (f *fakeSource) FetchPositionsForSession(sessionKey int) (FetchResult, []models.Position, error) {
-	if err := f.maybeFail("position"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "position"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.positions[sessionKey]
@@ -151,7 +162,7 @@ func (f *fakeSource) FetchPositionsForSession(sessionKey int) (FetchResult, []mo
 }
 
 func (f *fakeSource) FetchRaceControlForSession(sessionKey int) (FetchResult, []models.RaceControl, error) {
-	if err := f.maybeFail("race_control"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "race_control"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.raceControl[sessionKey]
@@ -159,7 +170,7 @@ func (f *fakeSource) FetchRaceControlForSession(sessionKey int) (FetchResult, []
 }
 
 func (f *fakeSource) FetchWeatherForSession(sessionKey int) (FetchResult, []models.Weather, error) {
-	if err := f.maybeFail("weather"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "weather"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.weather[sessionKey]
@@ -167,7 +178,7 @@ func (f *fakeSource) FetchWeatherForSession(sessionKey int) (FetchResult, []mode
 }
 
 func (f *fakeSource) FetchLapsForSession(sessionKey int) (FetchResult, []models.Lap, error) {
-	if err := f.maybeFail("laps"); err != nil {
+	if err := f.maybeFailSession(sessionKey, "laps"); err != nil {
 		return FetchResult{}, nil, err
 	}
 	data := f.laps[sessionKey]
@@ -259,6 +270,45 @@ func testSessionFixtures() (int, int, *fakeSource) {
 	}
 
 	return meetingKey, sessionKey, src
+}
+
+func testWeekendFixtures() (int, int, int, *fakeSource) {
+	meetingKey, raceKey, src := testSessionFixtures()
+	const qualiKey = 9473
+
+	src.sessionsByMeeting[meetingKey] = []models.Session{
+		{SessionKey: qualiKey, MeetingKey: meetingKey, SessionName: "Qualifying", SessionType: "Qualifying", CircuitKey: 10},
+		{SessionKey: raceKey, MeetingKey: meetingKey, SessionName: "Race", SessionType: "Race", CircuitKey: 10},
+	}
+	src.sessionsByKey[qualiKey] = []models.Session{src.sessionsByMeeting[meetingKey][0]}
+	src.drivers[qualiKey] = []models.Driver{
+		{
+			DriverNumber: 1,
+			FullName:     "Max Verstappen",
+			SessionKey:   qualiKey,
+			MeetingKey:   meetingKey,
+			TeamName:     "Red Bull Racing",
+			TeamColour:   "3671C6",
+		},
+		{
+			DriverNumber: 44,
+			FullName:     "Lewis Hamilton",
+			SessionKey:   qualiKey,
+			MeetingKey:   meetingKey,
+			TeamName:     "Ferrari",
+			TeamColour:   "E8002D",
+		},
+	}
+	src.results[qualiKey] = []models.SessionResult{
+		{SessionKey: qualiKey, MeetingKey: meetingKey, DriverNumber: 1, Position: 1},
+		{SessionKey: qualiKey, MeetingKey: meetingKey, DriverNumber: 44, Position: 2, GapToLeader: 0.2},
+	}
+	src.grid[qualiKey] = []models.StartingGrid{
+		{SessionKey: qualiKey, MeetingKey: meetingKey, DriverNumber: 1, Position: 1, LapDuration: 71.1},
+		{SessionKey: qualiKey, MeetingKey: meetingKey, DriverNumber: 44, Position: 2, LapDuration: 71.3},
+	}
+
+	return meetingKey, qualiKey, raceKey, src
 }
 
 func ptrFloat64(v float64) *float64 {
@@ -474,5 +524,84 @@ func TestIngestYearAndMeeting(t *testing.T) {
 	}
 	if meetingSummary.Sessions != 1 {
 		t.Fatalf("meeting sessions = %d, want 1", meetingSummary.Sessions)
+	}
+}
+
+func TestIngestMeetingWeekendIngestsAllSessions(t *testing.T) {
+	meetingKey, qualiKey, raceKey, src := testWeekendFixtures()
+	st := openTestStore(t)
+
+	opts := DefaultOptions()
+	opts.RequestDelay = 0
+	svc := NewService(st, src, opts)
+
+	summary, err := svc.IngestMeeting(meetingKey)
+	if err != nil {
+		t.Fatalf("IngestMeeting() error = %v", err)
+	}
+	if summary.Status != "completed" {
+		t.Fatalf("summary.Status = %q, want completed", summary.Status)
+	}
+	if summary.Sessions != 2 {
+		t.Fatalf("summary.Sessions = %d, want 2", summary.Sessions)
+	}
+	if len(summary.SessionSummaries) != 2 {
+		t.Fatalf("session summaries = %d, want 2", len(summary.SessionSummaries))
+	}
+	if summary.Drivers != 4 {
+		t.Fatalf("summary.Drivers = %d, want 4 (2 per session)", summary.Drivers)
+	}
+	if summary.SessionResults != 4 {
+		t.Fatalf("summary.SessionResults = %d, want 4", summary.SessionResults)
+	}
+
+	for _, sk := range []int{qualiKey, raceKey} {
+		drivers, err := st.ListSessionDrivers(sk)
+		if err != nil || len(drivers) != 2 {
+			t.Fatalf("session %d drivers = %+v, err = %v, want 2", sk, drivers, err)
+		}
+		results, err := st.ListSessionResults(sk)
+		if err != nil || len(results) != 2 {
+			t.Fatalf("session %d results = %+v, err = %v, want 2", sk, results, err)
+		}
+	}
+}
+
+func TestIngestMeetingPartialFailurePreservesSuccessfulSessions(t *testing.T) {
+	meetingKey, qualiKey, raceKey, src := testWeekendFixtures()
+	src.failSession = map[int]string{qualiKey: "session_result"}
+	st := openTestStore(t)
+
+	opts := DefaultOptions()
+	opts.RequestDelay = 0
+	svc := NewService(st, src, opts)
+
+	summary, err := svc.IngestMeeting(meetingKey)
+	if err == nil {
+		t.Fatal("IngestMeeting() expected partial failure error, got nil")
+	}
+	if summary.Status != "partial" {
+		t.Fatalf("summary.Status = %q, want partial", summary.Status)
+	}
+	if len(summary.Errors) != 1 {
+		t.Fatalf("summary.Errors = %v, want 1 entry", summary.Errors)
+	}
+
+	raceDrivers, err := st.ListSessionDrivers(raceKey)
+	if err != nil || len(raceDrivers) != 2 {
+		t.Fatalf("race session drivers = %+v, err = %v, want 2 preserved", raceDrivers, err)
+	}
+
+	qualiResults, err := st.ListSessionResults(qualiKey)
+	if err != nil {
+		t.Fatalf("ListSessionResults(quali) error = %v", err)
+	}
+	if len(qualiResults) != 0 {
+		t.Fatalf("quali session_results after failure = %d, want 0", len(qualiResults))
+	}
+
+	meetings, err := st.ListMeetingsByYear(2025)
+	if err != nil || len(meetings) != 1 {
+		t.Fatalf("meetings after partial failure = %+v, err = %v, want 1 meeting preserved", meetings, err)
 	}
 }
