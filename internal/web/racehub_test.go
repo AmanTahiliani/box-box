@@ -150,3 +150,96 @@ func TestHandleRaceHubRequiresSessionKey(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }
+
+func TestHandleSeasonsEmpty(t *testing.T) {
+	srv := testServer(t, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/seasons", nil)
+	rec := httptest.NewRecorder()
+
+	srv.handleSeasons(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var years []int
+	if err := json.Unmarshal(rec.Body.Bytes(), &years); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(years) != 0 {
+		t.Fatalf("years = %v, want empty", years)
+	}
+}
+
+func TestHandleSeasonsWithData(t *testing.T) {
+	st := openTestStore(t)
+	seedRaceHubStore(t, st)
+	srv := testServer(t, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/seasons", nil)
+	rec := httptest.NewRecorder()
+	srv.handleSeasons(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var years []int
+	if err := json.Unmarshal(rec.Body.Bytes(), &years); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(years) != 1 || years[0] != 2025 {
+		t.Fatalf("years = %v, want [2025]", years)
+	}
+}
+
+func TestHandleWeekendNotFound(t *testing.T) {
+	st := openTestStore(t)
+	srv := testServer(t, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/weekend?meeting_key=1229", nil)
+	rec := httptest.NewRecorder()
+	srv.handleWeekend(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestHandleWeekendWithData(t *testing.T) {
+	st := openTestStore(t)
+	seedRaceHubStore(t, st)
+	srv := testServer(t, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/weekend?meeting_key=1229", nil)
+	rec := httptest.NewRecorder()
+	srv.handleWeekend(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var weekend query.Weekend
+	if err := json.Unmarshal(rec.Body.Bytes(), &weekend); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if weekend.Meeting.MeetingName != "Monaco" {
+		t.Fatalf("meeting = %q, want Monaco", weekend.Meeting.MeetingName)
+	}
+	if len(weekend.Sessions) != 1 {
+		t.Fatalf("sessions len = %d, want 1", len(weekend.Sessions))
+	}
+	if weekend.DefaultSessionKey != 9472 {
+		t.Fatalf("default_session_key = %d, want 9472", weekend.DefaultSessionKey)
+	}
+}
+
+func TestHandleWeekendRequiresMeetingKey(t *testing.T) {
+	srv := testServer(t, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/weekend", nil)
+	rec := httptest.NewRecorder()
+
+	srv.handleWeekend(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}

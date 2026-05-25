@@ -319,6 +319,25 @@ func TestMeetingSessionDriverUpsertsAreIdempotent(t *testing.T) {
 		t.Fatalf("ListSessionsByMeeting() len = %d, want 1", len(sessions))
 	}
 
+	years, err := s.ListYears()
+	if err != nil {
+		t.Fatalf("ListYears() error = %v", err)
+	}
+	if len(years) != 1 || years[0] != 2025 {
+		t.Fatalf("ListYears() = %v, want [2025]", years)
+	}
+
+	counts, err := s.CountSessionDatasets(session.SessionKey)
+	if err != nil {
+		t.Fatalf("CountSessionDatasets() error = %v", err)
+	}
+	if counts.Drivers != 1 {
+		t.Fatalf("CountSessionDatasets().Drivers = %d, want 1", counts.Drivers)
+	}
+	if counts.Results != 0 {
+		t.Fatalf("CountSessionDatasets().Results = %d, want 0", counts.Results)
+	}
+
 	sessionDrivers, err := s.ListSessionDrivers(session.SessionKey)
 	if err != nil {
 		t.Fatalf("ListSessionDrivers() error = %v", err)

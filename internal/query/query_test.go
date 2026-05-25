@@ -2,6 +2,7 @@ package query
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -236,5 +237,79 @@ func TestListDriversRequiresSession(t *testing.T) {
 	}
 	if err != sql.ErrNoRows {
 		t.Fatalf("ListDrivers() error = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestListSeasonsEmpty(t *testing.T) {
+	svc := openTestService(t)
+
+	years, err := svc.ListSeasons()
+	if err != nil {
+		t.Fatalf("ListSeasons() error = %v", err)
+	}
+	if len(years) != 0 {
+		t.Fatalf("ListSeasons() = %v, want empty", years)
+	}
+}
+
+func TestListSeasonsWithData(t *testing.T) {
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	years, err := svc.ListSeasons()
+	if err != nil {
+		t.Fatalf("ListSeasons() error = %v", err)
+	}
+	if len(years) != 1 || years[0] != 2025 {
+		t.Fatalf("ListSeasons() = %v, want [2025]", years)
+	}
+}
+
+func TestGetWeekendMissingMeeting(t *testing.T) {
+	svc := openTestService(t)
+
+	_, err := svc.GetWeekend(1229)
+	if err == nil {
+		t.Fatal("GetWeekend() error = nil, want ErrMeetingNotFound")
+	}
+	if !errors.Is(err, ErrMeetingNotFound) {
+		t.Fatalf("GetWeekend() error = %v, want ErrMeetingNotFound", err)
+	}
+}
+
+func TestGetWeekendWithSessions(t *testing.T) {
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	if err := svc.store.UpsertSession(store.Session{
+		SessionKey:  9000,
+		MeetingKey:  1229,
+		SessionName: "Core Only",
+		SessionType: "Race",
+		DateStart:   "2025-05-24T13:00:00+00:00",
+	}); err != nil {
+		t.Fatalf("UpsertSession() error = %v", err)
+	}
+	if err := svc.store.UpsertSessionDriver(store.SessionDriver{
+		SessionKey: 9000, DriverNumber: 1, MeetingKey: 1229,
+	}); err != nil {
+		t.Fatalf("UpsertSessionDriver() error = %v", err)
+	}
+
+	weekend, err := svc.GetWeekend(1229)
+	if err != nil {
+		t.Fatalf("GetWeekend() error = %v", err)
+	}
+	if weekend.Meeting.MeetingName != "Monaco" {
+		t.Fatalf("MeetingName = %q, want Monaco", weekend.Meeting.MeetingName)
+	}
+	if len(weekend.Sessions) != 2 {
+		t.Fatalf("Sessions len = %d, want 2", len(weekend.Sessions))
+	}
+	if weekend.DefaultSessionKey != 9472 {
+		t.Fatalf("DefaultSessionKey = %d, want 9472 (full data session)", weekend.DefaultSessionKey)
+	}
+	if weekend.Sessions[0].Datasets["drivers"].Status != DatasetStatusAvailable {
+		t.Fatalf("first session drivers = %+v, want available", weekend.Sessions[0].Datasets["drivers"])
 	}
 }

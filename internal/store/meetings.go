@@ -100,6 +100,30 @@ func (s *Store) GetMeeting(meetingKey int) (Meeting, error) {
 	return m, nil
 }
 
+// ListYears returns distinct meeting years ordered newest first.
+func (s *Store) ListYears() ([]int, error) {
+	rows, err := s.db.Query(`
+		SELECT DISTINCT year
+		FROM meetings
+		WHERE year > 0
+		ORDER BY year DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var years []int
+	for rows.Next() {
+		var year int
+		if err := rows.Scan(&year); err != nil {
+			return nil, err
+		}
+		years = append(years, year)
+	}
+	return years, rows.Err()
+}
+
 // ListMeetingsByYear returns meetings for a season ordered by start date.
 func (s *Store) ListMeetingsByYear(year int) ([]Meeting, error) {
 	rows, err := s.db.Query(`

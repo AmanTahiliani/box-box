@@ -69,8 +69,10 @@ not implementation tickets yet.
 - [17 Phase 9 Navigation Data API](17-phase-9-navigation-data-api.md): backend
   slice for local-first season/weekend/session navigation so users do not need
   raw session keys.
-- [Cursor Phase 9 Prompt](cursor-phase-9-navigation-data-api-prompt.md):
-  current handoff prompt for the next Cursor backend phase.
+- [18 Phase 10 Navigation UI](18-phase-10-navigation-ui.md): frontend slice for
+  adding local-first season/weekend navigation around Race Hub.
+- [Cursor Phase 10 Prompt](cursor-phase-10-navigation-ui-prompt.md): current
+  handoff prompt for the next frontend phase.
 
 ## External References
 
