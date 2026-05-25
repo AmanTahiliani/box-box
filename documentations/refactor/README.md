@@ -75,8 +75,6 @@ not implementation tickets yet.
   slice for making one command ingest a whole race weekend into the local DB.
 - [20 Phase 12 Data Library UI](20-phase-12-data-library-ui.md): frontend slice
   for showing local ingestion coverage and next CLI actions.
-- [Cursor Phase 12 Prompt](cursor-phase-12-data-library-ui-prompt.md): current
-  handoff prompt for the next frontend phase.
 
 ## External References
 

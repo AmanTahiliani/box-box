@@ -2,49 +2,20 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
-import type { DatasetInfo, Meeting, WeekendSession } from '../types'
-
-const RACE_HUB_DATASETS = [
-  'meeting',
-  'session',
-  'drivers',
-  'results',
-  'starting_grid',
-  'stints',
-  'pit_stops',
-  'positions',
-  'race_control',
-  'weather',
-  'laps',
-] as const
-
-export function countRaceHubDatasets(datasets: Record<string, DatasetInfo>): { available: number; total: number } {
-  const total = RACE_HUB_DATASETS.length
-  const available = RACE_HUB_DATASETS.filter((key) => datasets[key]?.status === 'available').length
-  return { available, total }
-}
-
-export function formatCoverageHint(datasets: Record<string, DatasetInfo>): string {
-  const { available, total } = countRaceHubDatasets(datasets)
-  return `${available}/${total}`
-}
-
-function sourceBadge(source: WeekendSession['source']) {
-  switch (source) {
-    case 'local':
-      return <span className="badge badge-local">Local</span>
-    case 'partial':
-      return <span className="badge badge-partial">Partial</span>
-    default:
-      return <span className="badge badge-none">None</span>
-  }
-}
+import { formatCoverageHint } from '../lib/coverage'
+import { SourceBadge } from './SourceBadge'
+import { SessionCoverageDots } from './SessionCoverageDots'
+import type { Meeting, WeekendSession } from '../types'
 
 function formatMeetingDates(meeting: Meeting): string {
   const start = meeting.date_start?.slice(0, 10)
   const end = meeting.date_end?.slice(0, 10)
   if (start && end && start !== end) return `${start} – ${end}`
   return start || end || '—'
+}
+
+function sessionSourceBadge(source: WeekendSession['source']) {
+  return <SourceBadge source={source} />
 }
 
 interface Props {
@@ -269,7 +240,7 @@ export function LocalDataNavigator({ onSelectSession }: Props) {
                           </span>
                           <SessionCoverageDots datasets={datasets} />
                         </td>
-                        <td>{sourceBadge(source)}</td>
+                        <td>{sessionSourceBadge(source)}</td>
                         <td className="r">
                           <button
                             type="button"
@@ -293,13 +264,5 @@ export function LocalDataNavigator({ onSelectSession }: Props) {
   )
 }
 
-function SessionCoverageDots({ datasets }: { datasets: Record<string, DatasetInfo> }) {
-  return (
-    <span className="coverage-dots" aria-hidden="true">
-      {RACE_HUB_DATASETS.map((key) => {
-        const available = datasets[key]?.status === 'available'
-        return <span key={key} className={`coverage-dot ${available ? 'on' : 'off'}`} />
-      })}
-    </span>
-  )
-}
+// Re-export helpers used by tests
+export { countRaceHubDatasets, formatCoverageHint } from '../lib/coverage'

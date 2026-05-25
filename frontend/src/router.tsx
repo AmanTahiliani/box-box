@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router'
 import { Nav } from './components/Nav'
 import { RaceHubPage } from './pages/RaceHubPage'
+import { DataLibraryPage } from './pages/DataLibraryPage'
 
 type RaceHubSearch = {
   session_key?: number
@@ -36,7 +37,13 @@ export const raceHubRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, raceHubRoute])
+export const dataLibraryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/data-library',
+  component: DataLibraryPage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, raceHubRoute, dataLibraryRoute])
 
 export const router = createRouter({ routeTree })
 
