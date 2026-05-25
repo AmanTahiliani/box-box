@@ -82,9 +82,11 @@ function SessionDetailBlock({ entry }: { entry: WeekendSession }) {
                 <td className="mono" style={{ color: 'var(--text-2)' }}>
                   {key}
                 </td>
-                <td>
-                  {available ? (
+                 <td>
+                  {info?.status === 'available' ? (
                     <span className="badge badge-local">Local</span>
+                  ) : info?.status === 'skipped' ? (
+                    <span className="badge badge-none">N/A</span>
                   ) : (
                     <span className="badge badge-none">Missing</span>
                   )}

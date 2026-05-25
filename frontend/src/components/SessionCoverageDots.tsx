@@ -9,7 +9,7 @@ export function SessionCoverageDots({ datasets }: Props) {
   return (
     <span className="coverage-dots" aria-hidden="true">
       {RACE_HUB_DATASETS.map((key) => {
-        const available = datasets[key]?.status === 'available'
+        const available = datasets[key]?.status === 'available' || datasets[key]?.status === 'skipped'
         return <span key={key} className={`coverage-dot ${available ? 'on' : 'off'}`} />
       })}
     </span>

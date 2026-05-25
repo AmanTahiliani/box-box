@@ -64,8 +64,12 @@ func (s *Service) GetWeekend(meetingKey int) (Weekend, error) {
 			return Weekend{}, err
 		}
 		datasets := datasetsFromCounts(true, true, counts)
+		sessionModel := sessionToModel(sess)
+		if datasets["starting_grid"].Status == DatasetStatusMissing && !isGridExpected(sessionModel.SessionType, sessionModel.SessionName) {
+			datasets["starting_grid"] = skippedNA()
+		}
 		out.Sessions = append(out.Sessions, WeekendSession{
-			Session:  sessionToModel(sess),
+			Session:  sessionModel,
 			Source:   responseSource(datasets),
 			Datasets: datasets,
 		})

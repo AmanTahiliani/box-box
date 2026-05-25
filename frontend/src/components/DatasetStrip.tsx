@@ -19,9 +19,9 @@ export function DatasetStrip({ datasets }: Props) {
     <div className="dataset-strip">
       {keys.map((key) => {
         const info = datasets[key]
-        const available = info?.status === 'available'
+        const available = info?.status === 'available' || info?.status === 'skipped'
         return (
-          <div key={key} className="ds-item" title={info ? `${info.source} · ${info.count ?? 0} rows` : 'missing'}>
+          <div key={key} className="ds-item" title={info ? `${info.status === 'skipped' ? 'N/A' : info.source} · ${info.count ?? 0} rows` : 'missing'}>
             <div className={`ds-dot ${available ? 'ds-dot-local' : 'ds-dot-missing'}`} />
             <span>{DATASET_LABELS[key]}</span>
             {available && info.count != null && info.count > 0 && (

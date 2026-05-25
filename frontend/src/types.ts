@@ -1,6 +1,6 @@
 export interface DatasetInfo {
-  status: 'available' | 'missing'
-  source: 'local' | 'openf1' | 'none'
+  status: 'available' | 'missing' | 'skipped'
+  source: 'local' | 'openf1' | 'none' | 'na'
   count?: number
 }
 

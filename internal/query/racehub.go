@@ -166,6 +166,8 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 		}
 		hub.StartingGrid = enriched
 		hub.Datasets["starting_grid"] = availableLocal(len(enriched))
+	} else if !isGridExpected(sessionModel.SessionType, sessionModel.SessionName) {
+		hub.Datasets["starting_grid"] = skippedNA()
 	}
 
 	stints, err := s.store.ListStints(sessionKey)

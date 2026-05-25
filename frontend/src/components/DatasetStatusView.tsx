@@ -70,6 +70,8 @@ export function DatasetStatusView({ datasets }: Props) {
               <td>
                 {info?.status === 'available' ? (
                   <span className="badge badge-local">Local</span>
+                ) : info?.status === 'skipped' ? (
+                  <span className="badge badge-none">N/A</span>
                 ) : (
                   <span className="badge badge-none">Missing</span>
                 )}

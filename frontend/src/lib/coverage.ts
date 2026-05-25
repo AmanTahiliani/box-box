@@ -18,7 +18,10 @@ export type RaceHubDatasetKey = (typeof RACE_HUB_DATASETS)[number]
 
 export function countRaceHubDatasets(datasets: Record<string, DatasetInfo>): { available: number; total: number } {
   const total = RACE_HUB_DATASETS.length
-  const available = RACE_HUB_DATASETS.filter((key) => datasets[key]?.status === 'available').length
+  const available = RACE_HUB_DATASETS.filter((key) => {
+    const status = datasets[key]?.status
+    return status === 'available' || status === 'skipped'
+  }).length
   return { available, total }
 }
 
