@@ -1,25 +1,50 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig } from '@playwright/test'
+import { VIEWPORTS } from './tests/visual/helpers'
 
 const E2E_DB = '.playwright/boxbox-e2e.db'
 const API_PORT = process.env.BOXBOX_API_PORT ?? '18080'
 const WEB_PORT = process.env.BOXBOX_WEB_PORT ?? '15173'
 
 export default defineConfig({
-  testDir: './tests',
-  testIgnore: ['**/production-smoke.spec.ts', '**/visual/**'],
+  testDir: './tests/visual',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'html',
+  snapshotPathTemplate: '{testDir}/{testFileDir}/__snapshots__/{projectName}/{arg}{ext}',
+  expect: {
+    toHaveScreenshot: {
+      animations: 'disabled',
+      maxDiffPixelRatio: 0.02,
+    },
+  },
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'on-first-retry',
+    colorScheme: 'dark',
   },
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'desktop',
+      use: {
+        browserName: 'chromium',
+        viewport: VIEWPORTS.desktop,
+      },
+    },
+    {
+      name: 'tablet',
+      use: {
+        browserName: 'chromium',
+        viewport: VIEWPORTS.tablet,
+      },
+    },
+    {
+      name: 'mobile',
+      use: {
+        browserName: 'chromium',
+        viewport: VIEWPORTS.mobile,
+      },
     },
   ],
   webServer: [

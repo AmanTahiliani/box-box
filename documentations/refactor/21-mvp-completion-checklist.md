@@ -37,6 +37,8 @@ npm --prefix frontend test -- --run
 npm --prefix frontend run build
 npm run test:e2e
 npm run test:e2e:prod
+npm run test:visual
+npm run test:visual:prod
 ```
 
 ### Dev proxy smoke (Vite + Go API)
@@ -82,9 +84,27 @@ This runs `playwright.prod.config.ts`, which builds the frontend, seeds
 exercises Race Hub, Data Library, Live empty state, and nav links against the
 built SPA.
 
-## Remaining Post-MVP Work
+### Visual regression (Playwright screenshots)
 
-- Add real visual-regression checks for the React screens.
+Screenshot baselines for Race Hub, Data Library, and Live (disabled-live empty
+state) at desktop, tablet, and mobile viewports:
+
+```bash
+npm run test:visual
+npm run test:visual:prod
+```
+
+Refresh baselines after intentional UI changes:
+
+```bash
+npm run test:visual:update
+npm run test:visual:prod:update
+```
+
+Snapshots are stored under `tests/visual/__snapshots__/`. See
+[22 Phase 14 Visual Regression](22-phase-14-visual-regression.md).
+
+## Remaining Post-MVP Work
 - Improve high-density mobile/iPad behavior for Live Timing and Race Hub tables.
 - Add persisted live-event capture and reconciliation only after defining the
   live storage model.

@@ -77,6 +77,8 @@ not implementation tickets yet.
   for showing local ingestion coverage and next CLI actions.
 - [21 MVP Completion Checklist](21-mvp-completion-checklist.md): current
   implementation status, verification commands, and remaining post-MVP work.
+- [22 Phase 14 Visual Regression](22-phase-14-visual-regression.md): Playwright
+  screenshot coverage for MVP routes and responsive viewports.
 
 ## External References
 
