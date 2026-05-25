@@ -15,6 +15,11 @@
   --green:        #39c73a;
   --yellow:       #ffd600;
   --purple:       #c278ff;
+  --tyre-soft:    #ff3333;
+  --tyre-medium:  #ffd600;
+  --tyre-hard:    #d8d8d8;
+  --tyre-inter:   #39b54a;
+  --tyre-wet:     #0080ff;
 
   --f-ui:   system-ui, -apple-system, 'Segoe UI', sans-serif;
   --f-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -463,6 +468,125 @@ a { color: inherit; text-decoration: none; }
   color: #ff6b6b;
   font-size: 12px;
   margin-bottom: var(--s5);
+}
+
+/* ── Live timing ── */
+.live-page { max-width: 1120px; }
+
+.live-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s5);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s5);
+}
+
+.live-banner-main {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.live-banner h1 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.live-banner p {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.live-banner-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+.mono { font-family: var(--f-mono); }
+
+.live-conn,
+.live-state,
+.track-status,
+.tyre-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  padding: 4px 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.live-conn-connected,
+.live-state-on,
+.track-green { background: rgba(57,199,58,.12); color: var(--green); border: 1px solid rgba(57,199,58,.25); }
+.live-conn-connecting { background: rgba(255,214,0,.12); color: var(--yellow); border: 1px solid rgba(255,214,0,.25); }
+.live-conn-disconnected,
+.live-conn-error,
+.live-state { background: rgba(225,6,0,.10); color: #ff6b6b; border: 1px solid rgba(225,6,0,.24); }
+.track-yellow,
+.track-sc { background: rgba(255,214,0,.12); color: var(--yellow); border: 1px solid rgba(255,214,0,.25); }
+.track-red { background: rgba(225,6,0,.12); color: #ff6b6b; border: 1px solid rgba(225,6,0,.25); }
+.track-vsc { background: rgba(194,120,255,.12); color: var(--purple); border: 1px solid rgba(194,120,255,.25); }
+
+.live-tower { font-variant-numeric: tabular-nums; }
+.live-tower .in-pit td { background: rgba(0, 80, 160, 0.14); }
+.live-tower .pit-out td { background: rgba(57, 199, 58, 0.10); }
+.live-tower .retired td { opacity: 0.62; }
+.pos-delta { color: var(--text-3); font-family: var(--f-mono); }
+.lap-pb { color: var(--green); }
+.lap-ob { color: var(--purple); }
+.badge-pit { background: rgba(0,128,255,.14); color: #66aaff; border: 1px solid rgba(0,128,255,.26); }
+.badge-out { background: rgba(225,6,0,.12); color: #ff6b6b; border: 1px solid rgba(225,6,0,.24); }
+
+.tyre-soft { background: var(--tyre-soft); color: #fff; }
+.tyre-medium { background: var(--tyre-medium); color: #111; }
+.tyre-hard { background: var(--tyre-hard); color: #111; }
+.tyre-inter { background: var(--tyre-inter); color: #fff; }
+.tyre-wet { background: var(--tyre-wet); color: #fff; }
+.tyre-unknown { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border-2); }
+
+.live-rc { margin-bottom: var(--s7); }
+
+.live-rc-list {
+  border-top: 1px solid var(--border);
+}
+
+.live-rc-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.rc-time,
+.rc-lap {
+  color: var(--text-3);
+  flex-shrink: 0;
+  font-family: var(--f-mono);
+  font-size: 11px;
+}
+
+.rc-flag {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .missing-notice {

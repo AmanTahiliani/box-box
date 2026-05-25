@@ -109,8 +109,8 @@ export function DataLibraryPage() {
           </div>
           <CliCommands
             commands={[
-              { comment: '# Ingest a full season', cmd: 'box-box --ingest-year 2025' },
-              { comment: '# Or a single session', cmd: 'box-box --ingest-session <session_key>' },
+              { comment: '# Discover season meetings and sessions', cmd: 'box-box --ingest-year 2025' },
+              { comment: '# Then ingest a full weekend or single session', cmd: 'box-box --ingest-meeting <meeting_key>' },
             ]}
           />
         </div>
@@ -206,7 +206,7 @@ export function DataLibraryPage() {
 
           {!meetingsQuery.isLoading && !meetingsQuery.isError && meetings.length === 0 && (
             <div className="missing-notice">
-              No meetings ingested for {selectedYear}. Run{' '}
+              No meetings discovered for {selectedYear}. Run{' '}
               <code>box-box --ingest-year {selectedYear}</code>
             </div>
           )}

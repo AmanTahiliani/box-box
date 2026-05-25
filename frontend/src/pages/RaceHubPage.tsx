@@ -11,6 +11,9 @@ import { TabBar, type Tab } from '../components/TabBar'
 import { DatasetStatusView } from '../components/DatasetStatusView'
 import { StrategyView } from '../components/StrategyView'
 import { PositionEvolutionView } from '../components/PositionEvolutionView'
+import { LapsView } from '../components/LapsView'
+import { RaceControlView } from '../components/RaceControlView'
+import { WeatherView } from '../components/WeatherView'
 
 interface Props {
   sessionKey: number
@@ -138,6 +141,42 @@ export function RaceHubPage({ sessionKey }: Props) {
                 laps={data.laps}
                 hasPositions={data.datasets['positions']?.status === 'available'}
               />
+            </div>
+          )}
+
+          {activeTab === 'laps' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Laps</span>
+                {data.laps.length > 0 && (
+                  <span className="sec-meta">{data.laps.length} samples</span>
+                )}
+              </div>
+              <LapsView laps={data.laps} />
+            </div>
+          )}
+
+          {activeTab === 'race_control' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Race Control</span>
+                {data.race_control.length > 0 && (
+                  <span className="sec-meta">{data.race_control.length} messages</span>
+                )}
+              </div>
+              <RaceControlView messages={data.race_control} />
+            </div>
+          )}
+
+          {activeTab === 'weather' && (
+            <div className="data-section">
+              <div className="sec-header">
+                <span className="sec-title">Weather</span>
+                {data.weather.length > 0 && (
+                  <span className="sec-meta">{data.weather.length} samples</span>
+                )}
+              </div>
+              <WeatherView weather={data.weather} />
             </div>
           )}
 

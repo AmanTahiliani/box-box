@@ -48,8 +48,8 @@ function CliCommandLine({ cmd }: { cmd: string }) {
 
 export function ingestYearCommands(year: number): Command[] {
   return [
-    { comment: '# Ingest all meetings for a season', cmd: `box-box --ingest-year ${year}` },
-    { comment: '# Preview without downloading', cmd: `box-box --ingest-year ${year} --dry-run` },
+    { comment: '# Discover season meetings and sessions', cmd: `box-box --ingest-year ${year}` },
+    { comment: '# Preview season discovery only', cmd: `box-box --ingest-year ${year} --dry-run` },
   ]
 }
 

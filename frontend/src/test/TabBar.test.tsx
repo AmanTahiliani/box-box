@@ -3,12 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { TabBar } from '../components/TabBar'
 
 describe('TabBar', () => {
-  it('renders all 5 tabs', () => {
+  it('renders all Race Hub tabs', () => {
     render(<TabBar active="results" onChange={() => {}} />)
     expect(screen.getByRole('tab', { name: 'Results' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Grid' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Strategy' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Positions' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Laps' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Race Control' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Weather' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Datasets' })).toBeInTheDocument()
   })
 
@@ -29,7 +32,7 @@ describe('TabBar', () => {
   it('calls onChange with the correct tab id when clicked', () => {
     const onChange = vi.fn()
     render(<TabBar active="results" onChange={onChange} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }))
-    expect(onChange).toHaveBeenCalledWith('datasets')
+    fireEvent.click(screen.getByRole('tab', { name: 'Race Control' }))
+    expect(onChange).toHaveBeenCalledWith('race_control')
   })
 })

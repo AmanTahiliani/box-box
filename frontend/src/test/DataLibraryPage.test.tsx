@@ -119,8 +119,8 @@ describe('DataLibraryPage', () => {
       expect(mockFetchLocalMeetings).toHaveBeenCalledWith(2025)
     })
 
-    expect(await screen.findByText('Monaco')).toBeInTheDocument()
     expect(await screen.findByTestId('meeting-detail')).toBeInTheDocument()
+    expect(screen.getAllByText('Monaco').length).toBeGreaterThan(0)
     expect(screen.getByText('11/11')).toBeInTheDocument()
     expect(screen.getByText('box-box --ingest-meeting 1229')).toBeInTheDocument()
     expect(screen.getByText('box-box --ingest-session 9472')).toBeInTheDocument()

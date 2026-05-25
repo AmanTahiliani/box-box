@@ -10,6 +10,9 @@ export function Nav() {
         <Link to="/race-hub" search={{}} activeProps={{ className: 'active' }}>
           Race Hub
         </Link>
+        <Link to="/live" activeProps={{ className: 'active' }}>
+          Live
+        </Link>
         <Link to="/data-library" activeProps={{ className: 'active' }}>
           Data Library
         </Link>

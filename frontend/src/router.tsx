@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@t
 import { Nav } from './components/Nav'
 import { RaceHubPage } from './pages/RaceHubPage'
 import { DataLibraryPage } from './pages/DataLibraryPage'
+import { LiveTimingPage } from './pages/LiveTimingPage'
 
 type RaceHubSearch = {
   session_key?: number
@@ -43,7 +44,13 @@ export const dataLibraryRoute = createRoute({
   component: DataLibraryPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, raceHubRoute, dataLibraryRoute])
+export const liveTimingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/live',
+  component: LiveTimingPage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, raceHubRoute, dataLibraryRoute, liveTimingRoute])
 
 export const router = createRouter({ routeTree })
 

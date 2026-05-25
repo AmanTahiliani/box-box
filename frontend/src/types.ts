@@ -169,3 +169,100 @@ export interface Weekend {
   sessions: WeekendSession[]
   default_session_key?: number
 }
+
+export interface LiveStateResponse {
+  is_live: boolean
+  data: LiveStreamData | null
+}
+
+export interface LiveSectorData {
+  Value: string
+  PersonalFastest: boolean
+  OverallFastest: boolean
+}
+
+export interface LiveDriverData {
+  RacingNumber: string
+  Position: number
+  PrevPosition: number
+  GapToLeader: string
+  Interval: string
+  LastLapTime: string
+  LastLapPB: boolean
+  LastLapOB: boolean
+  BestLapTime: string
+  BestLapPB: boolean
+  BestLapOB: boolean
+  BestLapNum: number
+  InPit: boolean
+  PitOut: boolean
+  Retired: boolean
+  KnockedOut: boolean
+  Cutoff: boolean
+  OnFlyingLap: boolean
+  NumberOfLaps: number
+  SpeedTrap: string
+  Sectors: LiveSectorData[]
+}
+
+export interface LiveDriverInfo {
+  RacingNumber: string
+  BroadcastName: string
+  Tla: string
+  TeamName: string
+  TeamColour: string
+  FirstName: string
+  LastName: string
+}
+
+export interface LiveTyreData {
+  Compound: string
+  New: boolean
+  Age: number
+}
+
+export interface LiveRCMessage {
+  Time: string
+  Category: string
+  Flag: string
+  Message: string
+  Lap: number
+}
+
+export interface LiveWeatherData {
+  AirTemp: number
+  TrackTemp: number
+  Humidity: number
+  WindSpeed: number
+  WindDir: number
+  Rainfall: boolean
+}
+
+export interface LiveSessionMeta {
+  MeetingName: string
+  CircuitName: string
+  SessionType: string
+  SessionName: string
+}
+
+export interface LiveStintData {
+  Compound: string
+  New: boolean
+  Laps: number
+}
+
+export interface LiveStreamData {
+  Drivers: Record<string, LiveDriverData>
+  DriverInfo: Record<string, LiveDriverInfo>
+  Tyres: Record<string, LiveTyreData>
+  RCMessages: LiveRCMessage[]
+  Weather: LiveWeatherData
+  Session: LiveSessionMeta
+  TrackStatus: string
+  CurrentLap: number
+  TotalLaps: number
+  Clock: string
+  ClockRefTime: string
+  ClockExtrapolating: boolean
+  Stints: Record<string, LiveStintData[]>
+}
