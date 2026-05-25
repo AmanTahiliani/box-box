@@ -12,19 +12,19 @@ test.describe('Race Hub', () => {
     await expect(page.locator('.drv-code', { hasText: 'HAM' })).toBeVisible()
   })
 
-  test('strategy tab shows chart placeholder when stints are available', async ({ page }) => {
+  test('strategy tab renders stint chart when stints are available', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
     await page.getByRole('tab', { name: 'Strategy' }).click()
 
-    await expect(page.getByText('Strategy chart: not yet implemented.')).toBeVisible()
+    await expect(page.locator('[data-testid="strategy-chart"]')).toBeVisible()
     await expect(page.getByText('Stints not available.')).not.toBeVisible()
   })
 
-  test('positions tab shows chart placeholder when positions are available', async ({ page }) => {
+  test('positions tab renders position chart when positions are available', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
     await page.getByRole('tab', { name: 'Positions' }).click()
 
-    await expect(page.getByText('Position evolution chart: not yet implemented.')).toBeVisible()
+    await expect(page.locator('[data-testid="position-chart"]')).toBeVisible()
     await expect(page.getByText('Lap-by-lap positions not available.')).not.toBeVisible()
   })
 
@@ -33,7 +33,7 @@ test.describe('Race Hub', () => {
     await page.getByRole('tab', { name: 'Strategy' }).click()
 
     await expect(page.getByText('Stints not available.')).toBeVisible()
-    await expect(page.getByText('Strategy chart: not yet implemented.')).not.toBeVisible()
+    await expect(page.locator('[data-testid="strategy-chart"]')).not.toBeVisible()
   })
 
   test('positions tab shows missing notice when positions are unavailable', async ({ page }) => {
@@ -41,6 +41,6 @@ test.describe('Race Hub', () => {
     await page.getByRole('tab', { name: 'Positions' }).click()
 
     await expect(page.getByText('Lap-by-lap positions not available.')).toBeVisible()
-    await expect(page.getByText('Position evolution chart: not yet implemented.')).not.toBeVisible()
+    await expect(page.locator('[data-testid="position-chart"]')).not.toBeVisible()
   })
 })

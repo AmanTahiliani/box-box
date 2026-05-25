@@ -123,6 +123,8 @@ export function RaceHubPage({ sessionKey }: Props) {
               </div>
               <StrategyView
                 results={data.results}
+                stints={data.stints}
+                pit_stops={data.pit_stops}
                 hasStints={data.datasets['stints']?.status === 'available'}
               />
             </div>
@@ -136,6 +138,8 @@ export function RaceHubPage({ sessionKey }: Props) {
               <PositionEvolutionView
                 results={data.results}
                 grid={data.starting_grid}
+                positions={data.positions}
+                laps={data.laps}
                 hasPositions={data.datasets['positions']?.status === 'available'}
               />
             </div>

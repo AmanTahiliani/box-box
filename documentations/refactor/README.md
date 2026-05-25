@@ -66,8 +66,11 @@ not implementation tickets yet.
 - [16 Phase 8 Analytics Visuals](16-phase-8-analytics-visuals.md): frontend
   slice for turning the newly available analytics datasets into useful Race Hub
   views.
-- [Claude Phase 8 Prompt](claude-phase-8-analytics-visuals-prompt.md): current
-  handoff prompt for the next Claude frontend phase.
+- [17 Phase 9 Navigation Data API](17-phase-9-navigation-data-api.md): backend
+  slice for local-first season/weekend/session navigation so users do not need
+  raw session keys.
+- [Cursor Phase 9 Prompt](cursor-phase-9-navigation-data-api-prompt.md):
+  current handoff prompt for the next Cursor backend phase.
 
 ## External References
 
