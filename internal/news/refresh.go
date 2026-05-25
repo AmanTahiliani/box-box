@@ -166,6 +166,9 @@ func enrichOG(ctx context.Context, client *http.Client, items []Item, parallel i
 	}
 
 	for i := range items {
+		if items[i].OGImageURL != "" {
+			continue // Already has preview from feed, skip OG head fetch
+		}
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()

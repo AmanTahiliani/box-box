@@ -14,7 +14,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-const UserAgent = "box-box/phase-19b-rss-spike"
+const UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 // Source describes a feed that can be fetched and normalized.
 type Source struct {
@@ -207,6 +207,12 @@ type rssItem struct {
 	PubDate     string   `xml:"pubDate"`
 	Description string   `xml:"description"`
 	Categories  []string `xml:"category"`
+	Thumbnail   struct {
+		URL string `xml:"url,attr"`
+	} `xml:"http://search.yahoo.com/mrss/ thumbnail"`
+	Content     struct {
+		URL string `xml:"url,attr"`
+	} `xml:"http://search.yahoo.com/mrss/ content"`
 }
 
 type atomFeed struct {
@@ -225,6 +231,12 @@ type atomEntry struct {
 		Term  string `xml:"term,attr"`
 		Label string `xml:"label,attr"`
 	} `xml:"category"`
+	MediaGroup struct {
+		Thumbnail struct {
+			URL string `xml:"url,attr"`
+		} `xml:"http://search.yahoo.com/mrss/ thumbnail"`
+		Description string `xml:"http://search.yahoo.com/mrss/ description"`
+	} `xml:"http://search.yahoo.com/mrss/ group"`
 }
 
 type atomLink struct {
@@ -243,6 +255,10 @@ func normalizeRSS(source Source, raw []rssItem, fetchedAt time.Time) []Item {
 		if !source.SkipSummary {
 			summary = stripHTML(entry.Description)
 		}
+		imgURL := entry.Thumbnail.URL
+		if imgURL == "" {
+			imgURL = entry.Content.URL
+		}
 		items = append(items, Item{
 			Source:      source.ID,
 			Title:       cleanText(entry.Title),
@@ -251,6 +267,7 @@ func normalizeRSS(source Source, raw []rssItem, fetchedAt time.Time) []Item {
 			Summary:     summary,
 			Category:    firstNonEmpty(entry.Categories, source.Category),
 			FetchedAt:   fetchedAt,
+			OGImageURL:  imgURL,
 		})
 	}
 	return DeduplicateByURL(items)
@@ -265,17 +282,19 @@ func normalizeAtom(source Source, raw []atomEntry, fetchedAt time.Time) []Item {
 		}
 		summary := ""
 		if !source.SkipSummary {
-			raw := firstNonEmpty([]string{entry.Summary, entry.Content}, "")
+			raw := firstNonEmpty([]string{entry.Summary, entry.Content, entry.MediaGroup.Description}, "")
 			summary = stripHTML(raw)
 		}
 		items = append(items, Item{
-			Source:      source.ID,
-			Title:       cleanText(entry.Title),
-			URL:         atomEntryURL(entry),
-			PublishedAt: parseFeedTime(firstNonEmpty([]string{entry.Published, entry.Updated}, "")),
-			Summary:     summary,
-			Category:    category,
-			FetchedAt:   fetchedAt,
+			Source:        source.ID,
+			Title:         cleanText(entry.Title),
+			URL:           atomEntryURL(entry),
+			PublishedAt:   parseFeedTime(firstNonEmpty([]string{entry.Published, entry.Updated}, "")),
+			Summary:       summary,
+			Category:      category,
+			FetchedAt:     fetchedAt,
+			OGImageURL:    entry.MediaGroup.Thumbnail.URL,
+			OGDescription: stripHTML(entry.MediaGroup.Description),
 		})
 	}
 	return DeduplicateByURL(items)

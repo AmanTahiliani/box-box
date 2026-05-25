@@ -6,6 +6,8 @@ import type { ArticleContent, NewsItem } from '../types'
 
 type Category = 'all' | 'official' | 'news' | 'video'
 
+const PAGE_SIZE = 16
+
 const CATEGORY_LABELS: Record<Category, string> = {
   all: 'All',
   official: 'Official',
@@ -32,6 +34,12 @@ function categoryOf(item: NewsItem): Category {
   if (c === 'official') return 'official'
   if (c === 'video') return 'video'
   return 'news'
+}
+
+function getYouTubeVideoId(url: string): string | null {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/
+  const match = url.match(regExp)
+  return match && match[2].length === 11 ? match[2] : null
 }
 
 function CategoryTabs({
@@ -116,7 +124,7 @@ function BriefingCard({
           <span className="bp-card-age">{timeAgo(item.published_at ?? item.fetched_at)}</span>
         </div>
         <h3 className="bp-card-title">{item.title}</h3>
-        {!isVideo && (item.og_description || item.summary) && (
+        {(item.og_description || item.summary) && (
           <p className="bp-card-desc">
             {stripHtml(item.og_description || item.summary || '')}
           </p>
@@ -153,13 +161,19 @@ function ReaderPanel({
       setArticle(null)
       return
     }
+    if (categoryOf(item) === 'video') {
+      setArticle(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
     setLoading(true)
     setError(null)
     setArticle(null)
     fetchNewsArticle(item.url)
       .then((data) => { setArticle(data); setLoading(false) })
       .catch((err) => { setError(String(err)); setLoading(false) })
-  }, [item?.url])
+  }, [item?.url, item ? categoryOf(item) : ''])
 
   // Scroll panel to top when item changes
   useEffect(() => {
@@ -207,14 +221,27 @@ function ReaderPanel({
               </div>
             </div>
 
-            {(article?.image_url || item.og_image_url) && (
-              <div className="bp-reader-hero">
-                <img
-                  src={article?.image_url ?? item.og_image_url}
-                  alt=""
-                  loading="lazy"
-                />
+            {categoryOf(item) === 'video' ? (
+              <div className="bp-reader-video-container">
+                <iframe
+                  className="bp-reader-video-iframe"
+                  src={`https://www.youtube.com/embed/${getYouTubeVideoId(item.url)}?autoplay=1&rel=0`}
+                  title={item.title}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                ></iframe>
               </div>
+            ) : (
+              (article?.image_url || item.og_image_url) && (
+                <div className="bp-reader-hero">
+                  <img
+                    src={article?.image_url ?? item.og_image_url}
+                    alt=""
+                    loading="lazy"
+                  />
+                </div>
+              )
             )}
 
             <div className="bp-reader-content">
@@ -223,6 +250,25 @@ function ReaderPanel({
               </h1>
               {article?.byline && (
                 <div className="bp-reader-byline mono">{article.byline}</div>
+              )}
+
+              {categoryOf(item) === 'video' && (
+                <div className="bp-reader-video-desc">
+                  {(item.og_description || item.summary) && (
+                    <p className="bp-reader-fallback" style={{ marginBottom: '16px' }}>
+                      {stripHtml(item.og_description || item.summary || '')}
+                    </p>
+                  )}
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bp-reader-ext-link"
+                    style={{ fontSize: '13px', fontWeight: 600 }}
+                  >
+                    Open in YouTube ↗
+                  </a>
+                </div>
               )}
 
               {loading && (
@@ -286,6 +332,7 @@ function ReaderPanel({
 export function BriefingPage() {
   const [activeCategory, setActiveCategory] = useState<Category>('all')
   const [selectedItem, setSelectedItem] = useState<NewsItem | null>(null)
+  const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
 
   const { data: allNews = [], isLoading, isError } = useQuery({
@@ -297,6 +344,10 @@ export function BriefingPage() {
   const filtered = allNews.filter(
     (item) => activeCategory === 'all' || categoryOf(item) === activeCategory,
   )
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const pageStart = (safePage - 1) * PAGE_SIZE
+  const pagedItems = filtered.slice(pageStart, pageStart + PAGE_SIZE)
 
   const counts: Record<Category, number> = {
     all: allNews.length,
@@ -323,7 +374,22 @@ export function BriefingPage() {
 
   const handleClose = useCallback(() => setSelectedItem(null), [])
 
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount))
+  }, [pageCount])
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      setPage(Math.min(Math.max(nextPage, 1), pageCount))
+      setSelectedItem(null)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    },
+    [pageCount],
+  )
+
   const unreadCount = allNews.filter((i) => !i.read_at).length
+  const pageEnd = Math.min(pageStart + pagedItems.length, filtered.length)
+  const showPagination = filtered.length > PAGE_SIZE
 
   return (
     <div className="bp-page" data-testid="briefing-page">
@@ -342,7 +408,7 @@ export function BriefingPage() {
           <CategoryTabs
             active={activeCategory}
             counts={counts}
-            onChange={(c) => { setActiveCategory(c); setSelectedItem(null) }}
+            onChange={(c) => { setActiveCategory(c); setSelectedItem(null); setPage(1) }}
           />
 
           {filtered.length === 0 ? (
@@ -351,16 +417,67 @@ export function BriefingPage() {
               Run <code>box-box --ingest-news</code> to refresh feeds.
             </div>
           ) : (
-            <div className={`bp-grid${selectedItem ? ' bp-grid-narrow' : ''}`}>
-              {filtered.map((item) => (
-                <BriefingCard
-                  key={item.url}
-                  item={item}
-                  isActive={selectedItem?.url === item.url}
-                  onSelect={handleSelect}
-                />
-              ))}
-            </div>
+            <>
+              {showPagination && (
+                <div className="bp-pagination bp-pagination-top">
+                  <span className="bp-pagination-meta mono">
+                    {pageStart + 1}-{pageEnd} of {filtered.length}
+                  </span>
+                  <div className="bp-pagination-actions">
+                    <button
+                      className="bp-page-btn"
+                      onClick={() => handlePageChange(safePage - 1)}
+                      disabled={safePage === 1}
+                    >
+                      Previous
+                    </button>
+                    <span className="bp-page-current mono">
+                      Page {safePage} / {pageCount}
+                    </span>
+                    <button
+                      className="bp-page-btn"
+                      onClick={() => handlePageChange(safePage + 1)}
+                      disabled={safePage === pageCount}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className={`bp-grid${selectedItem ? ' bp-grid-narrow' : ''}`}>
+                {pagedItems.map((item) => (
+                  <BriefingCard
+                    key={item.url}
+                    item={item}
+                    isActive={selectedItem?.url === item.url}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </div>
+
+              {showPagination && (
+                <div className="bp-pagination bp-pagination-bottom">
+                  <button
+                    className="bp-page-btn"
+                    onClick={() => handlePageChange(safePage - 1)}
+                    disabled={safePage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="bp-page-current mono">
+                    Page {safePage} / {pageCount}
+                  </span>
+                  <button
+                    className="bp-page-btn"
+                    onClick={() => handlePageChange(safePage + 1)}
+                    disabled={safePage === pageCount}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

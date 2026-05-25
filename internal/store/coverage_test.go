@@ -7,13 +7,13 @@ import (
 func TestCoverageCRUD(t *testing.T) {
 	s := openTestStore(t)
 
-	// Verify schema migration version is 4 (since we added 004_coverage.sql)
+	// Verify schema migration version is 5 (since we added 005_news_enriched.sql)
 	version, err := s.SchemaVersion()
 	if err != nil {
 		t.Fatalf("SchemaVersion() error = %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("SchemaVersion() = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("SchemaVersion() = %d, want 5", version)
 	}
 
 	// Verify session_coverage table exists
