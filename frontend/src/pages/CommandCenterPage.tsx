@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { fetchLiveState, fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
+import { fetchLiveState, fetchLocalMeetings, fetchSeasonMeetings, fetchSeasons, fetchWeekend } from '../api'
 import { countWeekendStats, formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
 import {
   currentAndNextSession,
@@ -14,7 +14,7 @@ import {
   sessionStartTime,
   sortSessionsByStart,
 } from '../lib/schedule'
-import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
+import { countryAccent, countryDecal, countryFlag, formatGpDateRange } from '../lib/gpIdentity'
 import type { Meeting, Session, Weekend, WeekendSession } from '../types'
 import { PaddockBriefing } from '../components/PaddockBriefing'
 
@@ -28,21 +28,10 @@ function classifySessionStatus(session: Session, now: Date): 'live' | 'done' | '
   return 'upcoming'
 }
 
-function collectRecentWeekends(weekends: (Weekend | undefined)[], focusKey: number | null, limit = 6) {
-  const rows: Weekend[] = []
-  for (const weekend of weekends) {
-    if (!weekend) continue
-    if (focusKey != null && weekend.meeting_key === focusKey) continue
-    if (weekend.source === 'none') continue
-    rows.push(weekend)
-  }
-  return rows
-    .sort((a, b) => {
-      const left = Date.parse(a.meeting.date_start ?? '')
-      const right = Date.parse(b.meeting.date_start ?? '')
-      return right - left
-    })
-    .slice(0, limit)
+function meetingStatus(meeting: Meeting, focusKey: number | undefined, now: Date) {
+  if (meeting.meeting_key === focusKey) return 'focus'
+  if (meetingHasStarted(meeting, now)) return 'past'
+  return 'future'
 }
 
 function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | undefined {
@@ -73,7 +62,15 @@ export function CommandCenterPage() {
     enabled: latestSeason != null,
   })
 
-  const meetings = meetingsQuery.data ?? []
+  const seasonMeetingsQuery = useQuery({
+    queryKey: ['season-meetings', latestSeason],
+    queryFn: () => fetchSeasonMeetings(latestSeason!),
+    enabled: latestSeason != null,
+  })
+
+  const localMeetings = meetingsQuery.data ?? []
+  const seasonMeetings = seasonMeetingsQuery.data?.length ? seasonMeetingsQuery.data : localMeetings
+  const meetings = localMeetings
 
   const weekendQueries = useQueries({
     queries: meetings.map((meeting) => ({
@@ -116,7 +113,6 @@ export function CommandCenterPage() {
     : []
   const { current: currentSession, next: nextSession } = currentAndNextSession(focusSessions, nowDate)
 
-  const recentWeekends = collectRecentWeekends(weekendList, focusMeeting?.meeting_key ?? null)
   const analysisSession = pickAnalysisSession(focusWeekend)
   const analysisSessionKey =
     analysisSession?.session.session_key ??
@@ -314,45 +310,51 @@ export function CommandCenterPage() {
         </section>
       )}
 
-      {(weekendsLoading || recentWeekends.length > 0) && (
-        <section className="cc-recent">
+      {seasonMeetings.length > 0 && (
+        <section className="cc-season-calendar" data-testid="cc-season-calendar">
           <div className="sec-header">
-            <span className="sec-title">Recent Local Weekends</span>
-            <span className="sec-meta mono">{recentWeekends.length}</span>
+            <span className="sec-title">Season Calendar</span>
+            <span className="sec-meta mono">
+              {seasonMeetings.length} rounds · {meetingStats.full}/{meetingStats.total || 0} local
+            </span>
           </div>
-          {weekendsLoading && recentWeekends.length === 0 ? (
-            <div className="loading-state">loading weekends…</div>
-          ) : recentWeekends.length === 0 ? (
-            <div className="cc-side-empty">No additional local weekends.</div>
-          ) : (
-            <div className="cc-recent-strip" role="list">
-              {recentWeekends.map((weekend) => {
-                const finished = meetingHasStarted(weekend.meeting, nowDate)
-                const target = pickAnalysisSession(weekend)
-                const target_key = target?.session.session_key ?? weekend.default_session_key
-                return (
-                  <Link
-                    key={weekend.meeting_key}
-                    to="/race-hub"
-                    search={target_key ? { session_key: target_key } : {}}
-                    className="cc-recent-card"
-                    data-testid={`cc-weekend-${weekend.meeting_key}`}
-                    role="listitem"
-                  >
-                    <div className="cc-recent-head mono">
-                      <span className="cc-recent-decal">{countryDecal(weekend.meeting)}</span>
-                      <span className={`cc-cov-dot cc-cov-${weekend.source}`} aria-hidden="true" />
-                    </div>
-                    <div className="cc-recent-name">{weekend.meeting.meeting_name}</div>
-                    <div className="cc-recent-meta mono">
-                      {formatGpDateRange(weekend.meeting)}
-                      {' · '}
-                      {finished ? 'Past' : 'Upcoming'}
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
+          <div className="cc-calendar-grid" role="list">
+            {seasonMeetings.map((meeting, index) => {
+              const weekend = weekendsByKey.get(meeting.meeting_key)
+              const target = pickAnalysisSession(weekend)
+              const targetKey = target?.session.session_key ?? weekend?.default_session_key
+              const status = meetingStatus(meeting, focusMeeting?.meeting_key, nowDate)
+              const cardAccent = countryAccent(meeting)
+              return (
+                <Link
+                  key={meeting.meeting_key}
+                  to="/race-hub"
+                  search={targetKey ? { session_key: targetKey } : {}}
+                  className={`cc-calendar-card cc-calendar-${status}`}
+                  data-testid={`cc-calendar-${meeting.meeting_key}`}
+                  role="listitem"
+                  style={{ '--gp-card-accent': cardAccent } as React.CSSProperties}
+                >
+                  <div className="cc-calendar-accent" aria-hidden="true" />
+                  <div className="cc-calendar-top mono">
+                    <span className="cc-calendar-round">R{String(index + 1).padStart(2, '0')}</span>
+                    <span className={`cc-cov-dot cc-cov-${weekend?.source ?? 'none'}`} aria-hidden="true" />
+                  </div>
+                  <div className="cc-calendar-id">
+                    <span className="cc-calendar-decal mono">{countryDecal(meeting)}</span>
+                    {countryFlag(meeting) && <span className="cc-calendar-flag">{countryFlag(meeting)}</span>}
+                  </div>
+                  <div className="cc-calendar-copy">
+                    <div className="cc-calendar-name">{meeting.meeting_name}</div>
+                    <div className="cc-calendar-circuit mono">{meeting.circuit_short_name || meeting.location}</div>
+                    <div className="cc-calendar-date mono">{formatGpDateRange(meeting)}</div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+          {seasonMeetingsQuery.isError && (
+            <div className="cc-side-empty">Using local meetings because the full calendar could not load.</div>
           )}
         </section>
       )}

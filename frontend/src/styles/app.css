@@ -1296,7 +1296,7 @@ a { color: inherit; text-decoration: none; }
 
 .cc-band-accent {
   width: 6px;
-  background: var(--gp-accent);
+  background: linear-gradient(180deg, var(--gp-accent), rgba(255,255,255,0.28), var(--gp-accent));
   flex-shrink: 0;
 }
 
@@ -1304,9 +1304,25 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   padding: var(--s5);
   min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--gp-accent) 18%, transparent), transparent 54%),
+    var(--surface);
+}
+
+.cc-band-body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(110deg, transparent 0 22px, rgba(255,255,255,0.025) 22px 23px);
+  pointer-events: none;
 }
 
 .cc-band-row {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: stretch;
   gap: var(--s6);
@@ -1551,6 +1567,133 @@ a { color: inherit; text-decoration: none; }
 .cc-cov-none { background: var(--text-3); opacity: 0.5; }
 
 /* Recent weekends strip */
+.cc-season-calendar { display: flex; flex-direction: column; gap: var(--s3); }
+
+.cc-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: var(--s3);
+}
+
+.cc-calendar-card {
+  --gp-card-accent: var(--red);
+  position: relative;
+  min-height: 148px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s4);
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--gp-card-accent) 22%, transparent), transparent 58%),
+    var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.cc-calendar-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--gp-card-accent) 26%, transparent), transparent 32%),
+    repeating-linear-gradient(115deg, transparent 0 18px, rgba(255,255,255,0.025) 18px 19px);
+  pointer-events: none;
+}
+
+.cc-calendar-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--gp-card-accent) 58%, var(--border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--gp-card-accent) 28%, transparent), transparent 60%),
+    var(--surface-h);
+}
+
+.cc-calendar-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.cc-calendar-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gp-card-accent);
+}
+
+.cc-calendar-focus {
+  border-color: color-mix(in srgb, var(--gp-card-accent) 66%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gp-card-accent) 22%, transparent);
+}
+
+.cc-calendar-past {
+  opacity: 0.58;
+}
+
+.cc-calendar-top,
+.cc-calendar-id {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.cc-calendar-round {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+
+.cc-calendar-decal {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: var(--gp-card-accent);
+  filter: brightness(1.25);
+}
+
+.cc-calendar-flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.cc-calendar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cc-calendar-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.cc-calendar-circuit,
+.cc-calendar-date {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-calendar-circuit {
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+.cc-calendar-date {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
 .cc-recent { display: flex; flex-direction: column; gap: var(--s3); }
 
 .cc-recent-strip {

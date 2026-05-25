@@ -8,14 +8,16 @@ import type { DatasetInfo, Meeting, Weekend } from '../types'
 vi.mock('../api', () => ({
   fetchSeasons: vi.fn(),
   fetchLocalMeetings: vi.fn(),
+  fetchSeasonMeetings: vi.fn(),
   fetchWeekend: vi.fn(),
   fetchLiveState: vi.fn(),
 }))
 
-import { fetchSeasons, fetchLocalMeetings, fetchWeekend, fetchLiveState } from '../api'
+import { fetchSeasons, fetchLocalMeetings, fetchSeasonMeetings, fetchWeekend, fetchLiveState } from '../api'
 
 const mockFetchSeasons = vi.mocked(fetchSeasons)
 const mockFetchLocalMeetings = vi.mocked(fetchLocalMeetings)
+const mockFetchSeasonMeetings = vi.mocked(fetchSeasonMeetings)
 const mockFetchWeekend = vi.mocked(fetchWeekend)
 const mockFetchLiveState = vi.mocked(fetchLiveState)
 
@@ -113,6 +115,7 @@ describe('CommandCenterPage', () => {
   it('shows weekend identity band and schedule when data exists', async () => {
     mockFetchSeasons.mockResolvedValue([2025])
     mockFetchLocalMeetings.mockResolvedValue([meeting])
+    mockFetchSeasonMeetings.mockResolvedValue([meeting])
     mockFetchWeekend.mockResolvedValue(weekend)
 
     renderPage()
@@ -126,6 +129,8 @@ describe('CommandCenterPage', () => {
     })
     expect(screen.getByTestId('cc-focus')).toHaveTextContent('Monaco')
     expect(screen.getByTestId('cc-focus')).toHaveTextContent('MON')
+    expect(screen.getByTestId('cc-season-calendar')).toHaveTextContent('Season Calendar')
+    expect(screen.getByTestId('cc-calendar-1229')).toHaveTextContent('R01')
     expect(screen.getByText('No live session')).toBeInTheDocument()
     expect(screen.getByTestId('cc-action-race-hub')).toHaveTextContent('Race')
   })

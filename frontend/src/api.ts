@@ -26,6 +26,15 @@ export async function fetchLocalMeetings(year: number): Promise<Meeting[]> {
   return Array.isArray(meetings) ? meetings : []
 }
 
+export async function fetchSeasonMeetings(year: number): Promise<Meeting[]> {
+  const res = await fetch(`/api/v1/meetings?year=${year}&source=openf1`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const meetings = await res.json()
+  return Array.isArray(meetings) ? meetings : []
+}
+
 export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
   const res = await fetch(`/api/v1/weekend?meeting_key=${meetingKey}`)
   if (!res.ok) {
