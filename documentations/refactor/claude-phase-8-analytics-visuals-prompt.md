@@ -1,22 +1,33 @@
 # Prompt For Claude: Phase 8 Analytics Visuals
 
-You are working in the `box-box` repository as the frontend/UI engineer for
-Phase 8. The backend data foundation is now in place. Your task is to turn the
-Race Hub Strategy and Position tabs from placeholders into real, useful
-frontend views powered by `/api/v1/race-hub`.
+You are the frontend/UI engineer for Phase 8 of `box-box`. Please keep context
+usage low: do not read the whole refactor docs folder. Start with the files
+listed below and only open more if you are blocked.
 
-## Context
+## Goal
 
-Read these docs first:
+Turn the Race Hub Strategy and Position tabs from placeholders into real views
+powered by the local-first `/api/v1/race-hub` response.
 
-- `documentations/refactor/README.md`
-- `documentations/refactor/14-phase-6-react-race-hub-analytics.md`
-- `documentations/refactor/15-phase-7-analytics-data-foundation.md`
+## Read First
+
+Open only these first:
+
+- `frontend/src/pages/RaceHubPage.tsx`
+- `frontend/src/components/StrategyView.tsx`
+- `frontend/src/components/PositionEvolutionView.tsx`
+- `frontend/src/types.ts`
+- `tests/race-hub.spec.ts`
+- `scripts/seed-e2e-db/main.go`
+
+Optional, only if you need design guidance:
+
 - `documentations/refactor/16-phase-8-analytics-visuals.md`
 - `documentations/refactor/06-visual-design-direction.md`
 
-The current React app lives in `frontend/`. The backend Race Hub payload now
-includes:
+## Current Backend Contract
+
+`RaceHub` already includes these arrays:
 
 - `stints`
 - `pit_stops`
@@ -24,82 +35,54 @@ includes:
 - `race_control`
 - `weather`
 - `laps`
-- dataset metadata under `datasets`
 
-There is also a deterministic Playwright seed at
-`scripts/seed-e2e-db/main.go` and e2e coverage in `tests/race-hub.spec.ts`.
+Dataset availability is still reported under `datasets`.
 
-## Objective
+Seeded e2e sessions:
 
-Replace the "chart not yet implemented" states in:
+- `9472`: has core data plus analytics data.
+- `9000`: has core data only, so missing-data states must still render.
 
-- `frontend/src/components/StrategyView.tsx`
-- `frontend/src/components/PositionEvolutionView.tsx`
+## Work To Do
 
-with real views that consume the analytics arrays from the Race Hub response.
+1. Update `RaceHubPage.tsx` to pass analytics arrays into the Strategy and
+   Position components.
+2. Replace `"Strategy chart: not yet implemented."` with a real strategy view:
+   per-driver stint bars, compound labels/colors, lap ranges, and pit context.
+3. Replace `"Position evolution chart: not yet implemented."` with a real
+   position view: per-driver progression from `positions`, plus grid/finish
+   context when available.
+4. Preserve honest missing-data states for sessions without analytics.
+5. Update tests so they assert real analytics UI for session `9472`, not
+   placeholder text.
 
-## Product Expectations
+## Design Constraints
 
-Strategy should show, at minimum:
-
-- per-driver stint bars;
-- compound labels/colors;
-- lap ranges;
-- pit stop markers or nearby pit stop context;
-- a compact fallback table if the viewport is narrow.
-
-Position Evolution should show, at minimum:
-
-- per-driver position progression from position samples;
-- grid-to-finish context when results and grid are present;
-- clear gain/loss language;
-- enough labeling that the view is understandable without a legend-heavy mess.
-
-Use SVG/CSS for the first implementation unless you have a strong reason to add
-a charting library. This phase is about a high-quality first native view, not a
-large dependency decision.
-
-## Design Direction
-
-Keep it F1-native and operational:
-
-- dense but readable;
-- restrained surfaces;
-- strong typographic hierarchy;
-- team color as identity, compound color as data;
-- no decorative gradient blobs;
-- no generic SaaS dashboard cards everywhere;
-- no fake runtime mock data.
-
-## Implementation Notes
-
-- Update `RaceHubPage.tsx` to pass the new arrays into the components.
-- Use the existing `frontend/src/types.ts` contracts.
-- Preserve missing-data states for session `9000` in the e2e seed.
-- Update component tests or add new tests where the logic deserves coverage.
-- Update Playwright tests so they assert real analytics UI for seeded session
-  `9472`, not placeholder text.
-- If you discover a backend contract issue, document it clearly instead of
-  silently working around it in the UI.
+- Keep it dense, technical, and F1-native.
+- Use SVG/CSS for this first slice unless a dependency is truly necessary.
+- Team color identifies drivers; compound color identifies tyre data.
+- Avoid generic dashboard card sludge, decorative gradients, and fake runtime
+  mock data.
+- Keep mobile/iPad usable.
 
 ## Verification
 
 Run:
 
 ```bash
-npm test -- --run
-npm run build
-cd .. && npm run test:e2e
+cd frontend && npm test -- --run
+cd frontend && npm run build
+npm run test:e2e
 ```
 
-The e2e command starts a seeded local database and local web/API servers. It
-should not require OpenF1 network access.
+The root e2e command starts a seeded local database and local web/API servers.
+It should not need OpenF1 network access.
 
-## Deliverable
+## Report Back
 
-Implement the Phase 8 frontend slice and report:
+Summarize:
 
 - files changed;
-- key UI behavior added;
+- UI behavior added;
 - tests run and results;
-- any follow-up risks or design refinements you recommend.
+- follow-up risks or refinements.
