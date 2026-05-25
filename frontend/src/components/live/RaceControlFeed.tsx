@@ -1,5 +1,5 @@
 import type { LiveRCMessage } from '../../types'
-import { latestRaceControl } from '../../lib/live'
+import { latestRaceControl, rcFlagClass } from '../../lib/live'
 
 interface Props {
   messages: LiveRCMessage[]
@@ -17,13 +17,18 @@ export function RaceControlFeed({ messages }: Props) {
       {latest.length === 0 ? (
         <div className="missing-notice">No race control messages in the current live snapshot.</div>
       ) : (
-        <div className="live-rc-list">
+        <div className="live-rc-list live-rc-scroll">
           {latest.map((message, index) => (
             <div className="live-rc-row" key={`${message.Time}-${message.Message}-${index}`}>
               <span className="rc-time">{message.Time || '--:--'}</span>
-              {message.Flag && <span className="rc-flag">{message.Flag}</span>}
               {message.Lap > 0 && <span className="rc-lap">L{message.Lap}</span>}
-              <span>{message.Message}</span>
+              {message.Flag
+                ? <span className={`rc-flag ${rcFlagClass(message.Flag)}`}>{message.Flag}</span>
+                : message.Category && message.Category !== 'Other'
+                  ? <span className="rc-category">{message.Category}</span>
+                  : null
+              }
+              <span className="rc-message">{message.Message}</span>
             </div>
           ))}
         </div>

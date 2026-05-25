@@ -99,6 +99,29 @@ export function positionDelta(driver: LiveDriverData): string {
   return driver.PrevPosition > driver.Position ? '▲' : '▼'
 }
 
+export function positionDeltaClass(driver: LiveDriverData): string {
+  if (!driver.PrevPosition || !driver.Position || driver.PrevPosition === driver.Position) return ''
+  return driver.PrevPosition > driver.Position ? 'pos-gain' : 'pos-loss'
+}
+
+const RC_FLAG_CSS: Record<string, string> = {
+  GREEN:                'rc-flag-green',
+  YELLOW:               'rc-flag-yellow',
+  'DOUBLE YELLOW':      'rc-flag-yellow',
+  RED:                  'rc-flag-red',
+  SC:                   'rc-flag-sc',
+  'SAFETY CAR':         'rc-flag-sc',
+  VSC:                  'rc-flag-vsc',
+  'VIRTUAL SAFETY CAR': 'rc-flag-vsc',
+  CHEQUERED:            'rc-flag-chequered',
+  CHECKERED:            'rc-flag-chequered',
+}
+
+export function rcFlagClass(flag: string): string {
+  if (!flag) return ''
+  return RC_FLAG_CSS[flag.toUpperCase()] ?? ''
+}
+
 export function tyreLabel(tyre: LiveTyreData | undefined): string {
   if (!tyre) return '?'
   const compound = tyre.Compound?.charAt(0) || '?'

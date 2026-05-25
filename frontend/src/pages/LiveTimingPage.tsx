@@ -76,29 +76,42 @@ export function LiveTimingPage() {
         </div>
       )}
 
-      {streamStatus === 'disconnected' && (
-        <div className="missing-notice">Live stream disconnected. Showing the last received snapshot.</div>
+      {streamStatus === 'disconnected' && snapshot && (
+        <div className="live-status-strip live-status-warn">
+          Stream disconnected — showing last received snapshot
+        </div>
       )}
 
-      {isLoading && !snapshot && <div className="loading-state">connecting to live timing…</div>}
+      {isLoading && !snapshot && (
+        <div className="loading-state">connecting to live timing…</div>
+      )}
 
       {!isLoading && !snapshot && (
         <div className="empty-state" data-testid="live-empty">
+          <div className="live-empty-status">
+            <span className={`live-conn live-conn-${streamStatus}`}>{streamStatus}</span>
+          </div>
           <div className="empty-state-title">No live session active</div>
-          <div className="empty-state-desc">Check back during an F1 race weekend.</div>
+          <div className="empty-state-desc">
+            No timing data in the current snapshot. The feed will update automatically when an F1 session goes live.
+          </div>
         </div>
       )}
 
       {snapshot && (
         <>
           <SessionBanner isLive={isLive} snapshot={snapshot} connection={streamStatus} now={now} />
-          <div className="data-section">
-            <div className="sec-header">
-              <span className="sec-title">Timing Tower</span>
+          <div className="live-columns">
+            <div className="live-tower-col">
+              <div className="sec-header">
+                <span className="sec-title">Timing Tower</span>
+              </div>
+              <TimingTower snapshot={snapshot} />
             </div>
-            <TimingTower snapshot={snapshot} />
+            <div className="live-rc-col">
+              <RaceControlFeed messages={snapshot.RCMessages ?? []} />
+            </div>
           </div>
-          <RaceControlFeed messages={snapshot.RCMessages ?? []} />
         </>
       )}
     </div>

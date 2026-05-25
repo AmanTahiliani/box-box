@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   extrapolateClock,
   latestRaceControl,
+  positionDeltaClass,
   parseLiveStateEvent,
+  rcFlagClass,
   sortLiveTimingRows,
   trackStatusLabel,
   tyreClass,
@@ -119,6 +121,16 @@ describe('live transforms', () => {
   it('maps track status and race control ordering', () => {
     expect(trackStatusLabel('4')).toBe('SC')
     expect(latestRaceControl(snapshot.RCMessages, 1)[0].Message).toBe('DRS ENABLED')
+  })
+
+  it('maps position delta and race-control flag classes', () => {
+    expect(positionDeltaClass(snapshot.Drivers['16'])).toBe('pos-gain')
+    expect(positionDeltaClass(snapshot.Drivers['1'])).toBe('pos-loss')
+    expect(positionDeltaClass({ ...snapshot.Drivers['1'], PrevPosition: 2, Position: 2 })).toBe('')
+    expect(rcFlagClass('GREEN')).toBe('rc-flag-green')
+    expect(rcFlagClass('safety car')).toBe('rc-flag-sc')
+    expect(rcFlagClass('virtual safety car')).toBe('rc-flag-vsc')
+    expect(rcFlagClass('unknown')).toBe('')
   })
 
   it('extrapolates the session clock from the reference time', () => {

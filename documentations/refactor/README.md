@@ -81,6 +81,8 @@ not implementation tickets yet.
   screenshot coverage for MVP routes and responsive viewports.
 - [23 Phase 15 Command Center](23-phase-15-command-center.md): default Web
   entry screen for local coverage, weekend focus, live status, and next actions.
+- [24 Phase 16 Live Timing Polish](24-phase-16-live-timing-polish.md): denser
+  React live timing layout, status treatment, and race-control polish.
 
 ## External References
 

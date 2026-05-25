@@ -1,9 +1,23 @@
 import { teamColor } from '../../utils'
 import type { LiveStreamData } from '../../types'
-import { driverCode, positionDelta, sortLiveTimingRows, tyreClass, tyreLabel } from '../../lib/live'
+import {
+  driverCode,
+  positionDelta,
+  positionDeltaClass,
+  sortLiveTimingRows,
+  tyreClass,
+  tyreLabel,
+} from '../../lib/live'
 
 interface Props {
   snapshot: LiveStreamData
+}
+
+function posClass(pos: number): string {
+  if (pos === 1) return 'pos-p1'
+  if (pos === 2) return 'pos-p2'
+  if (pos === 3) return 'pos-p3'
+  return 'pos-n'
 }
 
 export function TimingTower({ snapshot }: Props) {
@@ -19,7 +33,7 @@ export function TimingTower({ snapshot }: Props) {
 
   return (
     <div className="scroll-x">
-      <table className="data-table live-tower" style={{ minWidth: 520 }}>
+      <table className="data-table live-tower" style={{ minWidth: 480 }}>
         <thead>
           <tr>
             <th>Pos</th>
@@ -28,12 +42,15 @@ export function TimingTower({ snapshot }: Props) {
             <th>Tyre</th>
             <th>Last Lap</th>
             <th>Gap</th>
-            <th>Best</th>
+            <th className="hide-mobile">Best</th>
+            <th className="hide-mobile r">Laps</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             const driver = row.Driver
+            const delta = positionDelta(driver)
+            const deltaClass = positionDeltaClass(driver)
             return (
               <tr
                 key={row.RacingNumber}
@@ -43,15 +60,19 @@ export function TimingTower({ snapshot }: Props) {
                   driver.Retired ? 'retired' : '',
                 ].filter(Boolean).join(' ')}
               >
-                <td className="mono pos-n">{row.Position}</td>
-                <td className="pos-delta">{positionDelta(driver)}</td>
+                <td className={`mono ${posClass(row.Position)}`}>{row.Position}</td>
+                <td className={`pos-delta${deltaClass ? ` ${deltaClass}` : ''}`}>{delta}</td>
                 <td>
                   <div className="drv-cell">
                     <div className="drv-bar" style={{ background: teamColor(row.Info?.TeamColour) }} />
                     <span className="drv-code">{driverCode(row)}</span>
                     <span className="drv-num">{row.RacingNumber}</span>
                     {driver.InPit && <span className="badge badge-pit">PIT</span>}
-                    {driver.Retired && <span className="badge badge-out">OUT</span>}
+                    {driver.PitOut && !driver.InPit && <span className="badge badge-pit">OUT</span>}
+                    {driver.Retired && <span className="badge badge-out">RET</span>}
+                    {driver.KnockedOut && <span className="badge badge-knocked">KO</span>}
+                    {driver.Cutoff && !driver.KnockedOut && <span className="badge badge-cutoff">CUT</span>}
+                    {driver.OnFlyingLap && <span className="badge badge-flying">FL</span>}
                   </div>
                 </td>
                 <td>
@@ -61,7 +82,10 @@ export function TimingTower({ snapshot }: Props) {
                   {driver.LastLapTime || '-'}
                 </td>
                 <td className="mono">{driver.GapToLeader || driver.Interval || '-'}</td>
-                <td className={driver.BestLapOB ? 'mono lap-ob' : 'mono'}>{driver.BestLapTime || '-'}</td>
+                <td className={`hide-mobile ${driver.BestLapOB ? 'mono lap-ob' : 'mono'}`}>
+                  {driver.BestLapTime || '-'}
+                </td>
+                <td className="hide-mobile mono r">{driver.NumberOfLaps || '-'}</td>
               </tr>
             )
           })}
