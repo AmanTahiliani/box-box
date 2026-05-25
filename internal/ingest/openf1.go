@@ -357,11 +357,17 @@ func driverToStore(d models.Driver) store.Driver {
 
 func sessionDriverToStore(d models.Driver) store.SessionDriver {
 	return store.SessionDriver{
-		SessionKey:   d.SessionKey,
-		DriverNumber: d.DriverNumber,
-		MeetingKey:   d.MeetingKey,
-		TeamName:     d.TeamName,
-		TeamColour:   d.TeamColour,
+		SessionKey:    d.SessionKey,
+		DriverNumber:  d.DriverNumber,
+		MeetingKey:    d.MeetingKey,
+		BroadcastName: d.BroadcastName,
+		FirstName:     d.FirstName,
+		FullName:      d.FullName,
+		LastName:      d.LastName,
+		NameAcronym:   d.NameAcronym,
+		HeadshotURL:   d.HeadshotURL,
+		TeamName:      d.TeamName,
+		TeamColour:    d.TeamColour,
 	}
 }
 

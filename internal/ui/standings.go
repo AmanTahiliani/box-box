@@ -65,21 +65,21 @@ func (m StandingsModel) Init() tea.Cmd {
 func fetchDriverChampionship(client *api.OpenF1Client, year int) tea.Cmd {
 	return func() tea.Msg {
 		standings, err := client.GetDriverChampionshipForYear(year)
-		return driverChampionshipLoadedMsg{standings: standings, err: err}
+		return driverChampionshipLoadedMsg{standings: standings, year: year, err: err}
 	}
 }
 
 func fetchTeamChampionship(client *api.OpenF1Client, year int) tea.Cmd {
 	return func() tea.Msg {
 		standings, err := client.GetTeamChampionshipForYear(year)
-		return teamChampionshipLoadedMsg{standings: standings, err: err}
+		return teamChampionshipLoadedMsg{standings: standings, year: year, err: err}
 	}
 }
 
-func fetchStandingsDrivers(client *api.OpenF1Client, sessionKey int) tea.Cmd {
+func fetchStandingsDrivers(client *api.OpenF1Client, year, sessionKey int) tea.Cmd {
 	return func() tea.Msg {
 		drivers, err := client.GetDriversForSession(sessionKey)
-		return standingsDriversLoadedMsg{drivers: drivers, err: err}
+		return standingsDriversLoadedMsg{drivers: drivers, year: year, sessionKey: sessionKey, err: err}
 	}
 }
 
@@ -99,21 +99,28 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 		}
 
 	case driverChampionshipLoadedMsg:
+		if msg.year != m.year {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.err = msg.err
 			m.loading = false
 			return m, nil
 		}
 		m.driverStandings = msg.standings
+		m.drivers = make(map[int]models.Driver)
 		if m.client.LastResponseWasStale() {
 			m.stale = true
 		}
 		if len(msg.standings) > 0 {
-			return m, fetchStandingsDrivers(m.client, msg.standings[0].SessionKey)
+			return m, fetchStandingsDrivers(m.client, msg.year, msg.standings[0].SessionKey)
 		}
 		m.loading = false
 
 	case teamChampionshipLoadedMsg:
+		if msg.year != m.year {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.err = msg.err
 			return m, nil
@@ -124,6 +131,12 @@ func (m StandingsModel) Update(msg tea.Msg) (StandingsModel, tea.Cmd) {
 		}
 
 	case standingsDriversLoadedMsg:
+		if msg.year != m.year {
+			return m, nil
+		}
+		if len(m.driverStandings) > 0 && msg.sessionKey != m.driverStandings[0].SessionKey {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.err = msg.err
 			m.loading = false

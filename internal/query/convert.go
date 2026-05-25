@@ -40,6 +40,30 @@ func sessionToModel(s store.Session) models.Session {
 }
 
 func driverToModel(sessionKey, meetingKey int, sd store.SessionDriver, d store.Driver) models.Driver {
+	broadcastName := sd.BroadcastName
+	if broadcastName == "" {
+		broadcastName = d.BroadcastName
+	}
+	firstName := sd.FirstName
+	if firstName == "" {
+		firstName = d.FirstName
+	}
+	fullName := sd.FullName
+	if fullName == "" {
+		fullName = d.FullName
+	}
+	lastName := sd.LastName
+	if lastName == "" {
+		lastName = d.LastName
+	}
+	nameAcronym := sd.NameAcronym
+	if nameAcronym == "" {
+		nameAcronym = d.NameAcronym
+	}
+	headshotURL := sd.HeadshotURL
+	if headshotURL == "" {
+		headshotURL = d.HeadshotURL
+	}
 	teamName := sd.TeamName
 	if teamName == "" {
 		teamName = d.TeamName
@@ -49,14 +73,14 @@ func driverToModel(sessionKey, meetingKey int, sd store.SessionDriver, d store.D
 		teamColour = d.TeamColour
 	}
 	return models.Driver{
-		BroadcastName: d.BroadcastName,
+		BroadcastName: broadcastName,
 		DriverNumber:  sd.DriverNumber,
-		FirstName:     d.FirstName,
-		FullName:      d.FullName,
-		HeadshotURL:   d.HeadshotURL,
-		LastName:      d.LastName,
+		FirstName:     firstName,
+		FullName:      fullName,
+		HeadshotURL:   headshotURL,
+		LastName:      lastName,
 		MeetingKey:    meetingKey,
-		NameAcronym:   d.NameAcronym,
+		NameAcronym:   nameAcronym,
 		SessionKey:    sessionKey,
 		TeamColour:    teamColour,
 		TeamName:      teamName,

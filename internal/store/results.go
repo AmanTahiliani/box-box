@@ -88,16 +88,29 @@ func (s *Store) GetDriver(driverNumber int) (Driver, error) {
 func (s *Store) UpsertSessionDriver(sd SessionDriver) error {
 	_, err := s.db.Exec(`
 		INSERT INTO session_drivers (
-			session_key, driver_number, meeting_key, team_name, team_colour
-		) VALUES (?, ?, ?, ?, ?)
+			session_key, driver_number, meeting_key, broadcast_name, first_name,
+			full_name, last_name, name_acronym, headshot_url, team_name, team_colour
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_key, driver_number) DO UPDATE SET
 			meeting_key = excluded.meeting_key,
+			broadcast_name = excluded.broadcast_name,
+			first_name = excluded.first_name,
+			full_name = excluded.full_name,
+			last_name = excluded.last_name,
+			name_acronym = excluded.name_acronym,
+			headshot_url = excluded.headshot_url,
 			team_name = excluded.team_name,
 			team_colour = excluded.team_colour
 	`,
 		sd.SessionKey,
 		sd.DriverNumber,
 		sd.MeetingKey,
+		nullString(sd.BroadcastName),
+		nullString(sd.FirstName),
+		nullString(sd.FullName),
+		nullString(sd.LastName),
+		nullString(sd.NameAcronym),
+		nullString(sd.HeadshotURL),
 		nullString(sd.TeamName),
 		nullString(sd.TeamColour),
 	)
@@ -110,7 +123,8 @@ func (s *Store) UpsertSessionDriver(sd SessionDriver) error {
 // ListSessionDrivers returns drivers entered for a session ordered by number.
 func (s *Store) ListSessionDrivers(sessionKey int) ([]SessionDriver, error) {
 	rows, err := s.db.Query(`
-		SELECT session_key, driver_number, meeting_key, team_name, team_colour
+		SELECT session_key, driver_number, meeting_key, broadcast_name, first_name,
+		       full_name, last_name, name_acronym, headshot_url, team_name, team_colour
 		FROM session_drivers
 		WHERE session_key = ?
 		ORDER BY driver_number ASC
@@ -123,16 +137,29 @@ func (s *Store) ListSessionDrivers(sessionKey int) ([]SessionDriver, error) {
 	var out []SessionDriver
 	for rows.Next() {
 		var sd SessionDriver
+		var broadcastName, firstName, fullName, lastName, nameAcronym, headshotURL sql.NullString
 		var teamName, teamColour sql.NullString
 		if err := rows.Scan(
 			&sd.SessionKey,
 			&sd.DriverNumber,
 			&sd.MeetingKey,
+			&broadcastName,
+			&firstName,
+			&fullName,
+			&lastName,
+			&nameAcronym,
+			&headshotURL,
 			&teamName,
 			&teamColour,
 		); err != nil {
 			return nil, err
 		}
+		sd.BroadcastName = broadcastName.String
+		sd.FirstName = firstName.String
+		sd.FullName = fullName.String
+		sd.LastName = lastName.String
+		sd.NameAcronym = nameAcronym.String
+		sd.HeadshotURL = headshotURL.String
 		sd.TeamName = teamName.String
 		sd.TeamColour = teamColour.String
 		out = append(out, sd)

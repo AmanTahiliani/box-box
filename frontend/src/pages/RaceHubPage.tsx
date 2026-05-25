@@ -315,7 +315,7 @@ export function RaceHubPage({ sessionKey }: Props) {
               <span className="sec-meta mono">{data.laps.length} samples</span>
             )}
           </div>
-          <LapsView laps={data.laps} />
+          <LapsView laps={data.laps} drivers={data.drivers} />
         </div>
       )}
 

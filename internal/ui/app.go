@@ -272,6 +272,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.calendar.loading = true
 			m.standings.year = m.year
 			m.standings.loading = true
+			m.standings.err = nil
+			m.standings.stale = false
+			m.standings.driverStandings = nil
+			m.standings.teamStandings = nil
+			m.standings.drivers = make(map[int]models.Driver)
+			m.standings.cursor = 0
+			m.standings.scroll = 0
 
 			return m, tea.Batch(
 				m.calendar.Init(),

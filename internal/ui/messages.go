@@ -5,19 +5,23 @@ import "github.com/AmanTahiliani/box-box/internal/models"
 // driverChampionshipLoadedMsg carries the loaded driver championship data.
 type driverChampionshipLoadedMsg struct {
 	standings []models.ChampionshipDriver
+	year      int
 	err       error
 }
 
 // teamChampionshipLoadedMsg carries the loaded team championship data.
 type teamChampionshipLoadedMsg struct {
 	standings []models.ChampionshipTeam
+	year      int
 	err       error
 }
 
 // standingsDriversLoadedMsg carries drivers for the standings join.
 type standingsDriversLoadedMsg struct {
-	drivers []models.Driver
-	err     error
+	drivers    []models.Driver
+	year       int
+	sessionKey int
+	err        error
 }
 
 // meetingsLoadedMsg carries the full meeting list for the calendar.

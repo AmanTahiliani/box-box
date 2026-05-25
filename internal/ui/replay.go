@@ -499,7 +499,13 @@ func (m ReplayModel) renderReplay() string {
 		name := fmt.Sprintf("#%d", dp.driverNum)
 		teamColor := colorMuted
 		if ok {
-			name = d.NameAcronym
+			name = d.FullName
+			if name == "" {
+				name = d.BroadcastName
+			}
+			if name == "" {
+				name = d.NameAcronym
+			}
 			if d.TeamColour != "" {
 				teamColor = "#" + d.TeamColour
 			} else {
@@ -508,7 +514,10 @@ func (m ReplayModel) renderReplay() string {
 		}
 
 		colorBar := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Render("┃")
-		nameStyled := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Bold(true).Render(padRight(name, 4))
+		numberStyled := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Bold(true).
+			Render(padRight(fmt.Sprintf("%d", dp.driverNum), 4))
+		nameStyled := lipgloss.NewStyle().Foreground(lipgloss.Color(teamColor)).Bold(true).
+			Render(padRight(truncate(name, 18), 18))
 		posStyled := renderPosition(dp.pos)
 
 		// Lap time
@@ -524,9 +533,10 @@ func (m ReplayModel) renderReplay() string {
 				Render(fmt.Sprintf("PIT %.1fs", dur))
 		}
 
-		sb.WriteString(fmt.Sprintf("  %s  %s  %s  %s  %s\n",
+		sb.WriteString(fmt.Sprintf("  %s  %s%s  %s  %s  %s\n",
 			padRightVisible(posStyled, 4),
 			colorBar,
+			numberStyled,
 			nameStyled,
 			ltStr,
 			pitStr,

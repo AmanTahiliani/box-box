@@ -1,4 +1,5 @@
 import type { RaceControlMessage } from '../types'
+import { rcFlagClass } from '../lib/live'
 
 interface Props {
   messages: RaceControlMessage[]
@@ -17,6 +18,24 @@ function formatEventTime(date: string): string {
 
 function eventLabel(message: RaceControlMessage): string {
   return message.flag || message.category || 'Message'
+}
+
+function eventClass(message: RaceControlMessage): string {
+  const flagClass = rcFlagClass(message.flag ?? '')
+  if (flagClass) return flagClass
+
+  const category = (message.category ?? '').toLowerCase()
+  const text = `${message.message ?? ''} ${message.category ?? ''}`.toLowerCase()
+
+  if (category.includes('safety') || text.includes('safety car')) return 'rc-flag-sc'
+  if (category === 'drs' || text.includes('drs')) return 'rc-flag-drs'
+  if (text.includes('virtual safety car')) return 'rc-flag-vsc'
+  if (text.includes('red flag')) return 'rc-flag-red'
+  if (text.includes('yellow')) return 'rc-flag-yellow'
+  if (text.includes('green light') || text.includes('green flag')) return 'rc-flag-green'
+  if (text.includes('chequered') || text.includes('checkered')) return 'rc-flag-chequered'
+
+  return 'rc-flag-other'
 }
 
 export function RaceControlView({ messages }: Props) {
@@ -44,24 +63,27 @@ export function RaceControlView({ messages }: Props) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((message, index) => (
-            <tr key={`${message.date}-${index}`}>
-              <td className="mono" style={{ color: 'var(--text-3)' }}>
-                {formatEventTime(message.date)}
-              </td>
-              <td className="c mono">{message.lap_number ?? '—'}</td>
-              <td>
-                <span style={{ fontWeight: 700 }}>{eventLabel(message)}</span>
-                {message.scope && (
-                  <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>
-                    {message.scope.toLowerCase()}
-                  </span>
-                )}
-              </td>
-              <td className="c mono hide-mobile">{message.driver_number ?? '—'}</td>
-              <td style={{ whiteSpace: 'normal' }}>{message.message || '—'}</td>
-            </tr>
-          ))}
+          {rows.map((message, index) => {
+            const visualClass = eventClass(message)
+            return (
+              <tr className={`race-control-row ${visualClass}`} key={`${message.date}-${index}`}>
+                <td className="mono rc-time-cell">
+                  {formatEventTime(message.date)}
+                </td>
+                <td className="c mono">{message.lap_number ?? '—'}</td>
+                <td>
+                  <span className={`rc-event-pill rc-flag ${visualClass}`}>{eventLabel(message)}</span>
+                  {message.scope && (
+                    <span className="rc-scope">
+                      {message.scope.toLowerCase()}
+                    </span>
+                  )}
+                </td>
+                <td className="c mono hide-mobile">{message.driver_number ?? '—'}</td>
+                <td className="rc-message-cell">{message.message || '—'}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

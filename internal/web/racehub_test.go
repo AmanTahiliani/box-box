@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/api"
+	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/query"
 	"github.com/AmanTahiliani/box-box/internal/store"
 )
@@ -148,6 +149,19 @@ func TestHandleRaceHubRequiresSessionKey(t *testing.T) {
 	srv.handleRaceHub(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestBuildDriverMapFirstKeepsFirstDuplicateDriverNumber(t *testing.T) {
+	drivers := []models.Driver{
+		{DriverNumber: 4, NameAcronym: "NOR", TeamName: "McLaren"},
+		{DriverNumber: 4, NameAcronym: "NOR", TeamName: "Red Bull Racing"},
+	}
+
+	driverMap := buildDriverMapFirst(drivers)
+	driver := driverMap[4]
+	if driver.TeamName != "McLaren" {
+		t.Fatalf("team = %q, want McLaren", driver.TeamName)
 	}
 }
 

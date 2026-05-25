@@ -557,12 +557,13 @@ func (s *Server) handleChampionshipDrivers(w http.ResponseWriter, r *http.Reques
 	}
 
 	drivers, _ := s.client.GetDriversForSession(champ[0].SessionKey)
-	driverMap := buildDriverMap(drivers)
+	driverMap := buildDriverMapFirst(drivers)
 
 	enriched := make([]champDriverWithInfo, 0, len(champ))
 	for _, c := range champ {
 		e := champDriverWithInfo{ChampionshipDriver: c}
-		if d, ok := driverMap[c.DriverNumber]; ok {
+		d, ok := s.championshipDriverInfo(c.SessionKey, c.DriverNumber, driverMap)
+		if ok {
 			e.NameAcronym = d.NameAcronym
 			e.FullName = d.FullName
 			e.TeamName = d.TeamName
@@ -571,6 +572,14 @@ func (s *Server) handleChampionshipDrivers(w http.ResponseWriter, r *http.Reques
 		enriched = append(enriched, e)
 	}
 	writeJSON(w, enriched)
+}
+
+func (s *Server) championshipDriverInfo(sessionKey, driverNumber int, fallback map[int]models.Driver) (models.Driver, bool) {
+	if d, err := s.client.GetDriver(sessionKey, driverNumber); err == nil && d != nil {
+		return *d, true
+	}
+	d, ok := fallback[driverNumber]
+	return d, ok
 }
 
 // --- /api/v1/championship/teams ---
@@ -1022,6 +1031,16 @@ func buildDriverMap(drivers []models.Driver) map[int]models.Driver {
 	m := make(map[int]models.Driver, len(drivers))
 	for _, d := range drivers {
 		m[d.DriverNumber] = d
+	}
+	return m
+}
+
+func buildDriverMapFirst(drivers []models.Driver) map[int]models.Driver {
+	m := make(map[int]models.Driver, len(drivers))
+	for _, d := range drivers {
+		if _, exists := m[d.DriverNumber]; !exists {
+			m[d.DriverNumber] = d
+		}
 	}
 	return m
 }

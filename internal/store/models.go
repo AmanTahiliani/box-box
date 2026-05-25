@@ -42,16 +42,16 @@ type NewsSource struct {
 
 // NewsItem stores a normalized feed item deduplicated by URL.
 type NewsItem struct {
-	URL            string
-	Source         string
-	Title          string
-	PublishedAt    *time.Time
-	Summary        string
-	Category       string
-	FetchedAt      time.Time
-	OGImageURL     string
-	OGDescription  string
-	ReadAt         *time.Time
+	URL           string
+	Source        string
+	Title         string
+	PublishedAt   *time.Time
+	Summary       string
+	Category      string
+	FetchedAt     time.Time
+	OGImageURL    string
+	OGDescription string
+	ReadAt        *time.Time
 }
 
 // Meeting is a race weekend record.
@@ -100,11 +100,17 @@ type Driver struct {
 
 // SessionDriver links a driver to a session with session-specific team info.
 type SessionDriver struct {
-	SessionKey   int
-	DriverNumber int
-	MeetingKey   int
-	TeamName     string
-	TeamColour   string
+	SessionKey    int
+	DriverNumber  int
+	MeetingKey    int
+	BroadcastName string
+	FirstName     string
+	FullName      string
+	LastName      string
+	NameAcronym   string
+	HeadshotURL   string
+	TeamName      string
+	TeamColour    string
 }
 
 // SessionResult is a final classification row for a session.

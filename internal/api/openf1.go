@@ -273,24 +273,12 @@ func (c *OpenF1Client) getLatestRaceSessionKey() (int, error) {
 		return 0, errors.New("no Race sessions found")
 	}
 
-	// Walk backwards to find the most recent completed race.
 	now := time.Now()
-	for i := len(sessions) - 1; i >= 0; i-- {
-		s := sessions[i]
-		if s.DateEnd != "" {
-			endTime, err := time.Parse(time.RFC3339, s.DateEnd)
-			if err == nil && endTime.Before(now) {
-				return s.SessionKey, nil
-			}
-		} else if s.DateStart != "" {
-			startTime, err := time.Parse(time.RFC3339, s.DateStart)
-			if err == nil && startTime.Add(3*time.Hour).Before(now) {
-				return s.SessionKey, nil
-			}
-		}
+	latestKey, ok := latestCompletedRaceSessionKey(sessions, now)
+	if !ok {
+		return 0, errors.New("no completed Race sessions found")
 	}
-
-	return 0, errors.New("no completed Race sessions found")
+	return latestKey, nil
 }
 
 // getLatestRaceSessionKeyForYear returns the session_key of the most recent
@@ -311,25 +299,47 @@ func (c *OpenF1Client) getLatestRaceSessionKeyForYear(year int) (int, error) {
 		return 0, fmt.Errorf("no Race sessions found for year %d", year)
 	}
 
-	// Walk backwards to find the most recent completed race.
 	now := time.Now()
-	for i := len(sessions) - 1; i >= 0; i-- {
-		s := sessions[i]
-		if s.DateEnd != "" {
-			endTime, err := time.Parse(time.RFC3339, s.DateEnd)
-			if err == nil && endTime.Before(now) {
-				return s.SessionKey, nil
-			}
-		} else if s.DateStart != "" {
-			// Fallback: if no DateEnd, check DateStart + 3 hours as a rough estimate.
-			startTime, err := time.Parse(time.RFC3339, s.DateStart)
-			if err == nil && startTime.Add(3*time.Hour).Before(now) {
-				return s.SessionKey, nil
-			}
+	latestKey, ok := latestCompletedRaceSessionKey(sessions, now)
+	if !ok {
+		return 0, fmt.Errorf("no completed Race sessions found for year %d", year)
+	}
+	return latestKey, nil
+}
+
+func latestCompletedRaceSessionKey(sessions []models.Session, now time.Time) (int, bool) {
+	var latestKey int
+	var latestTime time.Time
+
+	for _, s := range sessions {
+		completedAt, ok := completedRaceTime(s)
+		if !ok || !completedAt.Before(now) {
+			continue
+		}
+		if latestKey == 0 || completedAt.After(latestTime) {
+			latestKey = s.SessionKey
+			latestTime = completedAt
 		}
 	}
 
-	return 0, fmt.Errorf("no completed Race sessions found for year %d", year)
+	return latestKey, latestKey != 0
+}
+
+func completedRaceTime(s models.Session) (time.Time, bool) {
+	if s.DateEnd != "" {
+		endTime, err := time.Parse(time.RFC3339, s.DateEnd)
+		if err == nil {
+			return endTime, true
+		}
+	}
+	if s.DateStart == "" {
+		return time.Time{}, false
+	}
+	startTime, err := time.Parse(time.RFC3339, s.DateStart)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return startTime.Add(3 * time.Hour), true
 }
 
 // GetLatestDriverChampionship returns championship standings for the most recent
