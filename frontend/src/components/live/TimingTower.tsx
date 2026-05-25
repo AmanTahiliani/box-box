@@ -19,7 +19,7 @@ export function TimingTower({ snapshot }: Props) {
 
   return (
     <div className="scroll-x">
-      <table className="data-table live-tower">
+      <table className="data-table live-tower" style={{ minWidth: 520 }}>
         <thead>
           <tr>
             <th>Pos</th>

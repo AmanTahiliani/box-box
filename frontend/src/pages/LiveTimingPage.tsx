@@ -69,7 +69,7 @@ export function LiveTimingPage() {
   }, [])
 
   return (
-    <div className="page live-page">
+    <div className="page live-page" data-testid="live-page">
       {isError && (
         <div className="error-box">
           {error instanceof Error ? error.message : 'Failed to load live timing state'}
@@ -83,7 +83,7 @@ export function LiveTimingPage() {
       {isLoading && !snapshot && <div className="loading-state">connecting to live timing…</div>}
 
       {!isLoading && !snapshot && (
-        <div className="empty-state">
+        <div className="empty-state" data-testid="live-empty">
           <div className="empty-state-title">No live session active</div>
           <div className="empty-state-desc">Check back during an F1 race weekend.</div>
         </div>

@@ -5,6 +5,7 @@
   "description": "Repository-level test tooling for box-box.",
   "scripts": {
     "test:e2e": "playwright test",
+    "test:e2e:prod": "playwright test --config playwright.prod.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report"
   },

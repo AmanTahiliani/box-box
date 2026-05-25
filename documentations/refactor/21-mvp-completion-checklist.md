@@ -32,13 +32,16 @@ checkpoint for what has been completed and what remains.
 Run these before cutting an MVP tag or handing the repo to another agent:
 
 ```bash
-go test ./internal/live ./internal/store ./internal/ingest ./internal/query ./internal/web
-npm test -- --run --prefix frontend
-npm run build --prefix frontend
+go test ./internal/live ./internal/models ./internal/store ./internal/ingest ./internal/query ./internal/web
+npm --prefix frontend test -- --run
+npm --prefix frontend run build
 npm run test:e2e
+npm run test:e2e:prod
 ```
 
-For a local manual smoke test:
+### Dev proxy smoke (Vite + Go API)
+
+For a local manual smoke test with the Vite dev server proxying API calls:
 
 ```bash
 go run ./scripts/seed-e2e-db/main.go --db /tmp/boxbox-mvp.db
@@ -51,6 +54,33 @@ Then open:
 - `http://127.0.0.1:15173/race-hub?session_key=9472`
 - `http://127.0.0.1:15173/data-library`
 - `http://127.0.0.1:15173/live`
+
+### Production web smoke (Go serves built React)
+
+Verify the same routes when Go serves `frontend/dist` directly (no Vite):
+
+```bash
+npm --prefix frontend run build
+go run ./scripts/seed-e2e-db/main.go --db /tmp/boxbox-mvp.db
+BOXBOX_DISABLE_LIVE=1 go run ./cmd/main.go --web --db /tmp/boxbox-mvp.db --port 18080
+```
+
+Then open:
+
+- `http://127.0.0.1:18080/race-hub?session_key=9472`
+- `http://127.0.0.1:18080/data-library`
+- `http://127.0.0.1:18080/live`
+
+Automated production-serving coverage:
+
+```bash
+npm run test:e2e:prod
+```
+
+This runs `playwright.prod.config.ts`, which builds the frontend, seeds
+`.playwright/boxbox-prod-e2e.db`, starts Go web mode on port 18080, and
+exercises Race Hub, Data Library, Live empty state, and nav links against the
+built SPA.
 
 ## Remaining Post-MVP Work
 

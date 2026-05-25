@@ -6,6 +6,7 @@ const WEB_PORT = process.env.BOXBOX_WEB_PORT ?? '15173'
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: '**/production-smoke.spec.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

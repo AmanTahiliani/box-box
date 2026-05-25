@@ -40,6 +40,7 @@ body {
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -56,7 +57,11 @@ a { color: inherit; text-decoration: none; }
   padding: 0 var(--s6);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.app-nav::-webkit-scrollbar { display: none; }
 
 .nav-logo {
   font-family: var(--f-mono);
@@ -68,7 +73,7 @@ a { color: inherit; text-decoration: none; }
 }
 .nav-logo em { color: var(--red); font-style: normal; }
 
-.nav-links { display: flex; gap: 2px; }
+.nav-links { display: flex; gap: 2px; flex-shrink: 0; }
 
 .nav-links a {
   padding: var(--s2) var(--s4);
@@ -226,6 +231,8 @@ a { color: inherit; text-decoration: none; }
 
 .session-bar input {
   width: 110px;
+  min-width: 80px;
+  flex: 0 1 auto;
   padding: 4px var(--s3);
   background: var(--surface);
   border: 1px solid var(--border-2);
@@ -967,8 +974,32 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 640px) {
   .page { padding: var(--s3); }
   .app-nav { padding: 0 var(--s4); gap: var(--s3); }
+  .nav-logo { font-size: 14px; }
   .nav-links a { padding: var(--s2) var(--s3); font-size: 11px; }
   .rh-meeting { font-size: 17px; }
+
+  .session-bar input { flex: 1; max-width: 140px; }
+
+  .live-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s3);
+  }
+  .live-banner-meta {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .live-banner h1 { font-size: 16px; }
+
+  .dataset-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: var(--s3);
+    padding-bottom: var(--s2);
+  }
+  .dataset-strip::-webkit-scrollbar { display: none; }
 
   /* On narrow screens, hide lower-priority table columns */
   .hide-mobile { display: none; }
@@ -984,4 +1015,6 @@ a { color: inherit; text-decoration: none; }
   .dl-content-body { grid-template-columns: 1fr; }
   .dl-round-scroll { border-right: none; max-height: 40vh; }
   .dl-detail-wrap { border-top: 1px solid var(--border); }
+  .dl-content-header { padding: var(--s3) var(--s4); }
+  .dl-content-meta { font-size: 11px; }
 }
