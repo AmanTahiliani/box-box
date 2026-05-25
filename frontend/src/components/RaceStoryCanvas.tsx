@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
-import type { EnrichedResult, EnrichedGrid, PositionSample, Lap } from '../types'
+import type { EnrichedResult, EnrichedGrid, PositionSample, Lap, Session } from '../types'
 import { gridDelta, gridDeltaClass, formatDuration, formatGap } from '../utils'
 
 interface Props {
@@ -11,11 +11,12 @@ interface Props {
     datasets: Record<string, any>
     race_control?: any[]
     pit_stops?: any[]
+    session?: Session
   }
 }
 
 export function RaceStoryCanvas({ data }: Props) {
-  const { results, starting_grid: grid, positions, datasets, race_control = [], pit_stops = [] } = data
+  const { results, starting_grid: grid, positions, datasets, race_control = [], pit_stops = [], laps = [] } = data
   const hasPositions = datasets['positions']?.status === 'available'
 
   const [scrubTime, setScrubTime] = useState<number | null>(null)
@@ -42,8 +43,12 @@ export function RaceStoryCanvas({ data }: Props) {
         pos: p.position,
       })
     }
-    for (const samples of byDriver.values()) {
+    const dnfSet = new Set(results.filter(r => r.dnf || r.dns || r.dsq).map(r => r.driver_number))
+    for (const [dNum, samples] of byDriver.entries()) {
       samples.sort((a, b) => a.t - b.t)
+      if (samples.length > 0 && !dnfSet.has(dNum)) {
+        samples.push({ t: 1, pos: samples[samples.length - 1].pos })
+      }
     }
 
     const getInterpPos = (samples: {t: number, pos: number}[], t: number) => {
@@ -85,12 +90,26 @@ export function RaceStoryCanvas({ data }: Props) {
     const PL = 40
     const PR = 48
     const PT = 8
-    const PB = 8
+    const PB = 20
     const plotW = W - PL - PR
     const plotH = H - PT - PB
 
     const toX = (t: number) => PL + t * plotW
     const toY = (pos: number) => PT + ((pos - 1) / Math.max(maxPos - 1, 1)) * plotH
+
+    const winner = results.find(r => r.position === 1)
+    const winnerLaps = winner ? laps.filter(l => l.driver_number === winner.driver_number) : []
+    const lapTicks: { lap: number, t: number }[] = []
+    const lapInterval = winnerLaps.length < 30 ? 5 : 10
+    
+    for (const lap of winnerLaps) {
+      if (lap.lap_number > 0 && lap.lap_number % lapInterval === 0) {
+        const t = (new Date(lap.date_start).getTime() - tMin) / tRange
+        if (t >= 0 && t <= 1) {
+          lapTicks.push({ lap: lap.lap_number, t })
+        }
+      }
+    }
 
     // Safety Car / VSC periods
     const scPeriods: { start: number; end: number | null; type: 'SC' | 'VSC' }[] = []
@@ -175,6 +194,15 @@ export function RaceStoryCanvas({ data }: Props) {
             </g>
           ))}
 
+          {lapTicks.map(tick => (
+            <g key={`lap-${tick.lap}`}>
+              <line x1={toX(tick.t)} x2={toX(tick.t)} y1={H - PB} y2={H - PB + 4} stroke="var(--border)" strokeWidth={1} />
+              <text x={toX(tick.t)} y={H - PB + 14} textAnchor="middle" fill="var(--text-3)" fontSize={9} fontFamily="var(--f-mono)">
+                L{tick.lap}
+              </text>
+            </g>
+          ))}
+
           {Array.from(byDriver.entries()).map(([dNum, samples]) => {
             const colour = colorByDriver.get(dNum)
             const color = colour ? `#${colour}` : '#888'
@@ -200,6 +228,7 @@ export function RaceStoryCanvas({ data }: Props) {
                   strokeLinejoin="round"
                   strokeLinecap="round"
                   className="rs-driver-line"
+                  pathLength={1}
                 />
                 
                 {driverPits.map((p, i) => {
@@ -282,8 +311,16 @@ export function RaceStoryCanvas({ data }: Props) {
         <div className="rs-field-list">
           {displayResults.map((r, i) => {
             const gridPos = grid.find((g) => g.driver_number === r.driver_number)?.position ?? 0
+            const currentPos = scrubTime !== null ? i + 1 : r.position
             const isWinner = i === 0 && r.position === 1
-            const pClass = r.position === 1 ? 'rs-pos-p1' : r.position === 2 ? 'rs-pos-p2' : r.position === 3 ? 'rs-pos-p3' : ''
+            const pClass = currentPos === 1 ? 'rs-pos-p1' : currentPos === 2 ? 'rs-pos-p2' : currentPos === 3 ? 'rs-pos-p3' : ''
+            
+            let currentPoints: number | string = r.points
+            if (scrubTime !== null) {
+              const isSprint = data.session?.session_type?.toLowerCase().includes('sprint')
+              const ptsArray = isSprint ? [8, 7, 6, 5, 4, 3, 2, 1] : [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
+              currentPoints = currentPos <= ptsArray.length ? ptsArray[currentPos - 1] : 0
+            }
             
             return (
               <div 
@@ -294,7 +331,7 @@ export function RaceStoryCanvas({ data }: Props) {
               >
                 <div className="rs-driver-left">
                   <div className={`rs-pos-col ${pClass}`}>
-                    {scrubTime !== null ? i + 1 : r.position}
+                    {currentPos}
                   </div>
                   <div className="rs-driver-cell">
                     <div 
@@ -311,21 +348,21 @@ export function RaceStoryCanvas({ data }: Props) {
                 <div className="rs-driver-right">
                   <div className="rs-metric">
                     <span>
-                      <span className={gridDeltaClass(r.position, gridPos)}>
-                        {gridDelta(r.position, gridPos)}
+                      <span className={gridDeltaClass(currentPos, gridPos)}>
+                        {gridDelta(currentPos, gridPos)}
                       </span>
                     </span>
                     <span className="rs-metric-label">Grid</span>
                   </div>
                   
-                  <div className="rs-metric" style={{ width: '80px' }}>
+                  <div className="rs-metric" style={{ width: '80px', opacity: scrubTime !== null ? 0.3 : 1 }}>
                     <span>{isWinner ? formatDuration(r.duration) : formatGap(r.gap_to_leader)}</span>
                     <span className="rs-metric-label">{isWinner ? 'Time' : 'Gap'}</span>
                   </div>
                   
                   <div className="rs-metric" style={{ width: '40px' }}>
-                    <span style={{ color: r.points > 0 ? 'var(--text)' : 'var(--text-3)' }}>
-                      {r.points}
+                    <span style={{ color: Number(currentPoints) > 0 ? 'var(--text)' : 'var(--text-3)' }}>
+                      {currentPoints}
                     </span>
                     <span className="rs-metric-label">Pts</span>
                   </div>

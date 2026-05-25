@@ -2501,8 +2501,8 @@ a { color: inherit; text-decoration: none; }
 
 /* Interactive Race Story Canvas elements */
 .rs-driver-line {
-  stroke-dasharray: 4000;
-  stroke-dashoffset: 4000;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
   animation: drawLine 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
