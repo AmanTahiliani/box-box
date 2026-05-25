@@ -111,8 +111,7 @@ Snapshots are stored under `tests/visual/__snapshots__/`. See
 - Add track outline ingestion/read models to the React app if the local data
   source is reliable enough.
 - Expand from weekend/session ingestion toward safe full-season backfill.
-- Add Command Center, Drivers, Standings, and Settings as separate product
-  phases.
+- Add Drivers, Standings, and Settings as separate product phases.
 - Revisit static archive feasibility after source mapping is proven.
 
 ## Notes

@@ -1,5 +1,6 @@
 import { test } from '@playwright/test'
 import {
+  gotoCommandCenterReady,
   gotoDataLibraryReady,
   gotoLiveEmptyReady,
   gotoRaceHubReady,
@@ -7,6 +8,11 @@ import {
 } from './helpers'
 
 test.describe('MVP visual regression', () => {
+  test('command-center', async ({ page }) => {
+    await gotoCommandCenterReady(page)
+    await screenshotPage(page, 'command-center')
+  })
+
   test('race-hub', async ({ page }) => {
     await gotoRaceHubReady(page)
     await screenshotPage(page, 'race-hub')

@@ -14,6 +14,14 @@ export async function waitForScreenshotReady(page: Page): Promise<void> {
   await page.waitForTimeout(150)
 }
 
+export async function gotoCommandCenterReady(page: Page): Promise<void> {
+  await page.goto('/')
+  await expect(page.getByTestId('command-center')).toBeVisible()
+  await expect(page.getByTestId('cc-focus')).toBeVisible()
+  await expect(page.getByTestId('cc-session-9472')).toBeVisible()
+  await waitForScreenshotReady(page)
+}
+
 export async function gotoRaceHubReady(page: Page, sessionKey = FULL_SESSION): Promise<void> {
   await page.goto(`/race-hub?session_key=${sessionKey}`)
   await expect(page.getByText('Final Classification')).toBeVisible()

@@ -7,6 +7,9 @@ export function Nav() {
         box<em>-</em>box
       </Link>
       <div className="nav-links">
+        <Link to="/" activeProps={{ className: 'active' }} activeOptions={{ exact: true }}>
+          Command
+        </Link>
         <Link to="/race-hub" search={{}} activeProps={{ className: 'active' }}>
           Race Hub
         </Link>

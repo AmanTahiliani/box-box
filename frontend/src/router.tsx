@@ -1,5 +1,6 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { Nav } from './components/Nav'
+import { CommandCenterPage } from './pages/CommandCenterPage'
 import { RaceHubPage } from './pages/RaceHubPage'
 import { DataLibraryPage } from './pages/DataLibraryPage'
 import { LiveTimingPage } from './pages/LiveTimingPage'
@@ -17,12 +18,10 @@ const rootRoute = createRootRoute({
   ),
 })
 
-const indexRoute = createRoute({
+export const commandCenterRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  beforeLoad: () => {
-    throw redirect({ to: '/race-hub', search: {} })
-  },
+  component: CommandCenterPage,
 })
 
 export const raceHubRoute = createRoute({
@@ -50,7 +49,7 @@ export const liveTimingRoute = createRoute({
   component: LiveTimingPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, raceHubRoute, dataLibraryRoute, liveTimingRoute])
+const routeTree = rootRoute.addChildren([commandCenterRoute, raceHubRoute, dataLibraryRoute, liveTimingRoute])
 
 export const router = createRouter({ routeTree })
 

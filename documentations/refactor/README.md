@@ -79,6 +79,8 @@ not implementation tickets yet.
   implementation status, verification commands, and remaining post-MVP work.
 - [22 Phase 14 Visual Regression](22-phase-14-visual-regression.md): Playwright
   screenshot coverage for MVP routes and responsive viewports.
+- [23 Phase 15 Command Center](23-phase-15-command-center.md): default Web
+  entry screen for local coverage, weekend focus, live status, and next actions.
 
 ## External References
 
