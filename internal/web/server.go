@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AmanTahiliani/box-box/internal/api"
@@ -41,6 +42,21 @@ func NewServer(client *api.OpenF1Client, port int, st *store.Store) *Server {
 
 // Start registers routes, launches background goroutines, and begins serving.
 func (s *Server) Start() error {
+	handler, err := s.routes()
+	if err != nil {
+		return err
+	}
+
+	// Start background goroutines.
+	go s.hub.run()
+	if os.Getenv("BOXBOX_DISABLE_LIVE") != "1" {
+		go s.runLiveFeeds()
+	}
+
+	return http.ListenAndServe(s.addr, withCORS(withLogging(handler)))
+}
+
+func (s *Server) routes() (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	// REST API — /api/v1/laps/comparison must be registered before /api/v1/laps
@@ -68,34 +84,63 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/v1/live/stream", s.handleSSEStream)
 
 	// Static files + SPA catchall
-	subFS, err := fs.Sub(assetsFS, "assets")
+	staticFS, err := selectStaticFS()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fileServer := http.FileServer(http.FS(subFS))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/", spaFileServer(staticFS))
+
+	return mux, nil
+}
+
+func selectStaticFS() (fs.FS, error) {
+	if dist, ok := findFrontendDist("."); ok {
+		return os.DirFS(dist), nil
+	}
+	return fs.Sub(assetsFS, "assets")
+}
+
+func findFrontendDist(start string) (string, bool) {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", false
+	}
+
+	for {
+		dist := filepath.Join(dir, "frontend", "dist")
+		index := filepath.Join(dist, "index.html")
+		if info, err := os.Stat(index); err == nil && !info.IsDir() {
+			return dist, true
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
+func spaFileServer(staticFS fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(staticFS))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If the path maps to a real asset file, serve it directly.
 		if r.URL.Path != "/" {
 			p := strings.TrimPrefix(r.URL.Path, "/")
-			if f, err := subFS.Open(p); err == nil {
-				f.Close()
-				fileServer.ServeHTTP(w, r)
-				return
+			if fs.ValidPath(p) {
+				if info, err := fs.Stat(staticFS, p); err == nil && !info.IsDir() {
+					fileServer.ServeHTTP(w, r)
+					return
+				}
 			}
 		}
+
 		// SPA catchall: all unknown paths serve index.html.
 		r2 := *r
 		r2.URL.Path = "/"
 		fileServer.ServeHTTP(w, &r2)
 	})
-
-	// Start background goroutines.
-	go s.hub.run()
-	if os.Getenv("BOXBOX_DISABLE_LIVE") != "1" {
-		go s.runLiveFeeds()
-	}
-
-	return http.ListenAndServe(s.addr, withCORS(withLogging(mux)))
 }
 
 // withCORS adds permissive CORS headers (localhost use only).
