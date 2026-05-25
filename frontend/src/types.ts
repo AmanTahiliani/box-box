@@ -155,3 +155,17 @@ export interface Lap {
   lap_duration: number | null
   is_pit_out_lap: boolean
 }
+
+export interface WeekendSession {
+  session: Session
+  source: 'local' | 'partial' | 'none'
+  datasets: Record<string, DatasetInfo>
+}
+
+export interface Weekend {
+  source: 'local' | 'partial' | 'none'
+  meeting_key: number
+  meeting: Meeting
+  sessions: WeekendSession[]
+  default_session_key?: number
+}

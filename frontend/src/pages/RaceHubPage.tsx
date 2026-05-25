@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { fetchRaceHub } from '../api'
+import { LocalDataNavigator } from '../components/LocalDataNavigator'
 import { RaceHubHeader } from '../components/RaceHubHeader'
 import { DatasetStrip } from '../components/DatasetStrip'
 import { ClassificationTable } from '../components/ClassificationTable'
@@ -19,6 +20,10 @@ export function RaceHubPage({ sessionKey }: Props) {
   const navigate = useNavigate()
   const [inputVal, setInputVal] = useState(sessionKey > 0 ? String(sessionKey) : '')
   const [activeTab, setActiveTab] = useState<Tab>('results')
+
+  useEffect(() => {
+    setInputVal(sessionKey > 0 ? String(sessionKey) : '')
+  }, [sessionKey])
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['race-hub', sessionKey],
@@ -55,17 +60,8 @@ export function RaceHubPage({ sessionKey }: Props) {
         )}
       </form>
 
-      {/* Prompt when no key entered */}
-      {sessionKey === 0 && (
-        <div className="empty-state">
-          <div className="empty-state-title">Enter a session key to load Race Hub data</div>
-          <div className="empty-state-desc">
-            Example: <code>9472</code> (Monaco GP 2025 Race)<br />
-            Ingest data first with{' '}
-            <code>box-box --ingest-session &lt;key&gt;</code>
-          </div>
-        </div>
-      )}
+      {/* Local data browser when no session loaded */}
+      {sessionKey === 0 && <LocalDataNavigator />}
 
       {/* Loading */}
       {sessionKey > 0 && isLoading && (

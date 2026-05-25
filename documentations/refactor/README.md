@@ -71,8 +71,10 @@ not implementation tickets yet.
   raw session keys.
 - [18 Phase 10 Navigation UI](18-phase-10-navigation-ui.md): frontend slice for
   adding local-first season/weekend navigation around Race Hub.
-- [Cursor Phase 10 Prompt](cursor-phase-10-navigation-ui-prompt.md): current
-  handoff prompt for the next frontend phase.
+- [19 Phase 11 Weekend Ingestion](19-phase-11-weekend-ingestion.md): backend
+  slice for making one command ingest a whole race weekend into the local DB.
+- [Cursor Phase 11 Prompt](cursor-phase-11-weekend-ingestion-prompt.md):
+  current handoff prompt for the next backend phase.
 
 ## External References
 

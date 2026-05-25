@@ -43,4 +43,18 @@ test.describe('Race Hub', () => {
     await expect(page.getByText('Lap-by-lap positions not available.')).toBeVisible()
     await expect(page.locator('[data-testid="position-chart"]')).not.toBeVisible()
   })
+
+  test('navigates to race hub via local data browser', async ({ page }) => {
+    await page.goto('/race-hub')
+
+    await expect(page.getByTestId('local-nav')).toBeVisible()
+    await expect(page.getByText('Monaco')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Sessions' }).click()
+    await expect(page.getByTestId('weekend-sessions')).toBeVisible()
+    await page.getByTestId('open-session-9472').click()
+
+    await expect(page.getByText('Final Classification')).toBeVisible()
+    await expect(page.locator('.drv-code', { hasText: 'VER' })).toBeVisible()
+  })
 })
