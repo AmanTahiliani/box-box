@@ -1,5 +1,11 @@
 # box-box Refactor Brief
 
+## Operator guide
+
+For day-to-day build, run, ingest, test, and Web route commands, use the
+top-level [README.md](../../README.md). This directory is for architecture,
+phasing, and research — not the first stop for new contributors.
+
 ## Purpose
 
 This directory captures the planning baseline for the next major evolution of
