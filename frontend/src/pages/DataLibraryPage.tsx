@@ -95,7 +95,9 @@ export function DataLibraryPage() {
     return (
       <div className="page" data-testid="data-library-empty">
         <div className="dl-page-header">
-          <h1 className="dl-page-title">Data Library</h1>
+          <span className="dl-page-eyebrow mono">box-box · admin</span>
+          <h1 className="dl-page-title">Data Health</h1>
+          <span className="dl-page-sub mono">Local SQLite domain store · ingestion guidance</span>
         </div>
         <div className="empty-state">
           <div className="empty-state-title">No ingested seasons yet</div>
@@ -120,6 +122,26 @@ export function DataLibraryPage() {
 
   return (
     <div className="dl-page" data-testid="data-library">
+      <div className="dl-page-banner">
+        <div className="dl-banner-titles">
+          <span className="dl-page-eyebrow mono">box-box · admin</span>
+          <h1 className="dl-page-title">Data Health</h1>
+        </div>
+        <div className="dl-banner-stats mono">
+          <span>
+            <em>{seasons.length}</em> season{seasons.length === 1 ? '' : 's'}
+          </span>
+          <span>
+            <em className="dl-stat-full">{stats.full}</em> full
+          </span>
+          <span>
+            <em className="dl-stat-partial">{stats.partial}</em> partial
+          </span>
+          <span>
+            <em>{stats.missing}</em> missing
+          </span>
+        </div>
+      </div>
       <div className="dl-layout">
         <aside className="dl-nav">
           <div>
@@ -298,6 +320,9 @@ export function DataLibraryPage() {
       </div>
 
       <div className="dl-footer-link">
+        <Link to="/" className="dl-footer-back">
+          ← Command Center
+        </Link>
         <Link to="/race-hub" search={{}}>
           Open Race Hub →
         </Link>

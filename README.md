@@ -109,9 +109,10 @@ BOXBOX_API_PORT=18080 npm run dev --prefix frontend
 
 | Route | Purpose |
 | --- | --- |
-| `/` | **Command Center** — local season/weekend coverage, focus weekend, quick links to Live / Race Hub / Data Library |
+| `/` | **Command Center** — fan-facing race-weekend home with GP identity, live status, session schedule, and analysis links |
 | `/race-hub?session_key=<key>` | **Race Hub** — classification, grid, strategy, positions, laps, race control, weather (from local DB) |
-| `/data-library` | **Data Library** — ingestion coverage and suggested CLI commands |
+| `/admin` | **Admin / Data Health** — ingestion coverage, local data status, and suggested CLI commands |
+| `/data-library` | Legacy alias for Admin / Data Health |
 | `/live` | **Live Timing** — timing tower and race control via SSE when a session is live |
 
 Example after seeding: `http://localhost:5173/race-hub?session_key=9472`

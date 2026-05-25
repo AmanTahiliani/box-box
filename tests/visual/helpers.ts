@@ -30,7 +30,7 @@ export async function gotoRaceHubReady(page: Page, sessionKey = FULL_SESSION): P
 }
 
 export async function gotoDataLibraryReady(page: Page): Promise<void> {
-  await page.goto('/data-library')
+  await page.goto('/admin')
   await expect(page.getByTestId('data-library')).toBeVisible()
   await expect(page.getByTestId('dl-meeting-1229')).toBeVisible()
   await expect(page.getByTestId('meeting-detail')).toBeVisible()

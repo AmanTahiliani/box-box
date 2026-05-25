@@ -22,7 +22,8 @@ checkpoint for what has been completed and what remains.
 - React + TypeScript frontend added with TanStack Query and Router.
 - Race Hub route added for classification, grid, strategy, positions, laps,
   race control, weather, and dataset status.
-- Data Library route added for local season/weekend coverage and CLI guidance.
+- Admin / Data Health route added for local season/weekend coverage and CLI
+  guidance; `/data-library` remains a legacy alias.
 - Live Timing route added for current backend live snapshot/SSE state.
 - Go web mode serves the built React app from `frontend/dist` and falls back to
   embedded legacy assets when no build is present.
@@ -54,7 +55,8 @@ BOXBOX_API_PORT=18080 npm run dev --prefix frontend -- --host 127.0.0.1 --port 1
 Then open:
 
 - `http://127.0.0.1:15173/race-hub?session_key=9472`
-- `http://127.0.0.1:15173/data-library`
+- `http://127.0.0.1:15173/admin`
+- `http://127.0.0.1:15173/data-library` (legacy alias)
 - `http://127.0.0.1:15173/live`
 
 ### Production web smoke (Go serves built React)
@@ -70,7 +72,8 @@ BOXBOX_DISABLE_LIVE=1 go run ./cmd/main.go --web --db /tmp/boxbox-mvp.db --port 
 Then open:
 
 - `http://127.0.0.1:18080/race-hub?session_key=9472`
-- `http://127.0.0.1:18080/data-library`
+- `http://127.0.0.1:18080/admin`
+- `http://127.0.0.1:18080/data-library` (legacy alias)
 - `http://127.0.0.1:18080/live`
 
 Automated production-serving coverage:

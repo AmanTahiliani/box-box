@@ -89,6 +89,9 @@ not implementation tickets yet.
   entry screen for local coverage, weekend focus, live status, and next actions.
 - [24 Phase 16 Live Timing Polish](24-phase-16-live-timing-polish.md): denser
   React live timing layout, status treatment, and race-control polish.
+- [25 Phase 18 Fan Command Center](25-phase-18-fan-command-center.md): reworks
+  `/` around race-weekend identity and splits ingestion/admin concerns into
+  the new `/admin` (Data Health) route.
 
 ## External References
 

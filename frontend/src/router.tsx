@@ -37,6 +37,13 @@ export const raceHubRoute = createRoute({
   },
 })
 
+export const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin',
+  component: DataLibraryPage,
+})
+
+// Legacy alias — kept so any saved /data-library links keep working.
 export const dataLibraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/data-library',
@@ -49,7 +56,13 @@ export const liveTimingRoute = createRoute({
   component: LiveTimingPage,
 })
 
-const routeTree = rootRoute.addChildren([commandCenterRoute, raceHubRoute, dataLibraryRoute, liveTimingRoute])
+const routeTree = rootRoute.addChildren([
+  commandCenterRoute,
+  raceHubRoute,
+  adminRoute,
+  dataLibraryRoute,
+  liveTimingRoute,
+])
 
 export const router = createRouter({ routeTree })
 

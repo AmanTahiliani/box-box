@@ -17,7 +17,15 @@ test.describe('Production serving (Go + built React)', () => {
     await expect(page.locator('.drv-code', { hasText: 'VER' })).toBeVisible()
   })
 
-  test('serves data library route', async ({ page }) => {
+  test('serves admin / data health route', async ({ page }) => {
+    await page.goto('/admin')
+
+    await expect(page.getByTestId('data-library')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Data Health' })).toBeVisible()
+    await expect(page.getByTestId('dl-meeting-1229')).toBeVisible()
+  })
+
+  test('legacy /data-library route still works', async ({ page }) => {
     await page.goto('/data-library')
 
     await expect(page.getByTestId('data-library')).toBeVisible()
@@ -36,10 +44,10 @@ test.describe('Production serving (Go + built React)', () => {
     await page.locator('.app-nav').getByRole('link', { name: 'Race Hub' }).click()
     await expect(page).toHaveURL(/\/race-hub/)
 
-    await page.locator('.app-nav').getByRole('link', { name: 'Data Library' }).click()
-    await expect(page).toHaveURL(/\/data-library/)
+    await page.locator('.app-nav').getByRole('link', { name: 'Admin', exact: true }).click()
+    await expect(page).toHaveURL(/\/admin/)
 
-    await page.getByRole('link', { name: 'Live' }).click()
+    await page.getByRole('link', { name: 'Live', exact: true }).click()
     await expect(page).toHaveURL(/\/live/)
     await expect(page.getByTestId('live-empty')).toBeVisible()
   })

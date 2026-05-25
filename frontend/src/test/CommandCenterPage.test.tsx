@@ -107,10 +107,10 @@ describe('CommandCenterPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('command-center-empty')).toBeInTheDocument()
     })
-    expect(screen.getByText('No ingested seasons yet')).toBeInTheDocument()
+    expect(screen.getByText('No local data yet')).toBeInTheDocument()
   })
 
-  it('shows coverage summary and focus weekend when data exists', async () => {
+  it('shows weekend identity band and schedule when data exists', async () => {
     mockFetchSeasons.mockResolvedValue([2025])
     mockFetchLocalMeetings.mockResolvedValue([meeting])
     mockFetchWeekend.mockResolvedValue(weekend)
@@ -121,11 +121,12 @@ describe('CommandCenterPage', () => {
       expect(screen.getByTestId('command-center')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('Command Center')).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByTestId('cc-session-9472')).toBeInTheDocument()
     })
     expect(screen.getByTestId('cc-focus')).toHaveTextContent('Monaco')
+    expect(screen.getByTestId('cc-focus')).toHaveTextContent('MON')
     expect(screen.getByText('No live session')).toBeInTheDocument()
+    expect(screen.getByTestId('cc-action-race-hub')).toHaveTextContent('Race')
   })
 })

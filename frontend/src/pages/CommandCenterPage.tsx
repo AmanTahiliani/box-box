@@ -6,59 +6,54 @@ import { countWeekendStats, formatCoverageHint, sessionTypeAbbrev } from '../lib
 import {
   currentAndNextSession,
   focusMeetingKind,
-  focusMeetingLabel,
   formatCountdown,
   formatSessionScheduleTime,
   meetingHasStarted,
   pickFocusMeeting,
+  sessionEndTime,
   sessionStartTime,
   sortSessionsByStart,
 } from '../lib/schedule'
-import { SourceBadge, weekendStatusLabel } from '../components/SourceBadge'
-import { CliCommands } from '../components/CliCommands'
-import type { Meeting, Weekend, WeekendSession } from '../types'
+import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
+import type { Meeting, Session, Weekend, WeekendSession } from '../types'
 
-function formatMeetingDates(meeting: Meeting): string {
-  const start = meeting.date_start?.slice(0, 10)
-  const end = meeting.date_end?.slice(0, 10)
-  if (start && end && start !== end) return `${start} – ${end}`
-  return start || end || '—'
+type WeekendStatusKind = 'live' | 'current' | 'next' | 'recent' | 'fallback'
+
+function classifySessionStatus(session: Session, now: Date): 'live' | 'done' | 'upcoming' {
+  const start = sessionStartTime(session)
+  const end = sessionEndTime(session)
+  if (start && end && now >= start && now < end) return 'live'
+  if (start && now >= start) return 'done'
+  return 'upcoming'
 }
 
-function countSessionStats(weekends: (Weekend | undefined)[]) {
-  let local = 0
-  let partial = 0
-  let total = 0
-
+function collectRecentWeekends(weekends: (Weekend | undefined)[], focusKey: number | null, limit = 6) {
+  const rows: Weekend[] = []
   for (const weekend of weekends) {
     if (!weekend) continue
-    for (const entry of weekend.sessions) {
-      total++
-      if (entry.source === 'local') local++
-      else if (entry.source === 'partial') partial++
-    }
+    if (focusKey != null && weekend.meeting_key === focusKey) continue
+    if (weekend.source === 'none') continue
+    rows.push(weekend)
   }
-
-  return { local, partial, total }
-}
-
-function collectRecentSessions(weekends: (Weekend | undefined)[], limit = 8) {
-  const rows: Array<WeekendSession & { meeting: Meeting }> = []
-
-  for (const weekend of weekends) {
-    if (!weekend) continue
-    for (const entry of weekend.sessions) {
-      rows.push({ ...entry, meeting: weekend.meeting })
-    }
-  }
-
   return rows
     .sort((a, b) => {
-      const left = Date.parse(a.session.date_start)
-      const right = Date.parse(b.session.date_start)
+      const left = Date.parse(a.meeting.date_start ?? '')
+      const right = Date.parse(b.meeting.date_start ?? '')
       return right - left
     })
     .slice(0, limit)
+}
+
+function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | undefined {
+  if (!weekend) return undefined
+  const local = weekend.sessions.filter((s) => s.source === 'local')
+  const partial = weekend.sessions.filter((s) => s.source === 'partial')
+  const pool = local.length > 0 ? local : partial.length > 0 ? partial : weekend.sessions
+  const race = pool.find((s) => s.session.session_type?.toLowerCase().includes('race'))
+  if (race) return race
+  const qual = pool.find((s) => s.session.session_type?.toLowerCase().includes('qualifying'))
+  if (qual) return qual
+  return pool[0]
 }
 
 export function CommandCenterPage() {
@@ -112,14 +107,21 @@ export function CommandCenterPage() {
 
   const weekendList = useMemo(() => weekendQueries.map((q) => q.data), [weekendQueries])
   const meetingStats = countWeekendStats(weekendList)
-  const sessionStats = countSessionStats(weekendList)
   const focusMeeting = pickFocusMeeting(meetings, nowDate)
   const focusWeekend = focusMeeting ? weekendsByKey.get(focusMeeting.meeting_key) : undefined
   const focusKind = focusMeeting ? focusMeetingKind(focusMeeting, nowDate) : null
-  const focusSessions = focusWeekend ? sortSessionsByStart(focusWeekend.sessions.map((s) => s.session)) : []
+  const focusSessions: Session[] = focusWeekend
+    ? sortSessionsByStart(focusWeekend.sessions.map((s) => s.session))
+    : []
   const { current: currentSession, next: nextSession } = currentAndNextSession(focusSessions, nowDate)
-  const defaultSessionKey = focusWeekend?.default_session_key ?? focusWeekend?.sessions[0]?.session.session_key
-  const recentSessions = collectRecentSessions(weekendList)
+
+  const recentWeekends = collectRecentWeekends(weekendList, focusMeeting?.meeting_key ?? null)
+  const analysisSession = pickAnalysisSession(focusWeekend)
+  const analysisSessionKey =
+    analysisSession?.session.session_key ??
+    focusWeekend?.default_session_key ??
+    focusWeekend?.sessions[0]?.session.session_key
+
   const weekendsLoading = weekendQueries.some((q) => q.isLoading)
 
   if (seasonsQuery.isLoading) {
@@ -138,276 +140,284 @@ export function CommandCenterPage() {
 
   if (seasons.length === 0) {
     return (
-      <div className="cc-page" data-testid="command-center-empty">
-        <div className="cc-header">
-          <h1 className="cc-title">Command Center</h1>
-          <span className="cc-subtitle">Local-first F1 operations</span>
+      <div className="cc-page cc-empty" data-testid="command-center-empty">
+        <div className="cc-empty-band">
+          <span className="cc-empty-eyebrow mono">box-box · command center</span>
+          <h1 className="cc-empty-title">No local data yet</h1>
+          <p className="cc-empty-sub">
+            Ingest a race weekend from the CLI to populate this screen with live status, next-session
+            countdowns, and analysis links.
+          </p>
         </div>
-        <div className="empty-state">
-          <div className="empty-state-title">No ingested seasons yet</div>
-          <div className="empty-state-desc">
-            Ingest a season or session from the CLI, then return here for coverage and navigation.
-          </div>
-        </div>
-        <div className="cc-cli-section">
-          <div className="sec-header">
-            <span className="sec-title">Get Started</span>
-          </div>
-          <CliCommands
-            commands={[
-              { comment: '# Discover season meetings and sessions', cmd: 'box-box --ingest-year 2025' },
-              { comment: '# Ingest a full weekend or single session', cmd: 'box-box --ingest-meeting <meeting_key>' },
-            ]}
-          />
+        <div className="cc-empty-actions">
+          <Link to="/live" className="cc-action cc-action-live">
+            <span className="cc-action-label">Live Timing</span>
+            <span className="cc-action-meta">Standby</span>
+          </Link>
+          <Link to="/admin" className="cc-action">
+            <span className="cc-action-label">Admin · Data Health</span>
+            <span className="cc-action-meta">Ingestion guidance</span>
+          </Link>
         </div>
       </div>
     )
   }
 
   const liveActive = liveQuery.data?.is_live === true
+  const statusKind: WeekendStatusKind = liveActive
+    ? 'live'
+    : focusKind === 'current'
+      ? 'current'
+      : focusKind === 'next'
+        ? 'next'
+        : focusKind === 'recent'
+          ? 'recent'
+          : 'fallback'
+
+  const accent = countryAccent(focusMeeting ?? null)
+  const decal = countryDecal(focusMeeting ?? null)
+  const accentStyle = { '--gp-accent': accent } as React.CSSProperties
 
   return (
-    <div className="cc-page" data-testid="command-center">
-      <div className="cc-header">
-        <div>
-          <h1 className="cc-title">Command Center</h1>
-          <span className="cc-subtitle">
-            {latestSeason} season · {seasons.length} season{seasons.length === 1 ? '' : 's'} local
-          </span>
-        </div>
-        <div className="cc-live-pill" data-testid="cc-live-status">
+    <div className="cc-page" data-testid="command-center" style={accentStyle}>
+      <div className="cc-topbar">
+        <span className="cc-topbar-label mono">box-box · command center</span>
+        <span className="cc-topbar-meta mono">
+          {latestSeason} season · {meetingStats.full}/{meetingStats.total || 0} weekends full
+        </span>
+        <span className="cc-live-pill" data-testid="cc-live-status">
           <span className={`cc-live-dot ${liveActive ? 'live' : ''}`} />
           {liveActive ? 'Live session active' : 'No live session'}
-        </div>
+        </span>
       </div>
 
-      <div className="cc-summary">
-        <div className="cc-stat">
-          <span className="cc-stat-label">Seasons</span>
-          <span className="cc-stat-val">{seasons.length}</span>
+      {!focusMeeting && (
+        <div className="missing-notice">
+          No meetings ingested for {latestSeason}. Run{' '}
+          <code>box-box --ingest-year {latestSeason}</code>
         </div>
-        <div className="cc-stat">
-          <span className="cc-stat-label">Weekends Full</span>
-          <span className="cc-stat-val cc-stat-full">{meetingStats.full}</span>
-        </div>
-        <div className="cc-stat">
-          <span className="cc-stat-label">Partial</span>
-          <span className="cc-stat-val cc-stat-partial">{meetingStats.partial}</span>
-        </div>
-        <div className="cc-stat">
-          <span className="cc-stat-label">Missing</span>
-          <span className="cc-stat-val">{meetingStats.missing}</span>
-        </div>
-        <div className="cc-stat">
-          <span className="cc-stat-label">Sessions Local</span>
-          <span className="cc-stat-val">
-            {sessionStats.local}/{sessionStats.total || '—'}
-          </span>
-        </div>
-      </div>
+      )}
 
-      <div className="cc-grid">
-        <section className="cc-panel" data-testid="cc-focus">
-          <div className="sec-header">
-            <span className="sec-title">{focusKind ? focusMeetingLabel(focusKind) : 'Weekend'}</span>
-            {focusWeekend && (
-              <SourceBadge source={focusWeekend.source} label={weekendStatusLabel(focusWeekend.source)} />
-            )}
-          </div>
-
-          {meetingsQuery.isLoading && <div className="loading-state">loading meetings…</div>}
-
-          {meetingsQuery.isError && (
-            <div className="error-box">
-              {meetingsQuery.error instanceof Error
-                ? meetingsQuery.error.message
-                : 'Failed to load meetings'}
-            </div>
-          )}
-
-          {!meetingsQuery.isLoading && !meetingsQuery.isError && focusMeeting && (
-            <>
-              <div className="cc-focus-head">
-                <div>
-                  <div className="cc-focus-name">{focusMeeting.meeting_name}</div>
-                  <div className="cc-focus-meta mono">
-                    {focusMeeting.location}
-                    {focusMeeting.country_code ? ` · ${focusMeeting.country_code}` : ''}
-                    {' · '}
-                    {formatMeetingDates(focusMeeting)}
-                  </div>
+      {focusMeeting && (
+        <section className="cc-weekend-band" data-testid="cc-focus">
+          <div className="cc-band-accent" aria-hidden="true" />
+          <div className="cc-band-body">
+            <div className="cc-band-row">
+              <span className="cc-band-decal mono">{decal}</span>
+              <div className="cc-band-titles">
+                <div className="cc-band-eyebrow mono">
+                  <WeekendKindLabel kind={statusKind} />
                 </div>
-                {focusMeeting.circuit_short_name && (
-                  <span className="cc-circuit mono">{focusMeeting.circuit_short_name}</span>
-                )}
+                <h1 className="cc-band-name">{focusMeeting.meeting_name}</h1>
+                <div className="cc-band-sub mono">
+                  {[focusMeeting.location, focusMeeting.circuit_short_name]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
+                <div className="cc-band-sub mono cc-band-dates">{formatGpDateRange(focusMeeting)}</div>
               </div>
+              <CountdownBlock
+                liveActive={liveActive}
+                currentSession={currentSession}
+                nextSession={nextSession}
+                meeting={focusMeeting}
+                now={nowDate}
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
-              <div className="cc-focus-status">
-                {liveActive && (
-                  <div className="cc-status-row">
-                    <span className="badge badge-live">LIVE</span>
-                    <span>SignalR feed connected — open Live Timing</span>
-                  </div>
-                )}
-                {currentSession && (
-                  <div className="cc-status-row">
-                    <span className="badge badge-live">ON TRACK</span>
-                    <span>{currentSession.session_name}</span>
-                  </div>
-                )}
-                {!currentSession && nextSession && sessionStartTime(nextSession) && (
-                  <div className="cc-status-row">
-                    <span className="cc-status-label">Next session</span>
-                    <span className="cc-status-value">{nextSession.session_name}</span>
-                    <span className="cc-countdown mono">
-                      {formatCountdown(sessionStartTime(nextSession)!, nowDate)}
+      {focusMeeting && (
+        <div className="cc-actions-row" data-testid="cc-actions">
+          <Link
+            to="/live"
+            className={`cc-pri-action ${liveActive ? 'is-live' : ''}`}
+            data-testid="cc-action-live"
+          >
+            <span className="cc-pri-label">Watch Live</span>
+            <span className="cc-pri-meta mono">{liveActive ? 'Feed active' : 'Standby'}</span>
+          </Link>
+          <Link
+            to="/race-hub"
+            search={analysisSessionKey ? { session_key: analysisSessionKey } : {}}
+            className="cc-pri-action"
+            data-testid="cc-action-race-hub"
+          >
+            <span className="cc-pri-label">Open Analysis</span>
+            <span className="cc-pri-meta mono">
+              {analysisSession
+                ? `${analysisSession.session.session_name} · session ${analysisSession.session.session_key}`
+                : 'Pick a session'}
+            </span>
+          </Link>
+          {nextSession && sessionStartTime(nextSession) && (
+            <a
+              href="#cc-schedule"
+              className="cc-pri-action"
+              data-testid="cc-action-schedule"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById('cc-schedule')?.scrollIntoView({ behavior: 'smooth' })
+              }}
+            >
+              <span className="cc-pri-label">Schedule</span>
+              <span className="cc-pri-meta mono">
+                next: {nextSession.session_name}
+              </span>
+            </a>
+          )}
+        </div>
+      )}
+
+      {focusWeekend && focusWeekend.sessions.length > 0 && (
+        <section className="cc-schedule" id="cc-schedule">
+          <div className="sec-header">
+            <span className="sec-title">Weekend Schedule</span>
+            <span className="sec-meta mono">{focusWeekend.sessions.length} sessions</span>
+          </div>
+          <div className="cc-session-strip" role="list">
+            {focusWeekend.sessions.map(({ session, source, datasets }) => {
+              const status = classifySessionStatus(session, nowDate)
+              const isNext = nextSession?.session_key === session.session_key
+              const isCurrent = currentSession?.session_key === session.session_key
+              return (
+                <Link
+                  key={session.session_key}
+                  to="/race-hub"
+                  search={{ session_key: session.session_key }}
+                  className={`cc-session-card cc-status-${status}${isNext ? ' is-next' : ''}${
+                    isCurrent ? ' is-current' : ''
+                  }`}
+                  data-testid={`cc-session-${session.session_key}`}
+                  role="listitem"
+                >
+                  <div className="cc-session-card-head">
+                    <span className="cc-session-abbrev mono">
+                      {sessionTypeAbbrev(session.session_type, session.session_name)}
+                    </span>
+                    <span className={`cc-session-status cc-status-pill-${status}`}>
+                      {isCurrent ? 'On track' : status === 'done' ? 'Done' : isNext ? 'Next' : 'Upcoming'}
                     </span>
                   </div>
-                )}
-                {!currentSession && !nextSession && focusMeeting && meetingHasStarted(focusMeeting, nowDate) && (
-                  <div className="cc-status-row muted">Weekend finished</div>
-                )}
-                {!currentSession && !nextSession && focusKind === 'recent' && (
-                  <div className="cc-status-row muted">Historical weekend — local data available</div>
-                )}
-              </div>
+                  <div className="cc-session-name">{session.session_name}</div>
+                  <div className="cc-session-time mono">{formatSessionScheduleTime(session.date_start)}</div>
+                  <div className="cc-session-cov mono">
+                    <span className={`cc-cov-dot cc-cov-${source}`} aria-hidden="true" />
+                    {formatCoverageHint(datasets)}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
-              {weekendsLoading && !focusWeekend && (
-                <div className="loading-state">loading weekend schedule…</div>
-              )}
-
-              {focusWeekend && focusWeekend.sessions.length > 0 && (
-                <div className="scroll-x">
-                  <table className="data-table cc-schedule-table">
-                    <thead>
-                      <tr>
-                        <th>Session</th>
-                        <th>Start</th>
-                        <th>Coverage</th>
-                        <th className="r">Open</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {focusWeekend.sessions.map(({ session, source, datasets }) => {
-                        const isCurrent = currentSession?.session_key === session.session_key
-                        const isNext = nextSession?.session_key === session.session_key
-                        return (
-                          <tr
-                            key={session.session_key}
-                            className={isCurrent ? 'cc-row-live' : isNext ? 'cc-row-next' : ''}
-                          >
-                            <td>
-                              <span className="cc-session-type">
-                                {sessionTypeAbbrev(session.session_type, session.session_name)}
-                              </span>
-                              <span style={{ fontWeight: 600 }}>{session.session_name}</span>
-                              {session.session_key === focusWeekend.default_session_key && (
-                                <span className="nav-sub">default</span>
-                              )}
-                            </td>
-                            <td className="mono" style={{ color: 'var(--text-2)' }}>
-                              {formatSessionScheduleTime(session.date_start)}
-                            </td>
-                            <td>
-                              <span className="mono" style={{ color: 'var(--text-2)' }}>
-                                {formatCoverageHint(datasets)}
-                              </span>
-                              <SourceBadge source={source} />
-                            </td>
-                            <td className="r">
-                              <Link
-                                to="/race-hub"
-                                search={{ session_key: session.session_key }}
-                                className="nav-action-btn nav-action-primary"
-                              >
-                                Race Hub
-                              </Link>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-
-          {!meetingsQuery.isLoading && meetings.length === 0 && (
-            <div className="missing-notice">
-              No meetings ingested for {latestSeason}. Run{' '}
-              <code>box-box --ingest-year {latestSeason}</code>
+      {(weekendsLoading || recentWeekends.length > 0) && (
+        <section className="cc-recent">
+          <div className="sec-header">
+            <span className="sec-title">Recent Local Weekends</span>
+            <span className="sec-meta mono">{recentWeekends.length}</span>
+          </div>
+          {weekendsLoading && recentWeekends.length === 0 ? (
+            <div className="loading-state">loading weekends…</div>
+          ) : recentWeekends.length === 0 ? (
+            <div className="cc-side-empty">No additional local weekends.</div>
+          ) : (
+            <div className="cc-recent-strip" role="list">
+              {recentWeekends.map((weekend) => {
+                const finished = meetingHasStarted(weekend.meeting, nowDate)
+                const target = pickAnalysisSession(weekend)
+                const target_key = target?.session.session_key ?? weekend.default_session_key
+                return (
+                  <Link
+                    key={weekend.meeting_key}
+                    to="/race-hub"
+                    search={target_key ? { session_key: target_key } : {}}
+                    className="cc-recent-card"
+                    data-testid={`cc-weekend-${weekend.meeting_key}`}
+                    role="listitem"
+                  >
+                    <div className="cc-recent-head mono">
+                      <span className="cc-recent-decal">{countryDecal(weekend.meeting)}</span>
+                      <span className={`cc-cov-dot cc-cov-${weekend.source}`} aria-hidden="true" />
+                    </div>
+                    <div className="cc-recent-name">{weekend.meeting.meeting_name}</div>
+                    <div className="cc-recent-meta mono">
+                      {formatGpDateRange(weekend.meeting)}
+                      {' · '}
+                      {finished ? 'Past' : 'Upcoming'}
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           )}
         </section>
-
-        <aside className="cc-side">
-          <section className="cc-panel">
-            <div className="sec-header">
-              <span className="sec-title">Quick Actions</span>
-            </div>
-            <div className="cc-actions">
-              <Link to="/live" className="cc-action" data-testid="cc-action-live">
-                <span className="cc-action-label">Live Timing</span>
-                <span className="cc-action-meta">{liveActive ? 'Session active' : 'Standby'}</span>
-              </Link>
-              <Link
-                to="/race-hub"
-                search={defaultSessionKey ? { session_key: defaultSessionKey } : {}}
-                className="cc-action"
-                data-testid="cc-action-race-hub"
-              >
-                <span className="cc-action-label">Race Hub</span>
-                <span className="cc-action-meta">
-                  {defaultSessionKey ? `session ${defaultSessionKey}` : 'Pick a session'}
-                </span>
-              </Link>
-              <Link to="/data-library" className="cc-action" data-testid="cc-action-data-library">
-                <span className="cc-action-label">Data Library</span>
-                <span className="cc-action-meta">
-                  {meetingStats.full}/{meetingStats.total || 0} weekends full
-                </span>
-              </Link>
-            </div>
-          </section>
-
-          <section className="cc-panel">
-            <div className="sec-header">
-              <span className="sec-title">Local Sessions</span>
-              <span className="sec-meta">{recentSessions.length}</span>
-            </div>
-            {weekendsLoading && recentSessions.length === 0 && (
-              <div className="loading-state">loading sessions…</div>
-            )}
-            {recentSessions.length === 0 && !weekendsLoading && (
-              <div className="cc-side-empty">No local sessions ingested yet.</div>
-            )}
-            {recentSessions.length > 0 && (
-              <div className="cc-session-list">
-                {recentSessions.map(({ session, source, datasets, meeting }) => (
-                  <Link
-                    key={session.session_key}
-                    to="/race-hub"
-                    search={{ session_key: session.session_key }}
-                    className="cc-session-row"
-                    data-testid={`cc-session-${session.session_key}`}
-                  >
-                    <div>
-                      <div className="cc-session-row-title">
-                        {meeting.meeting_name} · {session.session_name}
-                      </div>
-                      <div className="cc-session-row-meta mono">
-                        {session.session_key} · {formatCoverageHint(datasets)}
-                      </div>
-                    </div>
-                    <SourceBadge source={source} />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-        </aside>
-      </div>
+      )}
     </div>
   )
+}
+
+function WeekendKindLabel({ kind }: { kind: WeekendStatusKind }) {
+  switch (kind) {
+    case 'live':
+      return <span className="cc-kind cc-kind-live">● Live now</span>
+    case 'current':
+      return <span className="cc-kind cc-kind-current">Current weekend</span>
+    case 'next':
+      return <span className="cc-kind cc-kind-next">Next weekend</span>
+    case 'recent':
+      return <span className="cc-kind cc-kind-recent">Recent weekend</span>
+    default:
+      return <span className="cc-kind">Weekend</span>
+  }
+}
+
+interface CountdownBlockProps {
+  liveActive: boolean
+  currentSession: Session | null
+  nextSession: Session | null
+  meeting: Meeting
+  now: Date
+}
+
+function CountdownBlock({ liveActive, currentSession, nextSession, meeting, now }: CountdownBlockProps) {
+  if (liveActive) {
+    return (
+      <div className="cc-countdown-block">
+        <div className="cc-cd-label mono">SignalR</div>
+        <div className="cc-cd-value cc-cd-live">LIVE</div>
+        <div className="cc-cd-sub mono">{currentSession?.session_name ?? 'Feed connected'}</div>
+      </div>
+    )
+  }
+  if (currentSession) {
+    return (
+      <div className="cc-countdown-block">
+        <div className="cc-cd-label mono">On Track</div>
+        <div className="cc-cd-value cc-cd-current">{currentSession.session_name}</div>
+        <div className="cc-cd-sub mono">In session</div>
+      </div>
+    )
+  }
+  if (nextSession && sessionStartTime(nextSession)) {
+    return (
+      <div className="cc-countdown-block">
+        <div className="cc-cd-label mono">Next · {nextSession.session_name}</div>
+        <div className="cc-cd-value mono">{formatCountdown(sessionStartTime(nextSession)!, now)}</div>
+        <div className="cc-cd-sub mono">{formatSessionScheduleTime(nextSession.date_start)}</div>
+      </div>
+    )
+  }
+  if (meetingHasStarted(meeting, now)) {
+    return (
+      <div className="cc-countdown-block">
+        <div className="cc-cd-label mono">Status</div>
+        <div className="cc-cd-value cc-cd-done">Complete</div>
+        <div className="cc-cd-sub mono">Weekend finished</div>
+      </div>
+    )
+  }
+  return null
 }
