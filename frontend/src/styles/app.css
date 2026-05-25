@@ -2370,3 +2370,131 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* ── Race Story Canvas ── */
+.race-story-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+}
+
+.rs-chart-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--s2);
+  padding: var(--s4) 0;
+  overflow-x: auto;
+}
+
+.rs-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.rs-driver-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--s1);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.rs-driver-row:hover {
+  background: var(--surface-h);
+  border-color: var(--border-2);
+}
+
+.rs-driver-left {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  flex: 1;
+}
+
+.rs-pos-col {
+  width: 24px;
+  text-align: right;
+  font-family: var(--f-mono);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.rs-pos-p1 { color: var(--yellow); }
+.rs-pos-p2 { color: var(--text); }
+.rs-pos-p3 { color: var(--text); }
+
+.rs-driver-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex: 1;
+  min-width: 0;
+}
+
+.rs-driver-color {
+  width: 4px;
+  height: 20px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.rs-driver-identity {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rs-driver-name {
+  font-family: var(--f-mono);
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.rs-driver-team {
+  font-size: 11px;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.rs-driver-right {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  text-align: right;
+}
+
+.rs-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--f-mono);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.rs-metric-label {
+  font-family: var(--f-ui);
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 640px) {
+  .rs-driver-right {
+    gap: var(--s4);
+  }
+  .rs-driver-team {
+    display: none;
+  }
+}

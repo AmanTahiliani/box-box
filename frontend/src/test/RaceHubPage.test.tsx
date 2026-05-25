@@ -234,10 +234,8 @@ describe('RaceHubPage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Race Story' }))
 
-    expect(screen.getByRole('tab', { name: 'Classification' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Starting Grid' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Positions' })).toBeInTheDocument()
-    expect(screen.getByText('Final Classification')).toBeInTheDocument()
+    expect(screen.getByText('VER')).toBeInTheDocument()
+    
   })
 
   it('keeps Data Status accessible and free of inline CLI guidance', async () => {

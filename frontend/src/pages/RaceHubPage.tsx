@@ -8,12 +8,10 @@ import {
   fetchWeekend,
 } from '../api'
 import { DatasetStrip } from '../components/DatasetStrip'
-import { ClassificationTable } from '../components/ClassificationTable'
-import { StartingGridTable } from '../components/StartingGridTable'
+import { RaceStoryCanvas } from '../components/RaceStoryCanvas'
 import { TabBar, type Tab } from '../components/TabBar'
 import { DatasetStatusView } from '../components/DatasetStatusView'
 import { StrategyView } from '../components/StrategyView'
-import { PositionEvolutionView } from '../components/PositionEvolutionView'
 import { LapsView } from '../components/LapsView'
 import { RaceControlView } from '../components/RaceControlView'
 import { WeatherView } from '../components/WeatherView'
@@ -33,8 +31,6 @@ interface Props {
   sessionKey: number
 }
 
-type RaceStorySubview = 'classification' | 'grid' | 'positions'
-
 function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | undefined {
   if (!weekend) return undefined
   const local = weekend.sessions.filter((s) => s.source === 'local')
@@ -50,7 +46,6 @@ function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | und
 export function RaceHubPage({ sessionKey }: Props) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
-  const [storyView, setStoryView] = useState<RaceStorySubview>('classification')
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
   // ─── Auto-redirect when no session_key is supplied ───
@@ -294,74 +289,7 @@ export function RaceHubPage({ sessionKey }: Props) {
 
       {activeTab === 'race_story' && (
         <div className="data-section">
-          <div className="rh-story-controls" role="tablist" aria-label="Race story view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={storyView === 'classification'}
-              className={`rh-story-btn${storyView === 'classification' ? ' active' : ''}`}
-              onClick={() => setStoryView('classification')}
-            >
-              Classification
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={storyView === 'grid'}
-              className={`rh-story-btn${storyView === 'grid' ? ' active' : ''}`}
-              onClick={() => setStoryView('grid')}
-            >
-              Starting Grid
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={storyView === 'positions'}
-              className={`rh-story-btn${storyView === 'positions' ? ' active' : ''}`}
-              onClick={() => setStoryView('positions')}
-            >
-              Positions
-            </button>
-          </div>
-
-          {storyView === 'classification' && (
-            <>
-              <div className="sec-header">
-                <span className="sec-title">Final Classification</span>
-                {data.results.length > 0 && (
-                  <span className="sec-meta mono">{data.results.length} drivers</span>
-                )}
-              </div>
-              <ClassificationTable results={data.results} grid={data.starting_grid} />
-            </>
-          )}
-
-          {storyView === 'grid' && (
-            <>
-              <div className="sec-header">
-                <span className="sec-title">Starting Grid</span>
-                {data.starting_grid.length > 0 && (
-                  <span className="sec-meta mono">{data.starting_grid.length} positions</span>
-                )}
-              </div>
-              <StartingGridTable grid={data.starting_grid} />
-            </>
-          )}
-
-          {storyView === 'positions' && (
-            <>
-              <div className="sec-header">
-                <span className="sec-title">Position Evolution</span>
-              </div>
-              <PositionEvolutionView
-                results={data.results}
-                grid={data.starting_grid}
-                positions={data.positions}
-                laps={data.laps}
-                hasPositions={data.datasets['positions']?.status === 'available'}
-              />
-            </>
-          )}
+          <RaceStoryCanvas data={data} />
         </div>
       )}
 
