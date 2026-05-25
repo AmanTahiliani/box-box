@@ -179,3 +179,11 @@ After v1:
 - Build full Command Center, Standings, Drivers, and Settings.
 - Improve mobile/iPad live layouts.
 - Add broader Playwright coverage and visual regression checks.
+
+### Phase 6: React Race Hub Analytics
+
+- Add Race Hub tabs or segmented views.
+- Keep classification and grid intact.
+- Add Dataset Status, Strategy, and Position Evolution views.
+- Use real local-first data where available and honest missing states otherwise.
+- Continue frontend work with Claude.

@@ -59,8 +59,10 @@ not implementation tickets yet.
   coding slice for store-backed Race Hub read models and Web API metadata.
 - [13 Phase 5 React Race Hub](13-phase-5-react-race-hub.md): first frontend
   implementation slice for the production Web UI.
-- [Claude Phase 5 Prompt](claude-phase-5-react-race-hub-prompt.md): current
-  handoff prompt for Claude to begin React/frontend work.
+- [14 Phase 6 React Race Hub Analytics](14-phase-6-react-race-hub-analytics.md):
+  next frontend slice for strategy, position, and richer Race Hub views.
+- [Claude Phase 6 Prompt](claude-phase-6-react-race-hub-analytics-prompt.md):
+  current handoff prompt for the next Claude frontend phase.
 
 ## External References
 

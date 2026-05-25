@@ -16,3 +16,10 @@ build/
 
 # Old file cache
 .cache/
+
+# Frontend dependencies/build output
+frontend/node_modules/
+frontend/dist/
+
+# Local Claude workspace settings
+.claude/
