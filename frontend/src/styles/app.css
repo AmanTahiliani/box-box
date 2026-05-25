@@ -2498,3 +2498,36 @@ a { color: inherit; text-decoration: none; }
     display: none;
   }
 }
+
+/* Interactive Race Story Canvas elements */
+.rs-driver-line {
+  stroke-dasharray: 4000;
+  stroke-dashoffset: 4000;
+  animation: drawLine 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes drawLine {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.rs-pit-dot {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-in-out 1.5s forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.rs-playhead {
+  transition: x1 0.05s linear, x2 0.05s linear;
+}
+
+.rs-driver-row-hover {
+  background: var(--surface-h);
+  border-color: var(--border-2);
+}
