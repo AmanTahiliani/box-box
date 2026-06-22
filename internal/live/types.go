@@ -38,7 +38,7 @@ type F1TimingLine struct {
 	KnockedOut   interface{}                `json:"KnockedOut"`
 	Cutoff       interface{}                `json:"Cutoff"`
 	NumberOfLaps interface{}                `json:"NumberOfLaps"`
-	Sectors      map[string]json.RawMessage `json:"Sectors"`
+	Sectors      json.RawMessage            `json:"Sectors"`
 	Speeds       map[string]json.RawMessage `json:"Speeds"`
 }
 

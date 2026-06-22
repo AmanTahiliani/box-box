@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { fetchLiveState, fetchLocalMeetings, fetchSeasonMeetings, fetchSeasons, fetchWeekend } from '../api'
-import { countWeekendStats, formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
+import { fetchLiveState, fetchLocalMeetings, fetchSeasonMeetings, fetchSeasons, fetchSessions, fetchWeekend } from '../api'
+import { RACE_HUB_DATASETS, countWeekendStats, formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
 import {
   currentAndNextSession,
   focusMeetingKind,
@@ -19,6 +19,10 @@ import type { Meeting, Session, Weekend, WeekendSession } from '../types'
 import { PaddockBriefing } from '../components/PaddockBriefing'
 
 type WeekendStatusKind = 'live' | 'current' | 'next' | 'recent' | 'fallback'
+
+const missingDatasets = Object.fromEntries(
+  RACE_HUB_DATASETS.map((dataset) => [dataset, { status: 'missing', source: 'none', count: 0 }]),
+) as WeekendSession['datasets']
 
 function classifySessionStatus(session: Session, now: Date): 'live' | 'done' | 'upcoming' {
   const start = sessionStartTime(session)
@@ -70,13 +74,13 @@ export function CommandCenterPage() {
 
   const localMeetings = meetingsQuery.data ?? []
   const seasonMeetings = seasonMeetingsQuery.data?.length ? seasonMeetingsQuery.data : localMeetings
-  const meetings = localMeetings
+  const focusMeetings = seasonMeetings.length > 0 ? seasonMeetings : localMeetings
 
   const weekendQueries = useQueries({
-    queries: meetings.map((meeting) => ({
+    queries: localMeetings.map((meeting) => ({
       queryKey: ['weekend', meeting.meeting_key],
       queryFn: () => fetchWeekend(meeting.meeting_key),
-      enabled: meetings.length > 0,
+      enabled: localMeetings.length > 0,
       staleTime: 60_000,
     })),
   })
@@ -96,28 +100,45 @@ export function CommandCenterPage() {
 
   const weekendsByKey = useMemo(() => {
     const map = new Map<number, Weekend>()
-    meetings.forEach((meeting, i) => {
+    localMeetings.forEach((meeting, i) => {
       const data = weekendQueries[i]?.data
       if (data) map.set(meeting.meeting_key, data)
     })
     return map
-  }, [meetings, weekendQueries])
+  }, [localMeetings, weekendQueries])
 
   const weekendList = useMemo(() => weekendQueries.map((q) => q.data), [weekendQueries])
   const meetingStats = countWeekendStats(weekendList)
-  const focusMeeting = pickFocusMeeting(meetings, nowDate)
+  const focusMeeting = pickFocusMeeting(focusMeetings, nowDate)
   const focusWeekend = focusMeeting ? weekendsByKey.get(focusMeeting.meeting_key) : undefined
+  const openF1SessionsQuery = useQuery({
+    queryKey: ['sessions', focusMeeting?.meeting_key, 'openf1'],
+    queryFn: () => fetchSessions(focusMeeting!.meeting_key, 'openf1'),
+    enabled: focusMeeting != null && focusWeekend == null,
+    staleTime: 60_000,
+  })
+  const openF1WeekendSessions: WeekendSession[] = useMemo(
+    () =>
+      (openF1SessionsQuery.data ?? []).map((session) => ({
+        session,
+        source: 'none',
+        datasets: missingDatasets,
+      })),
+    [openF1SessionsQuery.data],
+  )
+  const focusWeekendSessions = focusWeekend?.sessions ?? openF1WeekendSessions
   const focusKind = focusMeeting ? focusMeetingKind(focusMeeting, nowDate) : null
-  const focusSessions: Session[] = focusWeekend
-    ? sortSessionsByStart(focusWeekend.sessions.map((s) => s.session))
-    : []
+  const focusSessions: Session[] = sortSessionsByStart(focusWeekendSessions.map((s) => s.session))
   const { current: currentSession, next: nextSession } = currentAndNextSession(focusSessions, nowDate)
 
   const analysisSession = pickAnalysisSession(focusWeekend)
-  const analysisSessionKey =
-    analysisSession?.session.session_key ??
-    focusWeekend?.default_session_key ??
-    focusWeekend?.sessions[0]?.session.session_key
+  const actionSession =
+    analysisSession?.session ??
+    currentSession ??
+    nextSession ??
+    focusWeekendSessions.find((s) => s.session.session_key === focusWeekend?.default_session_key)?.session ??
+    focusWeekendSessions[0]?.session
+  const analysisSessionKey = actionSession?.session_key
 
   const weekendsLoading = weekendQueries.some((q) => q.isLoading)
 
@@ -243,8 +264,8 @@ export function CommandCenterPage() {
           >
             <span className="cc-pri-label">Open Analysis</span>
             <span className="cc-pri-meta mono">
-              {analysisSession
-                ? `${analysisSession.session.session_name} · session ${analysisSession.session.session_key}`
+              {actionSession
+                ? `${actionSession.session_name} · session ${actionSession.session_key}`
                 : 'Pick a session'}
             </span>
           </Link>
@@ -267,14 +288,14 @@ export function CommandCenterPage() {
         </div>
       )}
 
-      {focusWeekend && focusWeekend.sessions.length > 0 && (
+      {focusWeekendSessions.length > 0 && (
         <section className="cc-schedule" id="cc-schedule">
           <div className="sec-header">
             <span className="sec-title">Weekend Schedule</span>
-            <span className="sec-meta mono">{focusWeekend.sessions.length} sessions</span>
+            <span className="sec-meta mono">{focusWeekendSessions.length} sessions</span>
           </div>
           <div className="cc-session-strip" role="list">
-            {focusWeekend.sessions.map(({ session, source, datasets }) => {
+            {focusWeekendSessions.map(({ session, source, datasets }) => {
               const status = classifySessionStatus(session, nowDate)
               const isNext = nextSession?.session_key === session.session_key
               const isCurrent = currentSession?.session_key === session.session_key

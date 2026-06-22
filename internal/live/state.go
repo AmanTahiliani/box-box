@@ -23,6 +23,8 @@ type State struct {
 	ClockExtrapolating bool
 }
 
+const signalRRecordSeparator = byte(0x1e)
+
 // NewState returns an empty live timing accumulator.
 func NewState() *State {
 	return &State{
@@ -106,6 +108,51 @@ func (s *State) ProcessMessage(message []byte) bool {
 	return updated
 }
 
+// ProcessCoreMessage parses one or more SignalR Core JSON frames and applies
+// completion snapshots and feed deltas from the current official F1 live timing hub.
+func (s *State) ProcessCoreMessage(message []byte) bool {
+	updated := false
+	for _, frame := range splitSignalRFrames(message) {
+		var envelope struct {
+			Type   int               `json:"type"`
+			Target string            `json:"target"`
+			Args   []json.RawMessage `json:"arguments"`
+			Result json.RawMessage   `json:"result"`
+		}
+		if err := json.Unmarshal(frame, &envelope); err != nil {
+			continue
+		}
+
+		switch envelope.Type {
+		case 1:
+			if envelope.Target != "feed" || len(envelope.Args) < 2 {
+				continue
+			}
+			var topic string
+			if err := json.Unmarshal(envelope.Args[0], &topic); err != nil {
+				continue
+			}
+			if s.ProcessTopic(topic, envelope.Args[1]) {
+				updated = true
+			}
+		case 3:
+			if len(envelope.Result) == 0 || string(envelope.Result) == "null" {
+				continue
+			}
+			var result map[string]json.RawMessage
+			if err := json.Unmarshal(envelope.Result, &result); err != nil {
+				continue
+			}
+			for topic, data := range result {
+				if s.ProcessTopic(topic, data) {
+					updated = true
+				}
+			}
+		}
+	}
+	return updated
+}
+
 // ProcessTopic applies a single topic payload to the accumulator.
 func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 	updated := false
@@ -181,10 +228,10 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 		}
 	case "RaceControlMessages":
 		var rcm struct {
-			Messages map[string]json.RawMessage `json:"Messages"`
+			Messages json.RawMessage `json:"Messages"`
 		}
 		if json.Unmarshal(data, &rcm) == nil {
-			for _, msgRaw := range rcm.Messages {
+			for _, msgRaw := range indexedRawValues(rcm.Messages) {
 				var msg struct {
 					Utc      string `json:"Utc"`
 					Category string `json:"Category"`
@@ -192,7 +239,7 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 					Message  string `json:"Message"`
 					Lap      int    `json:"Lap"`
 				}
-				if json.Unmarshal(msgRaw, &msg) == nil && msg.Message != "" {
+				if json.Unmarshal(msgRaw.Raw, &msg) == nil && msg.Message != "" {
 					t := ""
 					if len(msg.Utc) >= 19 {
 						t = msg.Utc[11:16]
@@ -285,17 +332,17 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 		if json.Unmarshal(data, &tad) == nil {
 			for num, lineRaw := range tad.Lines {
 				var line struct {
-					Stints map[string]json.RawMessage `json:"Stints"`
+					Stints json.RawMessage `json:"Stints"`
 				}
 				if json.Unmarshal(lineRaw, &line) == nil && line.Stints != nil {
 					var driverStints []LiveStintData
-					for _, sRaw := range line.Stints {
+					for _, sRaw := range indexedRawValues(line.Stints) {
 						var st struct {
 							Compound  string `json:"Compound"`
 							New       string `json:"New"`
 							TotalLaps int    `json:"TotalLaps"`
 						}
-						if json.Unmarshal(sRaw, &st) == nil && st.Compound != "" {
+						if json.Unmarshal(sRaw.Raw, &st) == nil && st.Compound != "" {
 							driverStints = append(driverStints, LiveStintData{
 								Compound: st.Compound,
 								New:      st.New == "true" || st.New == "True",
@@ -417,16 +464,15 @@ func updateDriver(drivers map[string]LiveDriverData, num string, line F1TimingLi
 		}
 	}
 
-	for idx, sRaw := range line.Sectors {
-		i := 0
-		fmt.Sscanf(idx, "%d", &i)
+	for _, sector := range indexedRawValues(line.Sectors) {
+		i := sector.Index
 		if i >= 0 && i < 3 {
 			var sec struct {
 				Value           string `json:"Value"`
 				PersonalFastest bool   `json:"PersonalFastest"`
 				OverallFastest  bool   `json:"OverallFastest"`
 			}
-			if json.Unmarshal(sRaw, &sec) == nil {
+			if json.Unmarshal(sector.Raw, &sec) == nil {
 				if sec.Value == "" {
 					d.Sectors[i] = LiveSectorData{}
 				} else {
@@ -492,4 +538,55 @@ func toInt(v interface{}) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+type indexedRaw struct {
+	Index int
+	Raw   json.RawMessage
+}
+
+func splitSignalRFrames(message []byte) []json.RawMessage {
+	parts := []json.RawMessage{}
+	start := 0
+	for i, b := range message {
+		if b != signalRRecordSeparator {
+			continue
+		}
+		if i > start {
+			parts = append(parts, json.RawMessage(message[start:i]))
+		}
+		start = i + 1
+	}
+	if start < len(message) {
+		parts = append(parts, json.RawMessage(message[start:]))
+	}
+	return parts
+}
+
+func indexedRawValues(raw json.RawMessage) []indexedRaw {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		values := make([]indexedRaw, 0, len(arr))
+		for i, v := range arr {
+			values = append(values, indexedRaw{Index: i, Raw: v})
+		}
+		return values
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		values := make([]indexedRaw, 0, len(obj))
+		for k, v := range obj {
+			i := 0
+			fmt.Sscanf(k, "%d", &i)
+			values = append(values, indexedRaw{Index: i, Raw: v})
+		}
+		return values
+	}
+
+	return nil
 }

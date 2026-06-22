@@ -1,4 +1,4 @@
-import type { ArticleContent, LiveStateResponse, Meeting, NewsItem, RaceHub, Weekend } from './types'
+import type { ArticleContent, LiveStateResponse, Meeting, NewsItem, RaceHub, Session, Weekend } from './types'
 
 export async function fetchRaceHub(sessionKey: number): Promise<RaceHub> {
   const res = await fetch(`/api/v1/race-hub?session_key=${sessionKey}`)
@@ -33,6 +33,15 @@ export async function fetchSeasonMeetings(year: number): Promise<Meeting[]> {
   }
   const meetings = await res.json()
   return Array.isArray(meetings) ? meetings : []
+}
+
+export async function fetchSessions(meetingKey: number, source = 'openf1'): Promise<Session[]> {
+  const res = await fetch(`/api/v1/sessions?meeting_key=${meetingKey}&source=${source}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const sessions = await res.json()
+  return Array.isArray(sessions) ? sessions : []
 }
 
 export async function fetchWeekend(meetingKey: number): Promise<Weekend> {

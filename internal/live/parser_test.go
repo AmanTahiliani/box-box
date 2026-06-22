@@ -77,6 +77,41 @@ func TestProcessMessageIncremental(t *testing.T) {
 	}
 }
 
+func TestProcessCoreMessageCompletionAndFeed(t *testing.T) {
+	state := live.NewState()
+	msg := []byte(`{"type":3,"invocationId":"1","result":{
+		"ExtrapolatedClock":{"Remaining":"00:04:23","Utc":"2026-06-06T14:42:36.0491737Z","Extrapolating":true},
+		"TimingData":{"Lines":{"12":{"Position":"1","RacingNumber":"12","Sectors":[{"Value":"22.430"},{"Value":"40.119"},{"Value":""}],"Speeds":{"ST":{"Value":"254"}},"BestLapTime":{"Value":"1:12.704","Lap":15}}}},
+		"DriverList":{"12":{"RacingNumber":"12","Tla":"ANT","TeamName":"Mercedes","TeamColour":"00D7B6"}}
+	}}` + "\x1e")
+
+	if !state.ProcessCoreMessage(msg) {
+		t.Fatal("expected SignalR Core completion to produce updates")
+	}
+
+	snap := state.Snapshot()
+	if snap.Clock != "00:04:23" || !snap.ClockExtrapolating {
+		t.Errorf("clock = %q extrapolating=%v", snap.Clock, snap.ClockExtrapolating)
+	}
+	if snap.Drivers["12"].Position != 1 || snap.Drivers["12"].BestLapTime != "1:12.704" {
+		t.Errorf("driver = %+v", snap.Drivers["12"])
+	}
+	if snap.Drivers["12"].Sectors[1].Value != "40.119" || snap.Drivers["12"].SpeedTrap != "254" {
+		t.Errorf("driver sectors/speed = %+v", snap.Drivers["12"])
+	}
+	if snap.DriverInfo["12"].Tla != "ANT" {
+		t.Errorf("driver info = %+v", snap.DriverInfo["12"])
+	}
+
+	feed := []byte(`{"type":1,"target":"feed","arguments":["TimingData",{"Lines":{"12":{"LastLapTime":{"Value":"1:13.000","PersonalFastest":true}}}},"2026-06-06T14:42:37Z"]}` + "\x1e")
+	if !state.ProcessCoreMessage(feed) {
+		t.Fatal("expected SignalR Core feed frame to produce updates")
+	}
+	if state.Snapshot().Drivers["12"].LastLapTime != "1:13.000" {
+		t.Errorf("last lap = %q", state.Snapshot().Drivers["12"].LastLapTime)
+	}
+}
+
 func TestProcessTopicTimingData(t *testing.T) {
 	state := live.NewState()
 	data := json.RawMessage(`{

@@ -121,7 +121,12 @@ func (s *Server) signalRLoop() {
 
 		s.hub.mu.Lock()
 		s.hub.isLive = false
+		s.hub.lastSnapshot = nil
 		s.hub.mu.Unlock()
+
+		if payload, err := json.Marshal(map[string]any{"data": nil, "is_live": false}); err == nil {
+			s.hub.broadcast <- sseEvent{name: "snapshot", data: payload}
+		}
 
 		log.Printf("web: live feed reconnecting in %v", backoff)
 		time.Sleep(backoff)
