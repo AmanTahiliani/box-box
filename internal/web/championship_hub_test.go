@@ -230,8 +230,8 @@ func TestChampHubCache(t *testing.T) {
 		t.Fatal("empty cache should miss")
 	}
 
-	c.put(2026, champHubResponse{Season: 2026, Round: 10}, now)
-	c.put(2024, champHubResponse{Season: 2024, Round: 24}, now)
+	c.put(2026, champHubResponse{Season: 2026, Round: 10}, now, champHubTTL(2026, now))
+	c.put(2024, champHubResponse{Season: 2024, Round: 24}, now, champHubTTL(2024, now))
 
 	// Current-year entry: hit within 15 min, miss after.
 	if resp, ok := c.get(2026, now.Add(14*time.Minute)); !ok || resp.Round != 10 {
@@ -250,8 +250,17 @@ func TestChampHubCache(t *testing.T) {
 	}
 
 	// Re-put refreshes the entry.
-	c.put(2026, champHubResponse{Season: 2026, Round: 11}, now.Add(20*time.Minute))
+	c.put(2026, champHubResponse{Season: 2026, Round: 11}, now.Add(20*time.Minute), champHubTTL(2026, now))
 	if resp, ok := c.get(2026, now.Add(30*time.Minute)); !ok || resp.Round != 11 {
 		t.Errorf("refreshed entry = (%+v, %v), want hit with Round 11", resp, ok)
+	}
+
+	// Incomplete aggregates get the short TTL: hit right away, gone in 3 min.
+	c.put(2023, champHubResponse{Season: 2023, Round: 5}, now, champHubIncompleteTTL)
+	if _, ok := c.get(2023, now.Add(time.Minute)); !ok {
+		t.Error("incomplete entry should hit within its short TTL")
+	}
+	if _, ok := c.get(2023, now.Add(3*time.Minute)); ok {
+		t.Error("incomplete entry should expire after champHubIncompleteTTL")
 	}
 }

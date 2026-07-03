@@ -2,15 +2,52 @@ package api
 
 import (
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// Minimum spacing between live OpenF1 requests. The free tier throttles
+// bursts of more than ~3 requests/second, so anonymous clients are paced
+// conservatively; authenticated (paid tier) clients get a higher rate.
+const (
+	anonRequestInterval = 350 * time.Millisecond
+	authRequestInterval = 100 * time.Millisecond
+)
+
+// requestPacer spaces network requests evenly so concurrent callers
+// (e.g. the championship hub fan-out) cannot burst past the API rate limit.
+// Cache hits never touch the pacer.
+type requestPacer struct {
+	mu       sync.Mutex
+	interval time.Duration
+	next     time.Time
+}
+
+// wait blocks until this caller's reserved slot arrives.
+func (p *requestPacer) wait() {
+	if p == nil || p.interval <= 0 {
+		return
+	}
+	p.mu.Lock()
+	now := time.Now()
+	if p.next.Before(now) {
+		p.next = now
+	}
+	sleep := p.next.Sub(now)
+	p.next = p.next.Add(p.interval)
+	p.mu.Unlock()
+	if sleep > 0 {
+		time.Sleep(sleep)
+	}
+}
 
 type OpenF1Client struct {
 	url        string
 	apiKey     string
 	httpClient *http.Client
 	cache      *Cache
+	pacer      *requestPacer
 
 	// staleFlag is set to 1 atomically whenever a request falls back to stale
 	// cached data (e.g. because the API is locked during a live session).
@@ -24,6 +61,7 @@ func NewOpenF1Client(url string, timeout time.Duration) *OpenF1Client {
 		url:        url,
 		httpClient: &http.Client{Timeout: timeout},
 		cache:      NewCache(),
+		pacer:      &requestPacer{interval: anonRequestInterval},
 	}
 }
 
@@ -35,6 +73,7 @@ func NewOpenF1ClientWithKey(url string, timeout time.Duration, apiKey string) *O
 		apiKey:     apiKey,
 		httpClient: &http.Client{Timeout: timeout},
 		cache:      NewCache(),
+		pacer:      &requestPacer{interval: authRequestInterval},
 	}
 }
 

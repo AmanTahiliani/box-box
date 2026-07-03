@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	readability "codeberg.org/readeck/go-readability/v2"
@@ -655,6 +656,9 @@ const champHubWorkers = 5
 const (
 	champHubCurrentTTL = 15 * time.Minute
 	champHubPastTTL    = 24 * time.Hour
+	// champHubIncompleteTTL keeps a partially-fetched aggregate around just
+	// long enough to absorb page-load bursts while retrying soon after.
+	champHubIncompleteTTL = 2 * time.Minute
 )
 
 // champHubTTL returns the in-memory cache TTL for a season's hub response.
@@ -687,13 +691,13 @@ func (c *champHubCache) get(year int, now time.Time) (champHubResponse, bool) {
 	return e.resp, true
 }
 
-func (c *champHubCache) put(year int, resp champHubResponse, now time.Time) {
+func (c *champHubCache) put(year int, resp champHubResponse, now time.Time, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.entries == nil {
 		c.entries = map[int]champHubEntry{}
 	}
-	c.entries[year] = champHubEntry{resp: resp, expires: now.Add(champHubTTL(year, now))}
+	c.entries[year] = champHubEntry{resp: resp, expires: now.Add(ttl)}
 }
 
 // fetchMeetingRaces fans fetch out across meetings with bounded concurrency.
@@ -763,9 +767,14 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 
 	sort.Slice(meetings, func(i, j int) bool { return meetings[i].DateStart < meetings[j].DateStart })
 
+	// Any per-meeting fetch failure (network, rate limit) yields an incomplete
+	// aggregate: serve it so the page still renders, but cache it only briefly
+	// so a partial view of the season doesn't stick around for the full TTL.
+	var incomplete atomic.Bool
 	races := fetchMeetingRaces(meetings, champHubWorkers, func(m models.Meeting) (meetingRace, bool) {
 		sessions, serr := s.client.GetSessionsForMeeting(int(m.MeetingKey))
 		if serr != nil {
+			incomplete.Store(true)
 			return meetingRace{}, false
 		}
 		raceKey := 0
@@ -778,13 +787,20 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 		if raceKey == 0 {
 			return meetingRace{}, false // not a GP meeting (e.g. pre-season testing)
 		}
-		results, _ := s.client.GetSessionResult(raceKey)
-		grid, _ := s.client.GetStartingGrid(raceKey)
+		results, rerr := s.client.GetSessionResult(raceKey)
+		grid, gerr := s.client.GetStartingGrid(raceKey)
+		if rerr != nil || gerr != nil {
+			incomplete.Store(true)
+		}
 		return meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}, true
 	})
 
 	resp := aggregateChampionshipHub(year, races, champ, teams, driverInfo)
-	s.hubCache.put(year, resp, time.Now())
+	ttl := champHubTTL(year, time.Now())
+	if incomplete.Load() {
+		ttl = champHubIncompleteTTL
+	}
+	s.hubCache.put(year, resp, time.Now(), ttl)
 	writeJSON(w, resp)
 }
 

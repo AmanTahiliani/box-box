@@ -35,6 +35,45 @@ func IsLiveSessionError(err error) bool {
 	return errors.Is(err, ErrLiveSessionLocked)
 }
 
+// max429Retries is how many times doPaced re-attempts a request that came
+// back 429 before giving up and letting the caller fall back to stale data.
+const max429Retries = 3
+
+// retryAfter429 extracts the server-requested backoff from a 429 response,
+// with a sane default and cap so a hostile header can't stall the app.
+func retryAfter429(resp *http.Response) time.Duration {
+	delay := time.Second
+	if header := resp.Header.Get("Retry-After"); header != "" {
+		if seconds, err := strconv.Atoi(header); err == nil && seconds > 0 {
+			delay = time.Duration(seconds) * time.Second
+		}
+	}
+	if delay > 10*time.Second {
+		delay = 10 * time.Second
+	}
+	return delay
+}
+
+// doPaced executes req through the client's request pacer and transparently
+// retries 429 responses (honouring Retry-After) up to max429Retries times.
+// Without this, concurrent fan-outs (championship hub, track prefetch) burst
+// past the free-tier limit and callers silently treat 429s as missing data.
+func (c *OpenF1Client) doPaced(req *http.Request) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		c.pacer.wait()
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusTooManyRequests || attempt >= max429Retries {
+			return resp, nil
+		}
+		delay := retryAfter429(resp)
+		resp.Body.Close()
+		time.Sleep(delay)
+	}
+}
+
 // get performs a GET request and returns the response body, or an error if the
 // status code is not 200 OK. It checks the SQLite cache before making a
 // network request.
@@ -59,7 +98,7 @@ func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doPaced(req)
 	if err != nil {
 		return c.tryStale(url, err)
 	}
@@ -114,20 +153,14 @@ func (c *OpenF1Client) FetchStrict(url string) ([]byte, error) {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doPaced(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfterDur := 500 * time.Millisecond
-		if retryAfterHeader := resp.Header.Get("Retry-After"); retryAfterHeader != "" {
-			if seconds, err := strconv.Atoi(retryAfterHeader); err == nil {
-				retryAfterDur = time.Duration(seconds) * time.Second
-			}
-		}
-		return nil, &RateLimitError{RetryAfter: retryAfterDur}
+		return nil, &RateLimitError{RetryAfter: retryAfter429(resp)}
 	}
 
 	data, err := io.ReadAll(resp.Body)
