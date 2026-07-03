@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>box-box Review Packet - Issue #9 / PR #32</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #101010; color: #f4f4f4; }
+    body { margin: 0; padding: 32px; }
+    main { max-width: 1180px; margin: 0 auto; }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { margin-top: 32px; font-size: 18px; text-transform: uppercase; letter-spacing: .08em; color: #b6b6b6; }
+    .result { display: inline-block; margin: 12px 0 20px; padding: 6px 10px; border: 1px solid #f6c400; color: #f6c400; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    figure { margin: 0; border: 1px solid #2f2f2f; background: #151515; }
+    img { width: 100%; display: block; }
+    figcaption { padding: 10px 12px; color: #cfcfcf; font-size: 13px; border-top: 1px solid #2f2f2f; }
+    ul { line-height: 1.7; }
+    code { color: #f6c400; }
+    .caveat { border-left: 3px solid #f6c400; padding-left: 12px; color: #dedede; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Local Review Packet: Issue #9 / PR #32</h1>
+  <div>Reviewer harness: Codex · Implementer harness: Codex · Generated 2026-07-03</div>
+  <div class="result">PASS WITH CAVEATS</div>
+
+  <h2>Gates</h2>
+  <ul>
+    <li>PASS: <code>go test ./internal/live ./internal/web</code></li>
+    <li>PASS: <code>npm run test</code> in <code>frontend/</code> (22 files, 182 tests)</li>
+    <li>PASS: <code>npm run build</code> in <code>frontend/</code></li>
+    <li>PASS: <code>npm run test:e2e</code> (26/26)</li>
+    <li>CAVEAT: <code>npm run test:visual</code> passed 11/12; mobile Data Library snapshot failed by height/image diff.</li>
+  </ul>
+
+  <h2>Track Map Screenshots</h2>
+  <div class="grid">
+    <figure><img src="screenshots/live-track-map-desktop.png" alt="Live track map desktop"><figcaption>Desktop live track map with selected VER telemetry.</figcaption></figure>
+    <figure><img src="screenshots/live-track-map-mobile.png" alt="Live track map mobile"><figcaption>Mobile live track map with selected VER telemetry.</figcaption></figure>
+  </div>
+
+  <h2>Empty State</h2>
+  <div class="grid">
+    <figure><img src="screenshots/live-empty-desktop.png" alt="Live empty desktop"><figcaption>Desktop no live session state.</figcaption></figure>
+    <figure><img src="screenshots/live-empty-mobile.png" alt="Live empty mobile"><figcaption>Mobile no live session state.</figcaption></figure>
+  </div>
+
+  <h2>Visual Diff Caveat</h2>
+  <p class="caveat">The existing visual suite failed only on mobile Data Library, not on the live page. The diff is preserved below for inspection.</p>
+  <div class="grid">
+    <figure><img src="artifacts/visual-diff/data-library-diff.png" alt="Mobile data-library visual diff"><figcaption>Mobile Data Library visual diff from <code>npm run test:visual</code>.</figcaption></figure>
+  </div>
+</main>
+</body>
+</html>
