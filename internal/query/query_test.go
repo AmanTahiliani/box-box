@@ -166,6 +166,68 @@ func TestGetRaceHubCompleteData(t *testing.T) {
 	}
 }
 
+func TestGetChampionshipInputsDerivesLocalStandings(t *testing.T) {
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	if err := svc.store.UpsertDriver(store.Driver{
+		DriverNumber: 44,
+		FullName:     "Lewis Hamilton",
+		NameAcronym:  "HAM",
+		TeamName:     "Ferrari",
+		TeamColour:   "E8002D",
+	}); err != nil {
+		t.Fatalf("UpsertDriver() error = %v", err)
+	}
+	if err := svc.store.UpsertSessionDriver(store.SessionDriver{
+		SessionKey:   9472,
+		DriverNumber: 44,
+		MeetingKey:   1229,
+		TeamName:     "Ferrari",
+		TeamColour:   "E8002D",
+	}); err != nil {
+		t.Fatalf("UpsertSessionDriver() error = %v", err)
+	}
+	if err := svc.store.UpsertSessionResult(store.SessionResult{
+		SessionKey:   9472,
+		DriverNumber: 1,
+		MeetingKey:   1229,
+		Position:     1,
+		Points:       25,
+	}); err != nil {
+		t.Fatalf("UpsertSessionResult() error = %v", err)
+	}
+	if err := svc.store.UpsertSessionResult(store.SessionResult{
+		SessionKey:   9472,
+		DriverNumber: 44,
+		MeetingKey:   1229,
+		Position:     2,
+		Points:       18,
+	}); err != nil {
+		t.Fatalf("UpsertSessionResult() error = %v", err)
+	}
+
+	inputs, err := svc.GetChampionshipInputs(2025)
+	if err != nil {
+		t.Fatalf("GetChampionshipInputs() error = %v", err)
+	}
+	if len(inputs.Races) != 1 || inputs.Races[0].RaceSessionKey != 9472 {
+		t.Fatalf("Races = %+v, want Monaco race", inputs.Races)
+	}
+	if len(inputs.Champ) != 2 {
+		t.Fatalf("Champ len = %d, want 2", len(inputs.Champ))
+	}
+	if inputs.Champ[0].DriverNumber != 1 || inputs.Champ[0].PointsCurrent != 25 || inputs.Champ[0].PositionCurrent != 1 {
+		t.Fatalf("leader = %+v, want VER 25 P1", inputs.Champ[0])
+	}
+	if got := inputs.DriverMap[44]; got.NameAcronym != "HAM" || got.TeamName != "Ferrari" {
+		t.Fatalf("DriverMap[44] = %+v, want HAM Ferrari", got)
+	}
+	if len(inputs.Teams) != 2 || inputs.Teams[0].TeamName != "Red Bull Racing" || inputs.Teams[0].PointsCurrent != 25 {
+		t.Fatalf("Teams = %+v, want Red Bull Racing leading with 25", inputs.Teams)
+	}
+}
+
 func TestListMeetingsByYear(t *testing.T) {
 	svc := openTestService(t)
 	seedRaceHubData(t, svc.store)

@@ -737,26 +737,77 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 	if year == 0 {
 		year = time.Now().Year()
 	}
+	mode := parseSourceMode(r)
 
-	if resp, ok := s.hubCache.get(year, time.Now()); ok {
-		writeJSON(w, resp)
-		return
+	if mode != sourceLocal {
+		if resp, ok := s.hubCache.get(year, time.Now()); ok {
+			writeJSON(w, resp)
+			return
+		}
 	}
 
-	meetings, err := s.client.GetMeetingsForYear(year)
+	if mode == sourceLocal || mode == sourceAuto {
+		resp, ok, err := s.localChampionshipHub(year)
+		if err != nil {
+			writeError(w, err, http.StatusInternalServerError, false)
+			return
+		}
+		if ok {
+			s.hubCache.put(year, resp, time.Now(), champHubTTL(year, time.Now()))
+			writeJSON(w, resp)
+			return
+		}
+		if mode == sourceLocal {
+			writeJSON(w, resp)
+			return
+		}
+	}
+
+	resp, err := s.openF1ChampionshipHub(year)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
 		return
+	}
+	writeJSON(w, resp)
+}
+
+func (s *Server) localChampionshipHub(year int) (champHubResponse, bool, error) {
+	if !s.hasLocalQuery() {
+		return champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}}, false, nil
+	}
+
+	inputs, err := s.query.GetChampionshipInputs(year)
+	if err != nil {
+		return champHubResponse{}, false, err
+	}
+	if len(inputs.Champ) == 0 {
+		return champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}}, false, nil
+	}
+
+	races := make([]meetingRace, 0, len(inputs.Races))
+	for _, race := range inputs.Races {
+		races = append(races, meetingRace{
+			Meeting:        race.Meeting,
+			RaceSessionKey: race.RaceSessionKey,
+			Results:        race.Results,
+			Grid:           race.Grid,
+		})
+	}
+	return aggregateChampionshipHub(year, races, inputs.Champ, inputs.Teams, inputs.DriverMap), true, nil
+}
+
+func (s *Server) openF1ChampionshipHub(year int) (champHubResponse, error) {
+	meetings, err := s.client.GetMeetingsForYear(year)
+	if err != nil {
+		return champHubResponse{}, err
 	}
 
 	champ, err := s.client.GetDriverChampionshipForYear(year)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
-		return
+		return champHubResponse{}, err
 	}
 	if len(champ) == 0 {
-		writeJSON(w, champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}})
-		return
+		return champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}}, nil
 	}
 	teams, _ := s.client.GetTeamChampionshipForYear(year)
 
@@ -801,7 +852,7 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 		ttl = champHubIncompleteTTL
 	}
 	s.hubCache.put(year, resp, time.Now(), ttl)
-	writeJSON(w, resp)
+	return resp, nil
 }
 
 // aggregateChampionshipHub is the pure aggregation core (no network) so it can be

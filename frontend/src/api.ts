@@ -62,7 +62,9 @@ export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
 }
 
 export async function fetchChampionshipHub(year?: number): Promise<ChampionshipHub> {
-  const url = year ? `/api/v1/championship/hub?year=${year}` : '/api/v1/championship/hub'
+  const params = new URLSearchParams({ source: 'auto' })
+  if (year) params.set('year', year.toString())
+  const url = `/api/v1/championship/hub?${params.toString()}`
   const res = await fetch(url)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
