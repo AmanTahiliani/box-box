@@ -1,17 +1,52 @@
 # box-box
 
-> "Box, box. Box, box." — Every F1 race engineer, ever.
+> "Box, box. Box, box." Every F1 race engineer, ever.
 
-**box-box** is a Formula 1 dashboard in Go with two surfaces:
+**box-box** is an unofficial F1 race-weekend command center: live timing, Race Hub analytics, championship context, paddock briefing feeds, and local historical data in one Go + React app, with a preserved Bubble Tea TUI.
 
-- **Web UI (primary)** — React + TypeScript SPA for Race Hub analytics, local data coverage, and live timing.
-- **TUI (preserved)** — Bubble Tea terminal app with standings, calendar, driver profiles, official live timing, track map, battles, pit window, and replay.
+Live demo: [box-box.amantahiliani.com](https://box-box.amantahiliani.com/)
 
-Historical Web data is **local-first** in a SQLite domain database (ingested from OpenF1). **Live timing** uses the official F1 SignalR feed via the Go server; the React app reads `/api/v1/live/*`, not OpenF1 directly.
+![box-box Command Center](docs/assets/command-center.jpg)
 
-For architecture, phase history, and design rationale, see [documentations/refactor/README.md](documentations/refactor/README.md).
+## What it does
 
-## How it fits together
+- **Command Center**: current race-weekend home with GP identity, live status, schedule, championship leaders, and direct analysis links.
+- **Race Hub**: session workspace for overview, race story, strategy, laps, weather, race control, and dataset coverage.
+- **Live Timing**: official F1 SignalR feed bridged through the Go server to the browser via SSE.
+- **Championship View**: standings, form, teammate context, cumulative points, and a simulator.
+- **Paddock Briefing**: RSS/Atom news ingestion for a local race-weekend briefing surface.
+- **Local-first history**: OpenF1 data ingested into a SQLite domain database for fast historical browsing.
+- **Terminal Mode**: Bubble Tea TUI with standings, calendar, driver profiles, live timing, track map, battles, pit window, and replay.
+
+## Status
+
+Pre-beta and actively developed. The Web UI is the primary surface; the TUI is preserved and still useful for terminal workflows. Live timing depends on F1 broadcasting timing data, so it is only fully active during live sessions.
+
+## Quickstart
+
+```bash
+git clone https://github.com/AmanTahiliani/box-box.git
+cd box-box
+
+npm install                    # Playwright and repo-level test scripts
+npm install --prefix frontend  # Vite + React app
+
+npm run build --prefix frontend
+go run ./cmd/main.go --web
+# http://localhost:8080
+```
+
+For frontend development with a seeded local database:
+
+```bash
+go run ./scripts/seed-e2e-db/main.go --db /tmp/boxbox-dev.db
+BOXBOX_DISABLE_LIVE=1 go run ./cmd/main.go --web --db /tmp/boxbox-dev.db --port 18080
+
+BOXBOX_API_PORT=18080 npm run dev --prefix frontend
+# http://localhost:5173
+```
+
+## Architecture
 
 | Layer | Role |
 | --- | --- |
@@ -19,10 +54,12 @@ For architecture, phase history, and design rationale, see [documentations/refac
 | **Domain SQLite** (`boxbox.db`) | Local store for meetings, sessions, Race Hub datasets, and navigation APIs used by the Web UI. |
 | **HTTP cache SQLite** (`cache.db`) | TTL cache for OpenF1 responses (TUI and legacy paths). Separate from the domain DB. |
 | **Official F1 SignalR** | Live timing bridge in `internal/live`, exposed to Web (SSE) and TUI. |
-| **Go server** | `cmd/main.go` — TUI, `--web` API + static SPA, or CLI ingestion. |
-| **React frontend** | `frontend/` — production build served from `frontend/dist` when present. |
+| **Go server** | `cmd/main.go`: TUI, `--web` API + static SPA, or CLI ingestion. |
+| **React frontend** | `frontend/`: production build served from `frontend/dist` when present. |
 
 The Web UI should call **local-first Go APIs** (`/api/v1/...`). Do not add direct OpenF1 reads in the frontend.
+
+For architecture, phase history, and design rationale, see [documentations/refactor/README.md](documentations/refactor/README.md).
 
 ## Prerequisites
 
@@ -48,7 +85,7 @@ go build -o box-box ./cmd/main.go
 npm run build --prefix frontend   # writes frontend/dist (gitignored)
 ```
 
-## Run — TUI (default)
+## Run: TUI (default)
 
 ```bash
 go run ./cmd/main.go
@@ -61,7 +98,7 @@ Logs go to `box-box.log` in the project directory so the terminal stays clean.
 
 | Key | Action |
 | --- | --- |
-| `1`–`7` | Home, Standings, Calendar, Race Detail, Drivers, Live, Track Map |
+| `1`-`7` | Home, Standings, Calendar, Race Detail, Drivers, Live, Track Map |
 | `tab` / `shift+tab` | Next / previous tab |
 | `j`/`k`, `enter`, `b`/`esc` | Navigate, select, back |
 | `s`, `b`, `p` | Live: sectors, battles, pit window |
@@ -69,14 +106,14 @@ Logs go to `box-box.log` in the project directory so the terminal stays clean.
 | `y` | Cycle season year |
 | `q` / `ctrl+c` | Quit |
 
-## Run — Web (Go serves API + built React)
+## Run: Web (Go serves API + built React)
 
 Build the frontend first, then start web mode. Go walks up from the cwd to find `frontend/dist/index.html`; if missing, it serves embedded legacy assets.
 
 ```bash
 npm run build --prefix frontend
 go run ./cmd/main.go --web
-# → http://localhost:8080
+# http://localhost:8080
 ```
 
 Use a specific domain database or port:
@@ -85,22 +122,22 @@ Use a specific domain database or port:
 go run ./cmd/main.go --web --db ~/.local/share/box-box/boxbox.db --port 8080
 ```
 
-## Run — Web dev (Vite + Go API)
+## Run: Web dev (Vite + Go API)
 
 Vite proxies `/api` to the Go server. Set `BOXBOX_API_PORT` to match the Go `--port`.
 
-**Terminal 1 — API (seeded DB is enough for UI work without ingesting):**
+**Terminal 1: API (seeded DB is enough for UI work without ingesting):**
 
 ```bash
 go run ./scripts/seed-e2e-db/main.go --db /tmp/boxbox-dev.db
 BOXBOX_DISABLE_LIVE=1 go run ./cmd/main.go --web --db /tmp/boxbox-dev.db --port 18080
 ```
 
-**Terminal 2 — frontend:**
+**Terminal 2: frontend:**
 
 ```bash
 BOXBOX_API_PORT=18080 npm run dev --prefix frontend
-# default Vite port 5173 → http://localhost:5173
+# default Vite port 5173: http://localhost:5173
 ```
 
 `BOXBOX_DISABLE_LIVE=1` skips starting the SignalR bridge (used in CI and local UI work).
@@ -109,11 +146,11 @@ BOXBOX_API_PORT=18080 npm run dev --prefix frontend
 
 | Route | Purpose |
 | --- | --- |
-| `/` | **Command Center** — fan-facing race-weekend home with GP identity, live status, session schedule, and analysis links |
-| `/race-hub?session_key=<key>` | **Race Hub** — weekend workspace with session rail and Overview / Race Story / Strategy / Lap Data / Conditions / Race Control / Data Status tabs. Bare `/race-hub` auto-resolves to the focus session. |
-| `/admin` | **Admin / Data Health** — ingestion coverage, local data status, and suggested CLI commands |
+| `/` | **Command Center**: fan-facing race-weekend home with GP identity, live status, session schedule, and analysis links |
+| `/race-hub?session_key=<key>` | **Race Hub**: weekend workspace with session rail and Overview / Race Story / Strategy / Lap Data / Conditions / Race Control / Data Status tabs. Bare `/race-hub` auto-resolves to the focus session. |
+| `/admin` | **Admin / Data Health**: ingestion coverage, local data status, and suggested CLI commands |
 | `/data-library` | Legacy alias for Admin / Data Health |
-| `/live` | **Live Timing** — timing tower and race control via SSE when a session is live |
+| `/live` | **Live Timing**: timing tower and race control via SSE when a session is live |
 
 Example after seeding: `http://localhost:5173/race-hub?session_key=9472`
 
@@ -159,7 +196,7 @@ Without a key, the free OpenF1 tier is used. A key may be required for paid-tier
 | `~/.local/share/box-box/boxbox.db` | Domain database (default `--db`) |
 | `~/.cache/box-box/cache.db` | OpenF1 HTTP response cache (TUI / client) |
 | `box-box.log` | TUI application log (project root) |
-| `frontend/dist/` | Production React build (**gitignored** — build locally, do not commit) |
+| `frontend/dist/` | Production React build (**gitignored**; build locally, do not commit) |
 | `.playwright/*.db` | Seeded DBs for automated tests |
 
 Web mode logs to **stderr**.
@@ -214,10 +251,10 @@ Snapshots live under `tests/visual/__snapshots__/`.
 ## Known limitations
 
 - **Live timing** only works when F1 is broadcasting timing data; there is no guaranteed live session for local dev.
-- **E2E / visual tests** use `BOXBOX_DISABLE_LIVE=1` and seeded SQLite — they do not exercise full SignalR live behavior.
+- **E2E / visual tests** use `BOXBOX_DISABLE_LIVE=1` and seeded SQLite; they do not exercise full SignalR live behavior.
 - **`frontend/dist`** is generated output; build before production web mode or `test:e2e:prod`.
 - **TUI historical views** still use OpenF1 on demand with the HTTP cache; the Web UI’s local-first model does not fully replace the TUI yet.
-- **`--ingest-year`** stores season meetings, not full session datasets — use `--ingest-meeting` or `--ingest-session` for Race Hub data.
+- **`--ingest-year`** stores season meetings, not full session datasets; use `--ingest-meeting` or `--ingest-session` for Race Hub data.
 
 ## License
 
