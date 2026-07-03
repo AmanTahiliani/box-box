@@ -267,6 +267,42 @@ export interface LiveStreamData {
   Stints: Record<string, LiveStintData[]>
 }
 
+export interface ChampHubDriver {
+  driver_number: number
+  name_acronym: string
+  full_name: string
+  team_name: string
+  team_colour: string
+  points: number
+  position: number
+  wins: number
+  podiums: number
+  poles: number
+  form: number[]
+  cumulative: number[]
+  teammate_wins: number
+  teammate_losses: number
+}
+
+export interface ChampHubTeam {
+  team_name: string
+  team_colour: string
+  points: number
+  position: number
+  wins: number
+}
+
+export interface ChampionshipHub {
+  season: number
+  round: number
+  total_rounds: number
+  rounds_left: number
+  last_race: string
+  round_labels: string[]
+  drivers: ChampHubDriver[]
+  teams: ChampHubTeam[]
+}
+
 export interface NewsItem {
   source: string
   title: string

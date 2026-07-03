@@ -597,6 +597,292 @@ func (s *Server) handleChampionshipTeams(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, teams)
 }
 
+// --- /api/v1/championship/hub ---
+// Aggregated championship view: official points/positions enriched with derived
+// stats (wins, podiums, poles, recent form, teammate head-to-head) and a
+// per-round cumulative-points series, computed from season race results.
+
+type champHubDriver struct {
+	DriverNumber   int       `json:"driver_number"`
+	NameAcronym    string    `json:"name_acronym"`
+	FullName       string    `json:"full_name"`
+	TeamName       string    `json:"team_name"`
+	TeamColour     string    `json:"team_colour"`
+	Points         float64   `json:"points"`
+	Position       int       `json:"position"`
+	Wins           int       `json:"wins"`
+	Podiums        int       `json:"podiums"`
+	Poles          int       `json:"poles"`
+	Form           []float64 `json:"form"`       // last 5 races' points
+	Cumulative     []float64 `json:"cumulative"` // running total per completed round
+	TeammateWins   int       `json:"teammate_wins"`
+	TeammateLosses int       `json:"teammate_losses"`
+}
+
+type champHubTeam struct {
+	TeamName   string  `json:"team_name"`
+	TeamColour string  `json:"team_colour"`
+	Points     float64 `json:"points"`
+	Position   int     `json:"position"`
+	Wins       int     `json:"wins"`
+}
+
+type champHubResponse struct {
+	Season      int              `json:"season"`
+	Round       int              `json:"round"`
+	TotalRounds int              `json:"total_rounds"`
+	RoundsLeft  int              `json:"rounds_left"`
+	LastRace    string           `json:"last_race"`
+	RoundLabels []string         `json:"round_labels"`
+	Drivers     []champHubDriver `json:"drivers"`
+	Teams       []champHubTeam   `json:"teams"`
+}
+
+// meetingRace bundles a GP meeting with its (already-fetched) race results and grid.
+type meetingRace struct {
+	Meeting        models.Meeting
+	RaceSessionKey int
+	Results        []models.SessionResult
+	Grid           []models.StartingGrid
+}
+
+func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
+	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
+	if year == 0 {
+		year = time.Now().Year()
+	}
+
+	meetings, err := s.client.GetMeetingsForYear(year)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		return
+	}
+
+	champ, err := s.client.GetDriverChampionshipForYear(year)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		return
+	}
+	if len(champ) == 0 {
+		writeJSON(w, champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}})
+		return
+	}
+	teams, _ := s.client.GetTeamChampionshipForYear(year)
+
+	driverInfo := map[int]models.Driver{}
+	if ds, derr := s.client.GetDriversForSession(champ[0].SessionKey); derr == nil {
+		driverInfo = buildDriverMapFirst(ds)
+	}
+
+	sort.Slice(meetings, func(i, j int) bool { return meetings[i].DateStart < meetings[j].DateStart })
+
+	races := make([]meetingRace, 0, len(meetings))
+	for _, m := range meetings {
+		sessions, serr := s.client.GetSessionsForMeeting(int(m.MeetingKey))
+		if serr != nil {
+			continue
+		}
+		raceKey := 0
+		for _, sess := range sessions {
+			if strings.EqualFold(sess.SessionName, "Race") {
+				raceKey = sess.SessionKey
+				break
+			}
+		}
+		if raceKey == 0 {
+			continue // not a GP meeting (e.g. pre-season testing)
+		}
+		results, _ := s.client.GetSessionResult(raceKey)
+		grid, _ := s.client.GetStartingGrid(raceKey)
+		races = append(races, meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid})
+	}
+
+	writeJSON(w, aggregateChampionshipHub(year, races, champ, teams, driverInfo))
+}
+
+// aggregateChampionshipHub is the pure aggregation core (no network) so it can be
+// unit-tested with synthetic data. races must be ordered ascending by date and
+// contain only GP meetings (those with a Race session).
+func aggregateChampionshipHub(
+	year int,
+	races []meetingRace,
+	champ []models.ChampionshipDriver,
+	teams []models.ChampionshipTeam,
+	driverInfo map[int]models.Driver,
+) champHubResponse {
+	type acc struct {
+		wins, podiums, poles int
+		form                 []float64
+		finishByRound        map[int]int
+	}
+	accs := map[int]*acc{}
+	getAcc := func(num int) *acc {
+		a := accs[num]
+		if a == nil {
+			a = &acc{finishByRound: map[int]int{}}
+			accs[num] = a
+		}
+		return a
+	}
+
+	completed := 0
+	lastRace := ""
+	roundPoints := []map[int]float64{} // per completed round: driver -> race points
+
+	for _, mr := range races {
+		if len(mr.Results) == 0 {
+			continue // round not completed yet
+		}
+		completed++
+		lastRace = mr.Meeting.MeetingName
+		for _, g := range mr.Grid {
+			if g.Position == 1 {
+				getAcc(g.DriverNumber).poles++
+			}
+		}
+		rp := map[int]float64{}
+		for _, res := range mr.Results {
+			a := getAcc(res.DriverNumber)
+			if res.Position == 1 {
+				a.wins++
+			}
+			if res.Position >= 1 && res.Position <= 3 {
+				a.podiums++
+			}
+			a.form = append(a.form, res.Points)
+			a.finishByRound[completed] = res.Position
+			rp[res.DriverNumber] += res.Points
+		}
+		roundPoints = append(roundPoints, rp)
+	}
+
+	roundLabels := make([]string, 0, completed)
+	for i := 1; i <= completed; i++ {
+		roundLabels = append(roundLabels, fmt.Sprintf("R%d", i))
+	}
+
+	// Official totals are authoritative; reconcile the cumulative endpoint to them.
+	champPts := map[int]float64{}
+	for _, c := range champ {
+		champPts[c.DriverNumber] = c.PointsCurrent
+	}
+
+	cumulative := map[int][]float64{}
+	for num := range accs {
+		running := 0.0
+		series := make([]float64, 0, completed)
+		for i := 0; i < completed; i++ {
+			running += roundPoints[i][num]
+			series = append(series, running)
+		}
+		if completed > 0 {
+			if off, ok := champPts[num]; ok {
+				series[completed-1] = off
+			}
+		}
+		cumulative[num] = series
+	}
+
+	// Teammate head-to-head: per round, the teammate finishing ahead wins.
+	teamOf := func(num int) string { return driverInfo[num].TeamName }
+	byTeam := map[string][]int{}
+	for num := range accs {
+		byTeam[teamOf(num)] = append(byTeam[teamOf(num)], num)
+	}
+	twins := map[int]int{}
+	tloss := map[int]int{}
+	for team, members := range byTeam {
+		if team == "" || len(members) < 2 {
+			continue
+		}
+		for round := 1; round <= completed; round++ {
+			for i := 0; i < len(members); i++ {
+				for j := i + 1; j < len(members); j++ {
+					p1, ok1 := accs[members[i]].finishByRound[round]
+					p2, ok2 := accs[members[j]].finishByRound[round]
+					if !ok1 || !ok2 {
+						continue
+					}
+					if p1 < p2 {
+						twins[members[i]]++
+						tloss[members[j]]++
+					} else if p2 < p1 {
+						twins[members[j]]++
+						tloss[members[i]]++
+					}
+				}
+			}
+		}
+	}
+
+	sortedChamp := make([]models.ChampionshipDriver, len(champ))
+	copy(sortedChamp, champ)
+	sort.Slice(sortedChamp, func(i, j int) bool { return sortedChamp[i].PositionCurrent < sortedChamp[j].PositionCurrent })
+
+	drivers := make([]champHubDriver, 0, len(sortedChamp))
+	for _, c := range sortedChamp {
+		a := accs[c.DriverNumber]
+		if a == nil {
+			a = &acc{}
+		}
+		form := a.form
+		if len(form) > 5 {
+			form = form[len(form)-5:]
+		}
+		info := driverInfo[c.DriverNumber]
+		drivers = append(drivers, champHubDriver{
+			DriverNumber:   c.DriverNumber,
+			NameAcronym:    info.NameAcronym,
+			FullName:       info.FullName,
+			TeamName:       info.TeamName,
+			TeamColour:     info.TeamColour,
+			Points:         c.PointsCurrent,
+			Position:       c.PositionCurrent,
+			Wins:           a.wins,
+			Podiums:        a.podiums,
+			Poles:          a.poles,
+			Form:           form,
+			Cumulative:     cumulative[c.DriverNumber],
+			TeammateWins:   twins[c.DriverNumber],
+			TeammateLosses: tloss[c.DriverNumber],
+		})
+	}
+
+	teamWins := map[string]int{}
+	teamColour := map[string]string{}
+	for num, a := range accs {
+		teamWins[teamOf(num)] += a.wins
+		if col := driverInfo[num].TeamColour; col != "" {
+			teamColour[teamOf(num)] = col
+		}
+	}
+	sortedTeams := make([]models.ChampionshipTeam, len(teams))
+	copy(sortedTeams, teams)
+	sort.Slice(sortedTeams, func(i, j int) bool { return sortedTeams[i].PositionCurrent < sortedTeams[j].PositionCurrent })
+	teamsOut := make([]champHubTeam, 0, len(sortedTeams))
+	for _, t := range sortedTeams {
+		teamsOut = append(teamsOut, champHubTeam{
+			TeamName:   t.TeamName,
+			TeamColour: teamColour[t.TeamName],
+			Points:     t.PointsCurrent,
+			Position:   t.PositionCurrent,
+			Wins:       teamWins[t.TeamName],
+		})
+	}
+
+	totalRounds := len(races)
+	return champHubResponse{
+		Season:      year,
+		Round:       completed,
+		TotalRounds: totalRounds,
+		RoundsLeft:  totalRounds - completed,
+		LastRace:    lastRace,
+		RoundLabels: roundLabels,
+		Drivers:     drivers,
+		Teams:       teamsOut,
+	}
+}
+
 // --- /api/v1/track-outline ---
 // Accepts circuit_key and year (the frontend has both from meeting+session data).
 

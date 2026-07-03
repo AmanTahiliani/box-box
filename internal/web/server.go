@@ -81,6 +81,7 @@ func (s *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/team-radio", s.handleTeamRadio)
 	mux.HandleFunc("/api/v1/championship/drivers", s.handleChampionshipDrivers)
 	mux.HandleFunc("/api/v1/championship/teams", s.handleChampionshipTeams)
+	mux.HandleFunc("/api/v1/championship/hub", s.handleChampionshipHub)
 	mux.HandleFunc("/api/v1/track-outline", s.handleTrackOutline)
 	mux.HandleFunc("/api/v1/strategy", s.handleStrategy)
 	mux.HandleFunc("/api/v1/live/state", s.handleLiveState)

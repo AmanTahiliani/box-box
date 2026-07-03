@@ -5,6 +5,7 @@ import { RaceHubPage } from './pages/RaceHubPage'
 import { DataLibraryPage } from './pages/DataLibraryPage'
 import { LiveTimingPage } from './pages/LiveTimingPage'
 import { BriefingPage } from './pages/BriefingPage'
+import { ChampionshipPage } from './pages/ChampionshipPage'
 
 type RaceHubSearch = {
   session_key?: number
@@ -57,6 +58,12 @@ export const liveTimingRoute = createRoute({
   component: LiveTimingPage,
 })
 
+export const championshipRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/championship',
+  component: ChampionshipPage,
+})
+
 export const briefingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/briefing',
@@ -69,6 +76,7 @@ const routeTree = rootRoute.addChildren([
   adminRoute,
   dataLibraryRoute,
   liveTimingRoute,
+  championshipRoute,
   briefingRoute,
 ])
 
