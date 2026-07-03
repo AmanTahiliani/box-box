@@ -43,6 +43,6 @@ Originally scoped as a lightweight canvas for visualizations, this has grown int
 Passive monitoring and historical analysis features.
 
 - [ ] **Daemon / Notification Mode** — `box-box --watch` sends OS notifications for key race events (flags, overtakes, pit stops)
-- [ ] **Championship Simulator** — "What if" scenarios: set finishing positions per driver and project championship standings forward
+- [x] **Championship Simulator** — "What if" scenarios: set finishing positions per driver and project championship standings forward (simulator view on the web `/championship` page)
 - [ ] **Multi-Year Driver Comparison** — Career arc and season-over-season stats with win/pole rates
 - [ ] **tmux / Status Bar Integration** — Compact race status output for shell prompts and status bars
