@@ -23,6 +23,8 @@ func meetingToModel(m store.Meeting) models.Meeting {
 		DateStart: m.DateStart,
 		DateEnd:   m.DateEnd,
 		Year:      m.Year,
+
+		IsCancelled: m.IsCancelled,
 	}
 }
 
@@ -36,6 +38,8 @@ func sessionToModel(s store.Session) models.Session {
 		DateStart:   s.DateStart,
 		DateEnd:     s.DateEnd,
 		GMTOffset:   s.GMTOffset,
+
+		IsCancelled: s.IsCancelled,
 	}
 }
 

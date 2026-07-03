@@ -28,8 +28,8 @@ func TestOpenAppliesMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion() error = %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("SchemaVersion() = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("SchemaVersion() = %d, want 7", version)
 	}
 
 	tables := []string{
@@ -104,6 +104,18 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("schema_migrations v5 count = %d, want 1", count)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 6`).Scan(&count); err != nil {
+		t.Fatalf("count schema_migrations v6: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("schema_migrations v6 count = %d, want 1", count)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 7`).Scan(&count); err != nil {
+		t.Fatalf("count schema_migrations v7: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("schema_migrations v7 count = %d, want 1", count)
 	}
 }
 

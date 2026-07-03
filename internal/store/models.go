@@ -68,6 +68,7 @@ type Meeting struct {
 	DateStart           string
 	DateEnd             string
 	Year                int
+	IsCancelled         bool
 	UpdatedAt           time.Time
 }
 
@@ -81,6 +82,7 @@ type Session struct {
 	DateStart   string
 	DateEnd     string
 	GMTOffset   string
+	IsCancelled bool
 	UpdatedAt   time.Time
 }
 

@@ -10,6 +10,7 @@ interface Props {
 function SourceBadge({ source }: { source: RaceHub['source'] }) {
   if (source === 'local') return <span className="badge badge-local">Local</span>
   if (source === 'partial') return <span className="badge badge-partial">Partial</span>
+  if (source === 'cancelled') return <span className="badge badge-cancelled">Cancelled</span>
   return <span className="badge badge-none">No data</span>
 }
 

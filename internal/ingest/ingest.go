@@ -430,6 +430,27 @@ func (s *Service) ingestSessionDatasets(sess models.Session) (Summary, error) {
 		coverage = make(map[string]store.CoverageEntry)
 	}
 
+	if sess.IsCancelled {
+		s.opts.Progress.Step("session %d (%s) is cancelled; skipping Race Hub datasets", sessionKey, sess.SessionName)
+		if !s.opts.DryRun {
+			for _, dataset := range []string{
+				"drivers",
+				"session_result",
+				"starting_grid",
+				"stints",
+				"pit_stops",
+				"positions",
+				"race_control",
+				"weather",
+				"laps",
+			} {
+				_ = s.store.UpsertCoverage(sessionKey, dataset, "skipped", 0, "session cancelled")
+			}
+		}
+		summary.Status = statusForCancelled(s.opts.DryRun)
+		return summary, nil
+	}
+
 	// 1. Ingest drivers
 	if cov, ok := coverage["drivers"]; ok && cov.Status == "complete" && !s.opts.Force {
 		s.opts.Progress.Step("drivers already complete for session %d, skipping", sessionKey)
@@ -917,6 +938,13 @@ func statusForErrors(dryRun bool, errs []string) string {
 		return "partial"
 	}
 	return "completed"
+}
+
+func statusForCancelled(dryRun bool) string {
+	if dryRun {
+		return "dry_run"
+	}
+	return "cancelled"
 }
 
 type fetchFunc[T any] func() (FetchResult, T, error)

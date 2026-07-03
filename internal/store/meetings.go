@@ -16,8 +16,8 @@ func (s *Store) UpsertMeeting(m Meeting) error {
 		INSERT INTO meetings (
 			meeting_key, meeting_name, meeting_official_name, location,
 			country_code, country_name, circuit_key, circuit_short_name,
-			gmt_offset, date_start, date_end, year, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			gmt_offset, date_start, date_end, year, is_cancelled, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(meeting_key) DO UPDATE SET
 			meeting_name = excluded.meeting_name,
 			meeting_official_name = excluded.meeting_official_name,
@@ -30,6 +30,7 @@ func (s *Store) UpsertMeeting(m Meeting) error {
 			date_start = excluded.date_start,
 			date_end = excluded.date_end,
 			year = excluded.year,
+			is_cancelled = excluded.is_cancelled,
 			updated_at = excluded.updated_at
 	`,
 		m.MeetingKey,
@@ -44,6 +45,7 @@ func (s *Store) UpsertMeeting(m Meeting) error {
 		nullString(m.DateStart),
 		nullString(m.DateEnd),
 		m.Year,
+		boolInt(m.IsCancelled),
 		m.UpdatedAt.Unix(),
 	)
 	if err != nil {
@@ -56,6 +58,7 @@ func (s *Store) UpsertMeeting(m Meeting) error {
 func (s *Store) GetMeeting(meetingKey int) (Meeting, error) {
 	var m Meeting
 	var updatedAt int64
+	var isCancelled int
 	var officialName, location, countryCode, countryName sql.NullString
 	var circuitKey sql.NullInt64
 	var circuitShortName, gmtOffset, dateStart, dateEnd sql.NullString
@@ -63,7 +66,7 @@ func (s *Store) GetMeeting(meetingKey int) (Meeting, error) {
 	err := s.db.QueryRow(`
 		SELECT meeting_key, meeting_name, meeting_official_name, location,
 		       country_code, country_name, circuit_key, circuit_short_name,
-		       gmt_offset, date_start, date_end, year, updated_at
+		       gmt_offset, date_start, date_end, year, is_cancelled, updated_at
 		FROM meetings
 		WHERE meeting_key = ?
 	`, meetingKey).Scan(
@@ -79,6 +82,7 @@ func (s *Store) GetMeeting(meetingKey int) (Meeting, error) {
 		&dateStart,
 		&dateEnd,
 		&m.Year,
+		&isCancelled,
 		&updatedAt,
 	)
 	if err != nil {
@@ -96,6 +100,7 @@ func (s *Store) GetMeeting(meetingKey int) (Meeting, error) {
 	m.GMTOffset = gmtOffset.String
 	m.DateStart = dateStart.String
 	m.DateEnd = dateEnd.String
+	m.IsCancelled = isCancelled != 0
 	m.UpdatedAt = time.Unix(updatedAt, 0)
 	return m, nil
 }
@@ -129,7 +134,7 @@ func (s *Store) ListMeetingsByYear(year int) ([]Meeting, error) {
 	rows, err := s.db.Query(`
 		SELECT meeting_key, meeting_name, meeting_official_name, location,
 		       country_code, country_name, circuit_key, circuit_short_name,
-		       gmt_offset, date_start, date_end, year, updated_at
+		       gmt_offset, date_start, date_end, year, is_cancelled, updated_at
 		FROM meetings
 		WHERE year = ?
 		ORDER BY date_start ASC, meeting_key ASC
@@ -151,8 +156,8 @@ func (s *Store) UpsertSession(sess Session) error {
 	_, err := s.db.Exec(`
 		INSERT INTO sessions (
 			session_key, meeting_key, session_name, session_type,
-			circuit_key, date_start, date_end, gmt_offset, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			circuit_key, date_start, date_end, gmt_offset, is_cancelled, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(session_key) DO UPDATE SET
 			meeting_key = excluded.meeting_key,
 			session_name = excluded.session_name,
@@ -161,6 +166,7 @@ func (s *Store) UpsertSession(sess Session) error {
 			date_start = excluded.date_start,
 			date_end = excluded.date_end,
 			gmt_offset = excluded.gmt_offset,
+			is_cancelled = excluded.is_cancelled,
 			updated_at = excluded.updated_at
 	`,
 		sess.SessionKey,
@@ -171,6 +177,7 @@ func (s *Store) UpsertSession(sess Session) error {
 		nullString(sess.DateStart),
 		nullString(sess.DateEnd),
 		nullString(sess.GMTOffset),
+		boolInt(sess.IsCancelled),
 		sess.UpdatedAt.Unix(),
 	)
 	if err != nil {
@@ -183,12 +190,13 @@ func (s *Store) UpsertSession(sess Session) error {
 func (s *Store) GetSession(sessionKey int) (Session, error) {
 	var sess Session
 	var updatedAt int64
+	var isCancelled int
 	var circuitKey sql.NullInt64
 	var dateStart, dateEnd, gmtOffset sql.NullString
 
 	err := s.db.QueryRow(`
 		SELECT session_key, meeting_key, session_name, session_type,
-		       circuit_key, date_start, date_end, gmt_offset, updated_at
+		       circuit_key, date_start, date_end, gmt_offset, is_cancelled, updated_at
 		FROM sessions
 		WHERE session_key = ?
 	`, sessionKey).Scan(
@@ -200,6 +208,7 @@ func (s *Store) GetSession(sessionKey int) (Session, error) {
 		&dateStart,
 		&dateEnd,
 		&gmtOffset,
+		&isCancelled,
 		&updatedAt,
 	)
 	if err != nil {
@@ -212,6 +221,7 @@ func (s *Store) GetSession(sessionKey int) (Session, error) {
 	sess.DateStart = dateStart.String
 	sess.DateEnd = dateEnd.String
 	sess.GMTOffset = gmtOffset.String
+	sess.IsCancelled = isCancelled != 0
 	sess.UpdatedAt = time.Unix(updatedAt, 0)
 	return sess, nil
 }
@@ -220,7 +230,7 @@ func (s *Store) GetSession(sessionKey int) (Session, error) {
 func (s *Store) ListSessionsByMeeting(meetingKey int) ([]Session, error) {
 	rows, err := s.db.Query(`
 		SELECT session_key, meeting_key, session_name, session_type,
-		       circuit_key, date_start, date_end, gmt_offset, updated_at
+		       circuit_key, date_start, date_end, gmt_offset, is_cancelled, updated_at
 		FROM sessions
 		WHERE meeting_key = ?
 		ORDER BY date_start ASC, session_key ASC
@@ -238,6 +248,7 @@ func scanMeetings(rows *sql.Rows) ([]Meeting, error) {
 	for rows.Next() {
 		var m Meeting
 		var updatedAt int64
+		var isCancelled int
 		var officialName, location, countryCode, countryName sql.NullString
 		var circuitKey sql.NullInt64
 		var circuitShortName, gmtOffset, dateStart, dateEnd sql.NullString
@@ -255,6 +266,7 @@ func scanMeetings(rows *sql.Rows) ([]Meeting, error) {
 			&dateStart,
 			&dateEnd,
 			&m.Year,
+			&isCancelled,
 			&updatedAt,
 		); err != nil {
 			return nil, err
@@ -271,6 +283,7 @@ func scanMeetings(rows *sql.Rows) ([]Meeting, error) {
 		m.GMTOffset = gmtOffset.String
 		m.DateStart = dateStart.String
 		m.DateEnd = dateEnd.String
+		m.IsCancelled = isCancelled != 0
 		m.UpdatedAt = time.Unix(updatedAt, 0)
 		out = append(out, m)
 	}
@@ -282,6 +295,7 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 	for rows.Next() {
 		var sess Session
 		var updatedAt int64
+		var isCancelled int
 		var circuitKey sql.NullInt64
 		var dateStart, dateEnd, gmtOffset sql.NullString
 
@@ -294,6 +308,7 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 			&dateStart,
 			&dateEnd,
 			&gmtOffset,
+			&isCancelled,
 			&updatedAt,
 		); err != nil {
 			return nil, err
@@ -305,6 +320,7 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 		sess.DateStart = dateStart.String
 		sess.DateEnd = dateEnd.String
 		sess.GMTOffset = gmtOffset.String
+		sess.IsCancelled = isCancelled != 0
 		sess.UpdatedAt = time.Unix(updatedAt, 0)
 		out = append(out, sess)
 	}

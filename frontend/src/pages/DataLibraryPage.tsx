@@ -138,6 +138,9 @@ export function DataLibraryPage() {
             <em className="dl-stat-partial">{stats.partial}</em> partial
           </span>
           <span>
+            <em className="dl-stat-cancelled">{stats.cancelled}</em> cancelled
+          </span>
+          <span>
             <em>{stats.missing}</em> missing
           </span>
         </div>
@@ -176,6 +179,10 @@ export function DataLibraryPage() {
               <div className="dl-stat">
                 <span className="dl-stat-label">Partial</span>
                 <span className="dl-stat-val dl-stat-partial">{stats.partial}</span>
+              </div>
+              <div className="dl-stat">
+                <span className="dl-stat-label">Cancelled</span>
+                <span className="dl-stat-val dl-stat-cancelled">{stats.cancelled}</span>
               </div>
               <div className="dl-stat">
                 <span className="dl-stat-label">Missing</span>
@@ -294,7 +301,9 @@ export function DataLibraryPage() {
                             )}
                           </td>
                           <td className="hide-mobile mono" style={{ color: 'var(--text-2)' }}>
-                            {weekend && weekend.sessions.length > 0
+                            {weekend?.source === 'cancelled'
+                              ? 'cancelled'
+                              : weekend && weekend.sessions.length > 0
                               ? `${weekend.sessions.filter((s) => s.source === 'local').length}/${weekend.sessions.length} full`
                               : '—'}
                           </td>

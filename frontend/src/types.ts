@@ -16,6 +16,7 @@ export interface Meeting {
   date_start: string
   date_end: string
   year: number
+  is_cancelled?: boolean
 }
 
 export interface Session {
@@ -26,6 +27,7 @@ export interface Session {
   date_start: string
   date_end: string
   gmt_offset: string
+  is_cancelled?: boolean
 }
 
 export interface Driver {
@@ -73,7 +75,7 @@ export interface EnrichedGrid {
 }
 
 export interface RaceHub {
-  source: 'local' | 'partial' | 'none'
+  source: 'local' | 'partial' | 'none' | 'cancelled'
   session_key: number
   datasets: Record<string, DatasetInfo>
   meeting?: Meeting
@@ -158,12 +160,12 @@ export interface Lap {
 
 export interface WeekendSession {
   session: Session
-  source: 'local' | 'partial' | 'none'
+  source: 'local' | 'partial' | 'none' | 'cancelled'
   datasets: Record<string, DatasetInfo>
 }
 
 export interface Weekend {
-  source: 'local' | 'partial' | 'none'
+  source: 'local' | 'partial' | 'none' | 'cancelled'
   meeting_key: number
   meeting: Meeting
   sessions: WeekendSession[]

@@ -55,3 +55,23 @@ func datasetsFromCounts(meetingAvailable, sessionAvailable bool, counts store.Se
 	}
 	return ds
 }
+
+func cancelledDatasets() map[string]DatasetInfo {
+	ds := emptyDatasetMap()
+	ds["meeting"] = availableLocal(1)
+	ds["session"] = availableLocal(1)
+	for _, key := range []string{
+		"drivers",
+		"results",
+		"starting_grid",
+		"stints",
+		"pit_stops",
+		"positions",
+		"race_control",
+		"weather",
+		"laps",
+	} {
+		ds[key] = skippedNA()
+	}
+	return ds
+}

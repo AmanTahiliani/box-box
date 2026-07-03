@@ -51,6 +51,7 @@ export function countWeekendStats(weekends: (Weekend | undefined)[]) {
   let full = 0
   let partial = 0
   let missing = 0
+  let cancelled = 0
 
   for (const weekend of weekends) {
     if (!weekend || weekend.sessions.length === 0) {
@@ -64,15 +65,19 @@ export function countWeekendStats(weekends: (Weekend | undefined)[]) {
       case 'partial':
         partial++
         break
+      case 'cancelled':
+        cancelled++
+        break
       default:
         missing++
     }
   }
 
-  return { full, partial, missing, total: weekends.length }
+  return { full, partial, cancelled, missing, total: weekends.length }
 }
 
 export function sessionIconClass(session: WeekendSession): string {
+  if (session.source === 'cancelled') return 'si-cancelled'
   if (session.source === 'none') return 'si-missing'
   if (isSessionComplete(session.datasets)) return 'si-full'
   return 'si-partial'

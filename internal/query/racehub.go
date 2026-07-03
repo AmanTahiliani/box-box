@@ -106,6 +106,12 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 		hub.Datasets["meeting"] = availableLocal(1)
 	}
 
+	if sess.IsCancelled || (hub.Meeting != nil && hub.Meeting.IsCancelled) {
+		hub.Source = ResponseSourceCancelled
+		hub.Datasets = cancelledDatasets()
+		return hub, nil
+	}
+
 	driverLinks, err := s.store.ListSessionDrivers(sessionKey)
 	if err != nil {
 		return RaceHub{}, err

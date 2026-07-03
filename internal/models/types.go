@@ -24,6 +24,8 @@ type Meeting struct {
 	DateStart string `json:"date_start"`
 	DateEnd   string `json:"date_end"`
 	Year      int    `json:"year"`
+
+	IsCancelled bool `json:"is_cancelled"`
 }
 
 type Session struct {
@@ -38,6 +40,8 @@ type Session struct {
 	DateStart string `json:"date_start"`
 	DateEnd   string `json:"date_end"`
 	GMTOffset string `json:"gmt_offset"`
+
+	IsCancelled bool `json:"is_cancelled"`
 }
 
 // TyreCompound represents the type of tyre compound used.
@@ -169,7 +173,7 @@ type Pit struct {
 	LaneDuration float64 `json:"lane_duration"` // pit lane time (entry to exit)
 	LapNumber    int     `json:"lap_number"`
 	MeetingKey   int     `json:"meeting_key"`
-	PitDuration  float64 `json:"pit_duration"`  // deprecated, use StopDuration
+	PitDuration  float64 `json:"pit_duration"` // deprecated, use StopDuration
 	SessionKey   int     `json:"session_key"`
 	StopDuration float64 `json:"stop_duration"` // stationary time only
 }
@@ -186,7 +190,7 @@ type Interval struct {
 	Date         string   `json:"date"`
 	DriverNumber int      `json:"driver_number"`
 	GapToLeader  *float64 `json:"gap_to_leader"` // null when leading
-	Interval     *float64 `json:"interval"`       // null when leading
+	Interval     *float64 `json:"interval"`      // null when leading
 	MeetingKey   int      `json:"meeting_key"`
 	SessionKey   int      `json:"session_key"`
 }
@@ -228,7 +232,7 @@ type Weather struct {
 }
 
 type CarData struct {
-	Brake        int    `json:"brake"`        // 0-100
+	Brake        int    `json:"brake"` // 0-100
 	Date         string `json:"date"`
 	DriverNumber int    `json:"driver_number"`
 	DRS          int    `json:"drs"` // 0=off, 8=eligible, 10=open

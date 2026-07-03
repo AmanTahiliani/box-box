@@ -12,8 +12,8 @@ func TestCoverageCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion() error = %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("SchemaVersion() = %d, want 6", version)
+	if version != 7 {
+		t.Fatalf("SchemaVersion() = %d, want 7", version)
 	}
 
 	// Verify session_coverage table exists

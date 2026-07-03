@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
+	"github.com/AmanTahiliani/box-box/internal/store"
 )
 
 // ErrMeetingNotFound is returned when a meeting is not in the local store.
@@ -65,19 +66,33 @@ func (s *Service) GetWeekend(meetingKey int) (Weekend, error) {
 		}
 		datasets := datasetsFromCounts(true, true, counts)
 		sessionModel := sessionToModel(sess)
+		if sess.IsCancelled {
+			datasets = cancelledDatasets()
+		}
 		if datasets["starting_grid"].Status == DatasetStatusMissing && !isGridExpected(sessionModel.SessionType, sessionModel.SessionName) {
 			datasets["starting_grid"] = skippedNA()
 		}
 		out.Sessions = append(out.Sessions, WeekendSession{
 			Session:  sessionModel,
-			Source:   responseSource(datasets),
+			Source:   sessionSource(sess, datasets),
 			Datasets: datasets,
 		})
 	}
 
-	out.Source = weekendSource(out.Sessions)
+	if meeting.IsCancelled {
+		out.Source = ResponseSourceCancelled
+	} else {
+		out.Source = weekendSource(out.Sessions)
+	}
 	out.DefaultSessionKey = pickDefaultSession(out.Sessions)
 	return out, nil
+}
+
+func sessionSource(sess store.Session, datasets map[string]DatasetInfo) string {
+	if sess.IsCancelled {
+		return ResponseSourceCancelled
+	}
+	return responseSource(datasets)
 }
 
 func weekendSource(sessions []WeekendSession) string {

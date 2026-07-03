@@ -325,6 +325,7 @@ func meetingToStore(m models.Meeting) store.Meeting {
 		DateStart:           m.DateStart,
 		DateEnd:             m.DateEnd,
 		Year:                m.Year,
+		IsCancelled:         m.IsCancelled,
 	}
 }
 
@@ -338,6 +339,7 @@ func sessionToStore(s models.Session) store.Session {
 		DateStart:   s.DateStart,
 		DateEnd:     s.DateEnd,
 		GMTOffset:   s.GMTOffset,
+		IsCancelled: s.IsCancelled,
 	}
 }
 

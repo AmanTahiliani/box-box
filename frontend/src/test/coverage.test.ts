@@ -59,11 +59,18 @@ describe('coverage helpers', () => {
       meeting: {} as Weekend['meeting'],
       sessions: [{ session: {} as Weekend['sessions'][0]['session'], source: 'partial', datasets: {} }],
     }
-    expect(countWeekendStats([local, partial, undefined])).toEqual({
+    const cancelled: Weekend = {
+      source: 'cancelled',
+      meeting_key: 3,
+      meeting: {} as Weekend['meeting'],
+      sessions: [{ session: {} as Weekend['sessions'][0]['session'], source: 'cancelled', datasets: {} }],
+    }
+    expect(countWeekendStats([local, partial, cancelled, undefined])).toEqual({
       full: 1,
       partial: 1,
+      cancelled: 1,
       missing: 1,
-      total: 3,
+      total: 4,
     })
   })
 })

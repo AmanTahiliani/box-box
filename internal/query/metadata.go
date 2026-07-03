@@ -10,9 +10,10 @@ const (
 	DataSourceNone   = "none"
 	DataSourceOpenF1 = "openf1"
 
-	ResponseSourceLocal   = "local"
-	ResponseSourceNone    = "none"
-	ResponseSourcePartial = "partial"
+	ResponseSourceLocal     = "local"
+	ResponseSourceNone      = "none"
+	ResponseSourcePartial   = "partial"
+	ResponseSourceCancelled = "cancelled"
 )
 
 // DatasetInfo describes availability of a single dataset.
