@@ -1,5 +1,6 @@
 import { useState, Fragment } from 'react'
 import { teamColor } from '../../utils'
+import { useAutoAnimate } from '@formkit/auto-animate/react'
 import type { LiveStintData } from '../../types'
 import type { LiveTimingRow } from '../../lib/live'
 import {
@@ -42,6 +43,7 @@ export function TimingTower({
 }: Props) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [gapMode, setGapMode] = useState<'interval' | 'leader'>('interval')
+  const [listRef] = useAutoAnimate<HTMLTableSectionElement>({ duration: 300, easing: 'ease-out' })
 
   if (rows.length === 0) {
     return (
@@ -85,7 +87,7 @@ export function TimingTower({
             <th className="r"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={listRef}>
           {rows.map((row) => {
             const driver = row.Driver
             const delta = positionDelta(driver)

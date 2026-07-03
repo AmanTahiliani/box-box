@@ -164,7 +164,7 @@ export function LiveTimingPage() {
               />
             </div>
             <div className="live-rc-col">
-              <RaceControlFeed messages={snapshot.RCMessages ?? []} />
+              <RaceControlFeed messages={snapshot.RCMessages ?? []} driverInfo={snapshot.DriverInfo} />
             </div>
           </div>
         </>
