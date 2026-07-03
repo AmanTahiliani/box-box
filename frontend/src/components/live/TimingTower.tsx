@@ -1,10 +1,11 @@
 import { useState, Fragment } from 'react'
 import { teamColor } from '../../utils'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import type { LiveStintData } from '../../types'
+import type { LiveSessionMeta, LiveStintData } from '../../types'
 import type { LiveTimingRow } from '../../lib/live'
 import {
   driverCode,
+  liveSessionDisplay,
   positionDelta,
   positionDeltaClass,
   tyreClass,
@@ -22,7 +23,7 @@ interface Props {
   battleNumbers?: Set<string>
   pinned?: string[]
   onTogglePin?: (racingNumber: string) => void
-  sessionType?: string
+  session?: LiveSessionMeta
 }
 
 function posClass(pos: number): string {
@@ -39,7 +40,7 @@ export function TimingTower({
   battleNumbers,
   pinned,
   onTogglePin,
-  sessionType = '',
+  session,
 }: Props) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [gapMode, setGapMode] = useState<'interval' | 'leader'>('interval')
@@ -53,16 +54,14 @@ export function TimingTower({
     )
   }
 
-  const sType = sessionType.toLowerCase()
-  const isRace = sType.includes('race') || sType.includes('sprint')
-  const isQuali = sType.includes('qualifying') || sType.includes('practice') || !isRace
-
-  const isQ1 = sType === 'qualifying 1' || sType.includes('q1')
-  const isQ2 = sType === 'qualifying 2' || sType.includes('q2')
+  const sessionDisplay = liveSessionDisplay(session, rows)
+  const isRace = sessionDisplay.isRace
+  const isQuali = sessionDisplay.isQualifying || !isRace
+  const columnCount = 7 + (isRace ? 3 : 0) + (isQuali ? 3 : 0)
 
   return (
     <div className="scroll-x">
-      <table className="data-table live-tower" style={{ minWidth: 620 }}>
+      <table className="data-table live-tower" style={{ minWidth: 760 }}>
         <thead>
           <tr>
             <th>Pos</th>
@@ -95,27 +94,20 @@ export function TimingTower({
             const isPinned = pinned?.includes(row.RacingNumber) ?? false
             const inBattle = battleNumbers?.has(row.RacingNumber) ?? false
             const isExpanded = expandedRow === row.RacingNumber
-            
-            // Knockout zone border
-            let koClass = ''
-            if (isQuali && (isQ1 || isQ2)) {
-              if (isQ1 && row.Position === 15) koClass = 'ko-line-p15'
-              if (isQ2 && row.Position === 10) koClass = 'ko-line-p10'
-            } else if (isQuali) {
-               if (row.Position === 15) koClass = 'ko-line-p15'
-               if (row.Position === 10) koClass = 'ko-line-p10'
-            }
+            const isAtRisk =
+              Boolean(sessionDisplay.cutoffPosition && row.Position > sessionDisplay.cutoffPosition) ||
+              driver.Cutoff
+            const showCutoffAfter = row.Position === sessionDisplay.cutoffPosition
 
             const gapText = gapMode === 'interval' && isRace ? (driver.Interval || driver.GapToLeader) : driver.GapToLeader
             
-            // Render micro sectors
             const renderSector = (idx: number) => {
               const sec = driver.Sectors?.[idx]
               if (!sec) return '-'
-              let sClass = 'mono'
-              if (sec.OverallFastest) sClass = 'mono txt-purple'
-              else if (sec.PersonalFastest) sClass = 'mono txt-green'
-              else if (sec.Value) sClass = 'mono txt-yellow'
+              let sClass = 'sector-time mono'
+              if (sec.OverallFastest) sClass += ' sector-overall txt-purple'
+              else if (sec.PersonalFastest) sClass += ' sector-personal txt-green'
+              else if (sec.Value) sClass += ' sector-active txt-yellow'
               return <span className={sClass}>{sec.Value || '-'}</span>
             }
 
@@ -128,7 +120,8 @@ export function TimingTower({
                     driver.Retired ? 'retired' : '',
                     inBattle ? 'battle-row' : '',
                     isPinned ? 'pinned-row' : '',
-                    koClass,
+                    isAtRisk && !driver.KnockedOut ? 'danger-row' : '',
+                    driver.OnFlyingLap ? 'flying-row' : '',
                     'interactive-row'
                   ].filter(Boolean).join(' ')}
                   onClick={() => setExpandedRow(isExpanded ? null : row.RacingNumber)}
@@ -146,6 +139,7 @@ export function TimingTower({
                       {driver.Retired && <span className="badge badge-out">RET</span>}
                       {driver.KnockedOut && <span className="badge badge-knocked">KO</span>}
                       {driver.Cutoff && !driver.KnockedOut && <span className="badge badge-cutoff">CUT</span>}
+                      {!driver.Cutoff && isAtRisk && !driver.KnockedOut && <span className="badge badge-risk">RISK</span>}
                       {driver.OnFlyingLap && <span className="badge badge-flying">FL</span>}
                     </div>
                   </td>
@@ -188,7 +182,7 @@ export function TimingTower({
                 </tr>
                 {isExpanded && (
                    <tr className="expanded-row">
-                      <td colSpan={12} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
+                      <td colSpan={columnCount} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
                          <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
                             <div>
                                <div className="mono" style={{ color: 'var(--text-3)', fontSize: '10px', marginBottom: '4px' }}>STINTS</div>
@@ -209,6 +203,17 @@ export function TimingTower({
                          </div>
                       </td>
                    </tr>
+                )}
+                {showCutoffAfter && (
+                  <tr className="cutoff-separator" data-testid="qualifying-cutoff">
+                    <td colSpan={columnCount}>
+                      <span>{sessionDisplay.phaseLabel || 'Q'} cutoff</span>
+                      <strong>P{sessionDisplay.cutoffPosition} advance</strong>
+                      {sessionDisplay.atRiskStart && sessionDisplay.atRiskEnd && (
+                        <em>P{sessionDisplay.atRiskStart}-P{sessionDisplay.atRiskEnd} at risk</em>
+                      )}
+                    </td>
+                  </tr>
                 )}
               </Fragment>
             )

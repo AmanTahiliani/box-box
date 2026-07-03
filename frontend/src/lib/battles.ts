@@ -25,7 +25,8 @@ export interface Battle {
 export function isRaceSession(sessionType: string | null | undefined): boolean {
   if (!sessionType) return false
   const type = sessionType.toLowerCase()
-  return type.includes('race') || type.includes('sprint')
+  const isQualifying = type.includes('qualifying') || type.includes('shootout') || /\bsq\s*[123]\b/.test(type)
+  return !isQualifying && (type.includes('race') || /\bsprint\b/.test(type))
 }
 
 function isEligible(row: LiveTimingRow): boolean {

@@ -39,6 +39,7 @@ describe('isRaceSession', () => {
   it('only treats race and sprint sessions as races', () => {
     expect(isRaceSession('Race')).toBe(true)
     expect(isRaceSession('Sprint')).toBe(true)
+    expect(isRaceSession('Sprint Qualifying')).toBe(false)
     expect(isRaceSession('Qualifying')).toBe(false)
     expect(isRaceSession('Practice')).toBe(false)
     expect(isRaceSession('')).toBe(false)

@@ -102,6 +102,51 @@ const raceSnapshot = {
   },
 }
 
+const sprintQualifyingSnapshot = {
+  is_live: true,
+  data: {
+    ...raceSnapshot.data,
+    Drivers: Object.fromEntries(
+      Array.from({ length: 22 }, (_, index) => {
+        const num = String(index + 1)
+        return [
+          num,
+          driver(num, index + 1, index === 0 ? '' : `+${(index * 0.123).toFixed(3)}`, index === 0 ? '' : `+${(index * 0.123).toFixed(3)}`, {
+            LastLapTime: index < 2 ? '1:29.273' : '',
+            BestLapTime: `1:${String(29 + Math.floor(index / 10)).padStart(2, '0')}.${String(273 + index).padStart(3, '0')}`,
+            NumberOfLaps: 4,
+            Sectors: index === 7
+              ? [{ Value: '28.573', PersonalFastest: false, OverallFastest: false }, { Value: '', PersonalFastest: false, OverallFastest: false }, { Value: '', PersonalFastest: false, OverallFastest: false }]
+              : [],
+            OnFlyingLap: index === 7,
+          }),
+        ]
+      }),
+    ),
+    DriverInfo: Object.fromEntries(
+      Array.from({ length: 22 }, (_, index) => {
+        const num = String(index + 1)
+        return [num, info(num, `D${index + 1}`, 'Driver', String(index + 1), 'Test Team', index % 2 ? 'FF8000' : '27F4D2')]
+      }),
+    ),
+    Tyres: Object.fromEntries(
+      Array.from({ length: 22 }, (_, index) => [String(index + 1), { Compound: 'MEDIUM', New: false, Age: index % 4 }]),
+    ),
+    Session: {
+      MeetingName: 'British Grand Prix',
+      CircuitName: 'Silverstone',
+      SessionType: 'Sprint Qualifying',
+      SessionName: 'Sprint Qualifying',
+    },
+    TrackStatus: '1',
+    CurrentLap: 0,
+    TotalLaps: 0,
+    Clock: '00:02:11',
+    ClockRefTime: '2026-07-03T15:39:49Z',
+    ClockExtrapolating: false,
+  },
+}
+
 test.describe('Live Timing (mocked snapshot)', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/v1/live/state', (route) =>
@@ -148,18 +193,43 @@ test.describe('Live Timing (mocked snapshot)', () => {
   })
 
   test('renders stint history for drivers that have stints', async ({ page }) => {
+    await page.locator('.live-tower tbody tr', { hasText: 'VER' }).click()
     await expect(page.getByTestId('stint-seq').first()).toBeVisible()
   })
 
-  test('clicking a row pins the driver to the focus strip', async ({ page }) => {
-    await page.locator('.live-tower tbody tr', { hasText: 'VER' }).click()
+  test('clicking a pin button pins the driver to the focus strip', async ({ page }) => {
+    await page.locator('.live-tower tbody tr', { hasText: 'VER' }).locator('.pin-btn').click()
     const pinned = page.getByTestId('pinned-strip')
     await expect(pinned).toBeVisible()
     await expect(pinned).toContainText('VER')
 
     // Unpin restores the empty strip.
-    await page.locator('.live-tower tbody tr', { hasText: 'VER' }).click()
+    await page.locator('.live-tower tbody tr', { hasText: 'VER' }).locator('.pin-btn').click()
     await expect(page.getByTestId('pinned-strip')).toHaveCount(0)
+  })
+})
+
+test.describe('Live Timing (mocked Sprint Qualifying)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/v1/live/state', (route) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(sprintQualifyingSnapshot) }),
+    )
+    await page.route('**/api/v1/live/stream', (route) =>
+      route.fulfill({
+        contentType: 'text/event-stream',
+        body: 'event: heartbeat\ndata: {}\n\n',
+      }),
+    )
+    await page.goto('/live')
+  })
+
+  test('shows SQ1 phase, large clock, and 22-car cutoff after P17', async ({ page }) => {
+    await expect(page.getByText('SQ1', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('live-clock')).toContainText('00:02:11')
+    await expect(page.getByTestId('qualifying-cutoff')).toContainText('P17 advance')
+    await expect(page.getByTestId('qualifying-cutoff')).toContainText('P18-P22 at risk')
+    await expect(page.locator('.live-tower tbody tr', { hasText: 'D18' })).toHaveClass(/danger-row/)
+    await expect(page.locator('.live-tower tbody tr', { hasText: 'D8' })).toHaveClass(/flying-row/)
   })
 })
 

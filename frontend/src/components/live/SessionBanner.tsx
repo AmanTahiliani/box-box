@@ -1,17 +1,22 @@
 import type { LiveStreamData } from '../../types'
-import { extrapolateClock } from '../../lib/live'
+import type { LiveTimingRow } from '../../lib/live'
+import { extrapolateClock, liveSessionDisplay } from '../../lib/live'
 import { WeatherStrip } from './WeatherStrip'
 
 interface Props {
   isLive: boolean
   snapshot: LiveStreamData
+  rows: LiveTimingRow[]
   connection: 'connected' | 'connecting' | 'disconnected' | 'error'
   now: number
 }
 
-export function SessionBanner({ isLive, snapshot, connection, now }: Props) {
+export function SessionBanner({ isLive, snapshot, rows, connection, now }: Props) {
   const session = snapshot.Session
   const clock = extrapolateClock(snapshot.Clock, snapshot.ClockRefTime, snapshot.ClockExtrapolating, now)
+  const display = liveSessionDisplay(session, rows)
+  const atRiskLabel =
+    display.atRiskStart && display.atRiskEnd ? `P${display.atRiskStart}-P${display.atRiskEnd} at risk` : ''
 
   return (
     <section className="live-banner">
@@ -25,12 +30,17 @@ export function SessionBanner({ isLive, snapshot, connection, now }: Props) {
             </p>
           </div>
         </div>
-        <div className="live-banner-meta">
-          <span className="mono">
-            L<strong>{snapshot.CurrentLap || '-'}</strong>/<strong>{snapshot.TotalLaps || '-'}</strong>
-          </span>
-          {clock && <span className="mono">{clock}</span>}
-          <span className={isLive ? 'live-state live-state-on' : 'live-state'}>{isLive ? 'live' : 'stale'}</span>
+        <div className="live-session-board">
+          {display.phaseLabel && <span className="live-phase-pill mono">{display.phaseLabel}</span>}
+          <div className="live-clock mono" data-testid="live-clock">{clock || '--:--:--'}</div>
+          <div className="live-banner-meta">
+            {display.advanceCount && <span>{display.advanceCount} advance</span>}
+            {atRiskLabel && <span>{atRiskLabel}</span>}
+            <span>
+              L<strong>{snapshot.CurrentLap || '-'}</strong>/<strong>{snapshot.TotalLaps || '-'}</strong>
+            </span>
+            <span className={isLive ? 'live-state live-state-on' : 'live-state'}>{isLive ? 'live' : 'stale'}</span>
+          </div>
         </div>
       </div>
       <WeatherStrip weather={snapshot.Weather} />

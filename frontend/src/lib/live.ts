@@ -2,6 +2,8 @@ import type {
   LiveDriverData,
   LiveDriverInfo,
   LiveRCMessage,
+  LiveSectorData,
+  LiveSessionMeta,
   LiveStateResponse,
   LiveStreamData,
   LiveTyreData,
@@ -14,6 +16,27 @@ export interface LiveTimingRow {
   Info?: LiveDriverInfo
   Tyre?: LiveTyreData
 }
+
+export interface LiveSessionDisplay {
+  isRace: boolean
+  isQualifying: boolean
+  isSprintQualifying: boolean
+  phase: 1 | 2 | 3 | null
+  phaseLabel: string
+  cutoffPosition: number | null
+  advanceCount: number | null
+  atRiskStart: number | null
+  atRiskEnd: number | null
+}
+
+export interface VisibleSectorEntry {
+  lap: number
+  lastLapTime: string
+  completed: boolean
+  sectors: LiveSectorData[]
+}
+
+export type VisibleSectorState = Record<string, VisibleSectorEntry>
 
 const TRACK_STATUS_LABELS: Record<string, string> = {
   '1': 'GREEN',
@@ -109,6 +132,136 @@ export function sortLiveTimingRows(snapshot: LiveStreamData | null | undefined):
     ...row,
     Position: row.Position || index + 1,
   }))
+}
+
+export function liveSessionDisplay(
+  session: LiveSessionMeta | null | undefined,
+  rows: ReadonlyArray<LiveTimingRow>,
+): LiveSessionDisplay {
+  const text = [session?.SessionName, session?.SessionType].filter(Boolean).join(' ').toLowerCase()
+  const isQualifying =
+    /\bs?q\s*[123]\b/i.test(text) ||
+    text.includes('qualifying') ||
+    text.includes('shootout')
+  const isSprintQualifying =
+    /\bsq\s*[123]\b/i.test(text) ||
+    text.includes('sprint qualifying') ||
+    text.includes('sprint shootout')
+  const isRace = !isQualifying && (text.includes('race') || /\bsprint\b/i.test(text))
+  const phase = isQualifying ? explicitQualifyingPhase(text) ?? inferredQualifyingPhase(rows) : null
+  const prefix = isSprintQualifying ? 'SQ' : 'Q'
+  const cutoffPosition = qualifyingCutoffPosition(rows.length, phase)
+  const atRiskStart = cutoffPosition === null ? null : cutoffPosition + 1
+
+  return {
+    isRace,
+    isQualifying,
+    isSprintQualifying,
+    phase,
+    phaseLabel: phase ? `${prefix}${phase}` : isQualifying ? prefix : '',
+    cutoffPosition,
+    advanceCount: cutoffPosition,
+    atRiskStart,
+    atRiskEnd: cutoffPosition === null ? null : rows.length,
+  }
+}
+
+function explicitQualifyingPhase(text: string): 1 | 2 | 3 | null {
+  const match = text.match(/\b(?:s?q|qualifying)\s*([123])\b/i)
+  if (!match) return null
+  const phase = Number(match[1])
+  return phase === 1 || phase === 2 || phase === 3 ? phase : null
+}
+
+function inferredQualifyingPhase(rows: ReadonlyArray<LiveTimingRow>): 1 | 2 | 3 {
+  if (rows.length === 0) return 1
+  const knockedOut = rows.filter((row) => row.Driver.KnockedOut).length
+  if (knockedOut >= Math.max(0, rows.length - 10)) return 3
+  if (knockedOut >= 5) return 2
+  if (rows.length <= 10) return 3
+  if (rows.length <= 18) return 2
+  return 1
+}
+
+export function qualifyingCutoffPosition(totalRows: number, phase: 1 | 2 | 3 | null): number | null {
+  if (phase === 1 && totalRows > 5) return totalRows - 5
+  if (phase === 2 && totalRows > 10) return 10
+  return null
+}
+
+function emptySector(): LiveSectorData {
+  return { Value: '', PersonalFastest: false, OverallFastest: false }
+}
+
+function sectorHasValue(sector: LiveSectorData | undefined): boolean {
+  return Boolean(sector?.Value)
+}
+
+function normalizeSectors(sectors: ReadonlyArray<LiveSectorData> | undefined): LiveSectorData[] {
+  return [0, 1, 2].map((index) => sectors?.[index] ?? emptySector())
+}
+
+export function mergeVisibleSectors(
+  previous: VisibleSectorState,
+  rows: ReadonlyArray<LiveTimingRow>,
+): VisibleSectorState {
+  const next: VisibleSectorState = {}
+
+  for (const row of rows) {
+    const driver = row.Driver
+    const prior = previous[row.RacingNumber]
+    const incoming = normalizeSectors(driver.Sectors)
+    const hasIncoming = incoming.some(sectorHasValue)
+    const lap = driver.NumberOfLaps || prior?.lap || 0
+    const lapAdvanced = Boolean(prior && driver.NumberOfLaps > prior.lap)
+    const lastLapChanged = Boolean(
+      prior &&
+        driver.LastLapTime &&
+        driver.LastLapTime !== prior.lastLapTime,
+    )
+
+    if ((lapAdvanced || lastLapChanged || prior?.completed) && !hasIncoming) {
+      continue
+    }
+
+    if (!prior && !hasIncoming) continue
+
+    const merged = lapAdvanced || lastLapChanged ? normalizeSectors(undefined) : normalizeSectors(prior?.sectors)
+    for (let index = 0; index < 3; index += 1) {
+      if (sectorHasValue(incoming[index])) {
+        merged[index] = incoming[index]
+      }
+    }
+
+    const hasMerged = merged.some(sectorHasValue)
+    if (!hasMerged) continue
+
+    next[row.RacingNumber] = {
+      lap,
+      lastLapTime: driver.LastLapTime || prior?.lastLapTime || '',
+      completed: sectorHasValue(merged[2]) || (!driver.OnFlyingLap && lastLapChanged),
+      sectors: merged,
+    }
+  }
+
+  return next
+}
+
+export function rowsWithVisibleSectors(
+  rows: ReadonlyArray<LiveTimingRow>,
+  visibleSectors: VisibleSectorState,
+): LiveTimingRow[] {
+  return rows.map((row) => {
+    const sectors = visibleSectors[row.RacingNumber]?.sectors
+    if (!sectors) return row
+    return {
+      ...row,
+      Driver: {
+        ...row.Driver,
+        Sectors: sectors,
+      },
+    }
+  })
 }
 
 export function driverCode(row: LiveTimingRow): string {

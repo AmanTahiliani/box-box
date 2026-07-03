@@ -4,11 +4,14 @@ import { fetchLiveState } from '../api'
 import type { LiveStreamData } from '../types'
 import {
   loadPinnedDrivers,
+  mergeVisibleSectors,
   parseLiveStateEvent,
+  rowsWithVisibleSectors,
   savePinnedDrivers,
   sortLiveTimingRows,
   togglePin,
 } from '../lib/live'
+import type { VisibleSectorState } from '../lib/live'
 import type { GapHistoryMap } from '../lib/gapHistory'
 import { recordGapSamples } from '../lib/gapHistory'
 import { battleNumbers, detectBattles } from '../lib/battles'
@@ -29,6 +32,7 @@ export function LiveTimingPage() {
   const [now, setNow] = useState(Date.now())
   const [gapHistory, setGapHistory] = useState<GapHistoryMap>({})
   const [pinned, setPinned] = useState<string[]>(() => loadPinnedDrivers())
+  const [visibleSectors, setVisibleSectors] = useState<VisibleSectorState>({})
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['live-state'],
@@ -83,7 +87,17 @@ export function LiveTimingPage() {
     }
   }, [])
 
-  const rows = useMemo(() => sortLiveTimingRows(snapshot), [snapshot])
+  const rawRows = useMemo(() => sortLiveTimingRows(snapshot), [snapshot])
+
+  useEffect(() => {
+    if (rawRows.length === 0) {
+      setVisibleSectors({})
+      return
+    }
+    setVisibleSectors((prev) => mergeVisibleSectors(prev, rawRows))
+  }, [rawRows])
+
+  const rows = useMemo(() => rowsWithVisibleSectors(rawRows, visibleSectors), [rawRows, visibleSectors])
 
   // One interval sample per received snapshot, ring-buffered per driver.
   useEffect(() => {
@@ -143,7 +157,7 @@ export function LiveTimingPage() {
 
       {snapshot && (
         <>
-          <SessionBanner isLive={isLive} snapshot={snapshot} connection={streamStatus} now={now} />
+          <SessionBanner isLive={isLive} snapshot={snapshot} rows={rows} connection={streamStatus} now={now} />
           <TrackStatusBanner status={snapshot.TrackStatus} />
           <PinnedDrivers rows={rows} history={gapHistory} pinned={pinned} onToggle={handleTogglePin} />
           <div className="live-columns">
@@ -160,7 +174,7 @@ export function LiveTimingPage() {
                 battleNumbers={inBattle}
                 pinned={pinned}
                 onTogglePin={handleTogglePin}
-                sessionType={snapshot.Session?.SessionType}
+                session={snapshot.Session}
               />
             </div>
             <div className="live-rc-col">

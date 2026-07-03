@@ -187,6 +187,28 @@ describe('TimingTower', () => {
     render(<TimingTower rows={[]} />)
     expect(screen.getByText(/no driver timing rows/i)).toBeInTheDocument()
   })
+
+  it('renders the SQ1 cutoff after P17 and marks rows below as at risk', () => {
+    const sprintRows = Array.from({ length: 22 }, (_, index) =>
+      makeRow(String(index + 1), index + 1, `D${index + 1}`),
+    )
+    render(
+      <TimingTower
+        rows={sprintRows}
+        session={{
+          MeetingName: 'British Grand Prix',
+          CircuitName: 'Silverstone',
+          SessionType: 'Sprint Qualifying',
+          SessionName: 'Sprint Qualifying',
+        }}
+      />,
+    )
+
+    expect(screen.getByTestId('qualifying-cutoff')).toHaveTextContent('SQ1 cutoff')
+    expect(screen.getByTestId('qualifying-cutoff')).toHaveTextContent('P17 advance')
+    expect(screen.getByText('D18').closest('tr')).toHaveClass('danger-row')
+    expect(screen.getByText('D17').closest('tr')).not.toHaveClass('danger-row')
+  })
 })
 
 describe('PinnedDrivers', () => {
