@@ -29,9 +29,10 @@ type SSEHub struct {
 	deregister chan *sseClient
 	broadcast  chan sseEvent
 
-	mu           sync.RWMutex
-	lastSnapshot *live.LiveStreamData
-	isLive       bool
+	mu            sync.RWMutex
+	lastSnapshot  *live.LiveStreamData
+	lastPositions map[string]live.LivePositionData
+	isLive        bool
 }
 
 func newSSEHub() *SSEHub {
@@ -52,12 +53,21 @@ func (h *SSEHub) run() {
 			// Send catch-up snapshot so new clients see current state immediately.
 			h.mu.RLock()
 			snap := h.lastSnapshot
+			positions := cloneLivePositions(h.lastPositions)
 			live := h.isLive
 			h.mu.RUnlock()
 			if snap != nil {
 				if data, err := json.Marshal(map[string]any{"data": snap, "is_live": live}); err == nil {
 					select {
 					case c.ch <- formatSSEFrame("snapshot", data):
+					default:
+					}
+				}
+			}
+			if len(positions) > 0 {
+				if data, err := json.Marshal(positions); err == nil {
+					select {
+					case c.ch <- formatSSEFrame("positions", data):
 					default:
 					}
 				}
@@ -122,6 +132,7 @@ func (s *Server) signalRLoop() {
 		s.hub.mu.Lock()
 		s.hub.isLive = false
 		s.hub.lastSnapshot = nil
+		s.hub.lastPositions = nil
 		s.hub.mu.Unlock()
 
 		if payload, err := json.Marshal(map[string]any{"data": nil, "is_live": false}); err == nil {
@@ -150,17 +161,33 @@ func (s *Server) connectAndDrain() error {
 	idleTimeout := 60 * time.Second
 	timer := time.NewTimer(idleTimeout)
 	defer timer.Stop()
+	lastPositionBroadcast := time.Time{}
 
 	for {
 		select {
 		case data := <-dataChan:
+			now := time.Now()
 			s.hub.mu.Lock()
-			s.hub.lastSnapshot = &data
+			if data.SnapshotUpdated {
+				s.hub.lastSnapshot = &data
+			}
+			if data.PositionUpdated && len(data.Positions) > 0 {
+				s.hub.lastPositions = cloneLivePositions(data.Positions)
+			}
 			s.hub.isLive = true
 			s.hub.mu.Unlock()
 
-			if payload, err := json.Marshal(map[string]any{"data": data, "is_live": true}); err == nil {
-				s.hub.broadcast <- sseEvent{name: "snapshot", data: payload}
+			if data.SnapshotUpdated {
+				if payload, err := json.Marshal(map[string]any{"data": data, "is_live": true}); err == nil {
+					s.hub.broadcast <- sseEvent{name: "snapshot", data: payload}
+				}
+			}
+
+			if data.PositionUpdated && len(data.Positions) > 0 && now.Sub(lastPositionBroadcast) >= 250*time.Millisecond {
+				if payload, err := json.Marshal(data.Positions); err == nil {
+					s.hub.broadcast <- sseEvent{name: "positions", data: payload}
+					lastPositionBroadcast = now
+				}
 			}
 
 			if !timer.Stop() {
@@ -175,6 +202,17 @@ func (s *Server) connectAndDrain() error {
 			return fmt.Errorf("idle timeout (%v)", idleTimeout)
 		}
 	}
+}
+
+func cloneLivePositions(in map[string]live.LivePositionData) map[string]live.LivePositionData {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]live.LivePositionData, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 // handleLiveState returns the current live data snapshot as JSON.

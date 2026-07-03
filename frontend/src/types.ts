@@ -177,6 +177,22 @@ export interface LiveStateResponse {
   data: LiveStreamData | null
 }
 
+export interface LivePosition {
+  x: number
+  y: number
+  z: number
+  status: string
+}
+
+export interface LiveTelemetry {
+  Speed: number
+  Throttle: number
+  Brake: number
+  DRS: number
+  NGear: number
+  RPM: number
+}
+
 export interface LiveSectorData {
   Value: string
   PersonalFastest: boolean
@@ -257,6 +273,7 @@ export interface LiveStreamData {
   Drivers: Record<string, LiveDriverData>
   DriverInfo: Record<string, LiveDriverInfo>
   Tyres: Record<string, LiveTyreData>
+  Telemetry?: Record<string, LiveTelemetry>
   RCMessages: LiveRCMessage[]
   Weather: LiveWeatherData
   Session: LiveSessionMeta
@@ -267,6 +284,24 @@ export interface LiveStreamData {
   ClockRefTime: string
   ClockExtrapolating: boolean
   Stints: Record<string, LiveStintData[]>
+}
+
+export interface TrackPoint {
+  x: number
+  y: number
+}
+
+export interface TrackBounds {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+}
+
+export interface TrackOutline {
+  circuit_key: number
+  points: TrackPoint[]
+  bounds: TrackBounds
 }
 
 export interface ChampHubDriver {

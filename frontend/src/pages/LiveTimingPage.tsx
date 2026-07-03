@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLiveState } from '../api'
-import type { LiveStreamData } from '../types'
+import { fetchLiveState, fetchLiveTrackOutline } from '../api'
+import type { LivePosition, LiveStreamData } from '../types'
 import {
   loadPinnedDrivers,
   mergeVisibleSectors,
@@ -21,6 +21,7 @@ import { TimingTower } from '../components/live/TimingTower'
 import { BattleChips } from '../components/live/BattleChips'
 import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
+import { TrackMap } from '../components/live/TrackMap'
 import { Radio } from 'lucide-react'
 
 type StreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -33,11 +34,24 @@ export function LiveTimingPage() {
   const [gapHistory, setGapHistory] = useState<GapHistoryMap>({})
   const [pinned, setPinned] = useState<string[]>(() => loadPinnedDrivers())
   const [visibleSectors, setVisibleSectors] = useState<VisibleSectorState>({})
+  const [positions, setPositions] = useState<Record<string, LivePosition>>({})
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['live-state'],
     queryFn: fetchLiveState,
     staleTime: 5_000,
+  })
+
+  const trackOutlineQuery = useQuery({
+    queryKey: [
+      'live-track-outline',
+      snapshot?.Session?.MeetingName ?? '',
+      snapshot?.Session?.CircuitName ?? '',
+    ],
+    queryFn: () => fetchLiveTrackOutline(snapshot!.Session),
+    enabled: Boolean(snapshot?.Session?.MeetingName || snapshot?.Session?.CircuitName),
+    staleTime: Infinity,
+    retry: false,
   })
 
   useEffect(() => {
@@ -75,6 +89,17 @@ export function LiveTimingPage() {
 
     events.addEventListener('heartbeat', () => {
       if (!cancelled) setStreamStatus('connected')
+    })
+
+    events.addEventListener('positions', (event) => {
+      if (cancelled) return
+      try {
+        const parsed = JSON.parse(event.data) as Record<string, LivePosition>
+        setPositions(parsed && typeof parsed === 'object' ? parsed : {})
+        setStreamStatus('connected')
+      } catch {
+        // Ignore malformed transient frames; the next 4Hz update will replace it.
+      }
     })
 
     events.onerror = () => {
@@ -160,6 +185,14 @@ export function LiveTimingPage() {
           <SessionBanner isLive={isLive} snapshot={snapshot} rows={rows} connection={streamStatus} now={now} />
           <TrackStatusBanner status={snapshot.TrackStatus} />
           <PinnedDrivers rows={rows} history={gapHistory} pinned={pinned} onToggle={handleTogglePin} />
+          <TrackMap
+            outline={trackOutlineQuery.data}
+            positions={positions}
+            telemetry={snapshot.Telemetry}
+            drivers={snapshot.Drivers}
+            driverInfo={snapshot.DriverInfo}
+            loading={trackOutlineQuery.isLoading}
+          />
           <div className="live-columns">
             <div className="live-tower-col">
               <div className="sec-header">

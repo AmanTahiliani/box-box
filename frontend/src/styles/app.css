@@ -649,6 +649,141 @@ a { color: inherit; text-decoration: none; }
   gap: var(--s5);
 }
 
+.live-track-panel {
+  margin-bottom: var(--s5);
+}
+
+.track-map-stage {
+  position: relative;
+  min-height: 360px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.track-map-svg {
+  display: block;
+  width: 100%;
+  height: 360px;
+}
+
+.track-map-outline-shadow,
+.track-map-outline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.track-map-outline-shadow {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 5;
+}
+
+.track-map-outline {
+  stroke: var(--surface-3);
+  stroke-width: 2.4;
+}
+
+.track-car {
+  cursor: pointer;
+  outline: none;
+}
+
+.track-car circle {
+  stroke: #050505;
+  stroke-width: 0.7;
+  transition: r 0.12s, opacity 0.12s, stroke 0.12s;
+}
+
+.track-car text {
+  fill: #fff;
+  font-family: var(--f-mono);
+  font-size: 2.1px;
+  font-weight: 800;
+  pointer-events: none;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 0.7;
+}
+
+.track-car:hover circle,
+.track-car:focus-visible circle,
+.track-car-selected circle {
+  r: 3.7;
+  stroke: #fff;
+}
+
+.track-car-inactive {
+  opacity: 0.35;
+  filter: grayscale(0.8);
+}
+
+.track-map-empty {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.track-map-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.track-telemetry {
+  position: absolute;
+  right: var(--s5);
+  bottom: var(--s5);
+  width: min(260px, calc(100% - 32px));
+  padding: var(--s4);
+  border: 1px solid var(--border-2);
+  background: rgba(10, 10, 10, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+.track-telemetry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: var(--s3);
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.track-driver-code {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.track-telemetry dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s3);
+}
+
+.track-telemetry dt {
+  color: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: 9px;
+}
+
+.track-telemetry dd {
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+}
+
 @media (min-width: 900px) {
   .live-columns {
     display: grid;

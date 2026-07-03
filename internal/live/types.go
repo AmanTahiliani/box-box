@@ -87,6 +87,24 @@ type LiveSessionMeta struct {
 	SessionName string
 }
 
+// LivePositionData is the latest raw F1 GPS position for one driver.
+type LivePositionData struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Z      float64 `json:"z"`
+	Status string  `json:"status"`
+}
+
+// LiveTelemetryData is the latest car telemetry for one driver.
+type LiveTelemetryData struct {
+	Speed    int `json:"Speed"`
+	Throttle int `json:"Throttle"`
+	Brake    int `json:"Brake"`
+	DRS      int `json:"DRS"`
+	NGear    int `json:"NGear"`
+	RPM      int `json:"RPM"`
+}
+
 // LiveSectorData holds a single sector time and flags.
 type LiveSectorData struct {
 	Value           string
@@ -131,6 +149,7 @@ type LiveStreamData struct {
 	Drivers            map[string]LiveDriverData
 	DriverInfo         map[string]F1DriverListEntry
 	Tyres              map[string]LiveTyreData
+	Telemetry          map[string]LiveTelemetryData
 	RCMessages         []LiveRCMessage
 	Weather            LiveWeatherData
 	Session            LiveSessionMeta
@@ -141,4 +160,7 @@ type LiveStreamData struct {
 	ClockRefTime       time.Time // UTC when Clock was accurate
 	ClockExtrapolating bool      // true = actively counting down
 	Stints             map[string][]LiveStintData
+	Positions          map[string]LivePositionData `json:"-"`
+	PositionUpdated    bool                        `json:"-"`
+	SnapshotUpdated    bool                        `json:"-"`
 }

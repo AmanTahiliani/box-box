@@ -1,8 +1,14 @@
 package live
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/zlib"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 )
 
@@ -11,6 +17,8 @@ type State struct {
 	Drivers            map[string]LiveDriverData
 	DriverInfo         map[string]F1DriverListEntry
 	Tyres              map[string]LiveTyreData
+	Telemetry          map[string]LiveTelemetryData
+	Positions          map[string]LivePositionData
 	Stints             map[string][]LiveStintData
 	RCMessages         []LiveRCMessage
 	Weather            LiveWeatherData
@@ -21,6 +29,8 @@ type State struct {
 	Clock              string
 	ClockRefTime       time.Time
 	ClockExtrapolating bool
+	positionUpdated    bool
+	snapshotUpdated    bool
 }
 
 const signalRRecordSeparator = byte(0x1e)
@@ -31,6 +41,8 @@ func NewState() *State {
 		Drivers:    make(map[string]LiveDriverData),
 		DriverInfo: make(map[string]F1DriverListEntry),
 		Tyres:      make(map[string]LiveTyreData),
+		Telemetry:  make(map[string]LiveTelemetryData),
+		Positions:  make(map[string]LivePositionData),
 		Stints:     make(map[string][]LiveStintData),
 	}
 }
@@ -49,6 +61,14 @@ func (s *State) Snapshot() LiveStreamData {
 	for k, v := range s.Tyres {
 		cpyTyres[k] = v
 	}
+	cpyTelemetry := make(map[string]LiveTelemetryData, len(s.Telemetry))
+	for k, v := range s.Telemetry {
+		cpyTelemetry[k] = v
+	}
+	cpyPositions := make(map[string]LivePositionData, len(s.Positions))
+	for k, v := range s.Positions {
+		cpyPositions[k] = v
+	}
 	cpyRC := make([]LiveRCMessage, len(s.RCMessages))
 	copy(cpyRC, s.RCMessages)
 	cpyStints := make(map[string][]LiveStintData, len(s.Stints))
@@ -62,6 +82,7 @@ func (s *State) Snapshot() LiveStreamData {
 		Drivers:            cpyDrivers,
 		DriverInfo:         cpyInfo,
 		Tyres:              cpyTyres,
+		Telemetry:          cpyTelemetry,
 		RCMessages:         cpyRC,
 		Weather:            s.Weather,
 		Session:            s.Session,
@@ -72,11 +93,16 @@ func (s *State) Snapshot() LiveStreamData {
 		ClockRefTime:       s.ClockRefTime,
 		ClockExtrapolating: s.ClockExtrapolating,
 		Stints:             cpyStints,
+		Positions:          cpyPositions,
+		PositionUpdated:    s.positionUpdated,
+		SnapshotUpdated:    s.snapshotUpdated,
 	}
 }
 
 // ProcessMessage parses a raw SignalR WebSocket frame and applies any updates.
 func (s *State) ProcessMessage(message []byte) bool {
+	s.clearTransientFlags()
+
 	var parsed F1SignalRMessage
 	if err := json.Unmarshal(message, &parsed); err != nil {
 		return false
@@ -111,6 +137,8 @@ func (s *State) ProcessMessage(message []byte) bool {
 // ProcessCoreMessage parses one or more SignalR Core JSON frames and applies
 // completion snapshots and feed deltas from the current official F1 live timing hub.
 func (s *State) ProcessCoreMessage(message []byte) bool {
+	s.clearTransientFlags()
+
 	updated := false
 	for _, frame := range splitSignalRFrames(message) {
 		var envelope struct {
@@ -156,7 +184,15 @@ func (s *State) ProcessCoreMessage(message []byte) bool {
 // ProcessTopic applies a single topic payload to the accumulator.
 func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 	updated := false
-	switch topic {
+	baseTopic := strings.TrimSuffix(topic, ".z")
+	if topic != baseTopic {
+		var ok bool
+		data, ok = inflateTopicPayload(data)
+		if !ok {
+			return false
+		}
+	}
+	switch baseTopic {
 	case "TimingData":
 		var td struct {
 			Lines map[string]json.RawMessage `json:"Lines"`
@@ -170,6 +206,10 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 				}
 			}
 		}
+	case "Position":
+		updated = s.updatePositions(data)
+	case "CarData":
+		updated = s.updateTelemetry(data)
 	case "DriverList":
 		var dlMap map[string]json.RawMessage
 		if json.Unmarshal(data, &dlMap) == nil {
@@ -288,7 +328,10 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 	case "SessionInfo":
 		var si struct {
 			Meeting struct {
-				Name string `json:"Name"`
+				Name    string `json:"Name"`
+				Circuit struct {
+					ShortName string `json:"ShortName"`
+				} `json:"Circuit"`
 			} `json:"Meeting"`
 			Name string `json:"Name"`
 			Type string `json:"Type"`
@@ -296,6 +339,9 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 		if json.Unmarshal(data, &si) == nil {
 			if si.Meeting.Name != "" {
 				s.Session.MeetingName = si.Meeting.Name
+			}
+			if si.Meeting.Circuit.ShortName != "" {
+				s.Session.CircuitName = si.Meeting.Circuit.ShortName
 			}
 			if si.Name != "" {
 				s.Session.SessionName = si.Name
@@ -386,7 +432,175 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 			}
 		}
 	}
+	if updated {
+		if baseTopic == "Position" {
+			s.positionUpdated = true
+		} else {
+			s.snapshotUpdated = true
+		}
+	}
 	return updated
+}
+
+func (s *State) clearTransientFlags() {
+	s.positionUpdated = false
+	s.snapshotUpdated = false
+}
+
+func inflateTopicPayload(data json.RawMessage) (json.RawMessage, bool) {
+	var encoded string
+	if err := json.Unmarshal(data, &encoded); err != nil {
+		var wrapper struct {
+			Z string `json:"z"`
+		}
+		if json.Unmarshal(data, &wrapper) != nil || wrapper.Z == "" {
+			return nil, false
+		}
+		encoded = wrapper.Z
+	}
+
+	compressed, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, false
+	}
+	if inflated, ok := readCompressed(zlib.NewReader(bytes.NewReader(compressed))); ok {
+		return json.RawMessage(inflated), true
+	}
+	if inflated, ok := readCompressed(func() (io.ReadCloser, error) {
+		return flate.NewReader(bytes.NewReader(compressed)), nil
+	}()); ok {
+		return json.RawMessage(inflated), true
+	}
+	return nil, false
+}
+
+func readCompressed(r io.ReadCloser, err error) ([]byte, bool) {
+	if err != nil {
+		return nil, false
+	}
+	defer r.Close()
+	out, err := io.ReadAll(r)
+	return out, err == nil
+}
+
+func (s *State) updatePositions(data json.RawMessage) bool {
+	var payload struct {
+		Position json.RawMessage `json:"Position"`
+	}
+	if json.Unmarshal(data, &payload) != nil || len(payload.Position) == 0 {
+		return false
+	}
+
+	updated := false
+	for _, sampleRaw := range indexedRawValues(payload.Position) {
+		var sample struct {
+			Entries map[string]struct {
+				Status string      `json:"Status"`
+				X      json.Number `json:"X"`
+				Y      json.Number `json:"Y"`
+				Z      json.Number `json:"Z"`
+			} `json:"Entries"`
+		}
+		if json.Unmarshal(sampleRaw.Raw, &sample) != nil {
+			continue
+		}
+		for num, entry := range sample.Entries {
+			x, okX := numberToFloat(entry.X)
+			y, okY := numberToFloat(entry.Y)
+			z, okZ := numberToFloat(entry.Z)
+			if !okX || !okY {
+				continue
+			}
+			if !okZ {
+				z = 0
+			}
+			s.Positions[num] = LivePositionData{
+				X:      x,
+				Y:      y,
+				Z:      z,
+				Status: entry.Status,
+			}
+			updated = true
+		}
+	}
+	return updated
+}
+
+func (s *State) updateTelemetry(data json.RawMessage) bool {
+	var payload struct {
+		Entries json.RawMessage `json:"Entries"`
+	}
+	if json.Unmarshal(data, &payload) != nil || len(payload.Entries) == 0 {
+		return false
+	}
+
+	updated := false
+	for _, entryRaw := range indexedRawValues(payload.Entries) {
+		var entry struct {
+			Cars map[string]struct {
+				Channels map[string]json.RawMessage `json:"Channels"`
+			} `json:"Cars"`
+		}
+		if json.Unmarshal(entryRaw.Raw, &entry) != nil {
+			continue
+		}
+		for num, car := range entry.Cars {
+			t := s.Telemetry[num]
+			if v, ok := channelInt(car.Channels, "0"); ok {
+				t.RPM = v
+			}
+			if v, ok := channelInt(car.Channels, "2"); ok {
+				t.Speed = v
+			}
+			if v, ok := channelInt(car.Channels, "3"); ok {
+				t.NGear = v
+			}
+			if v, ok := channelInt(car.Channels, "4"); ok {
+				t.Throttle = v
+			}
+			if v, ok := channelInt(car.Channels, "5"); ok {
+				t.Brake = v
+			}
+			if v, ok := channelInt(car.Channels, "45"); ok {
+				t.DRS = v
+			}
+			s.Telemetry[num] = t
+			updated = true
+		}
+	}
+	return updated
+}
+
+func channelInt(channels map[string]json.RawMessage, key string) (int, bool) {
+	raw, ok := channels[key]
+	if !ok {
+		return 0, false
+	}
+	var n json.Number
+	if json.Unmarshal(raw, &n) == nil {
+		if i, err := n.Int64(); err == nil {
+			return int(i), true
+		}
+		if f, err := n.Float64(); err == nil {
+			return int(f), true
+		}
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		var i int
+		if _, err := fmt.Sscanf(s, "%d", &i); err == nil {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func numberToFloat(n json.Number) (float64, bool) {
+	if n == "" {
+		return 0, false
+	}
+	v, err := n.Float64()
+	return v, err == nil
 }
 
 func updateDriver(drivers map[string]LiveDriverData, num string, line F1TimingLine) {
