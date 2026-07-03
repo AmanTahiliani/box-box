@@ -21,7 +21,7 @@
   --tyre-inter:   #39b54a;
   --tyre-wet:     #0080ff;
 
-  --f-ui:   system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-ui:   'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --f-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
 
   --s1: 2px; --s2: 4px; --s3: 6px; --s4: 10px;

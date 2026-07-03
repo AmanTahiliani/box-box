@@ -1,0 +1,15 @@
+{
+  "short_name": "box-box",
+  "name": "box-box | Live F1 Dashboard",
+  "icons": [
+    {
+      "src": "/favicon.jpg",
+      "type": "image/jpeg",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0d0d0d",
+  "background_color": "#0d0d0d"
+}
