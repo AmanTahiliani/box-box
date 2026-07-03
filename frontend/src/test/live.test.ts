@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
+  compoundClass,
+  compoundLetter,
   extrapolateClock,
   latestRaceControl,
+  loadPinnedDrivers,
   positionDeltaClass,
   parseLiveStateEvent,
   rcFlagClass,
+  savePinnedDrivers,
   sortLiveTimingRows,
+  togglePin,
+  trackStatusInfo,
   trackStatusLabel,
   tyreClass,
   tyreLabel,
+  windDirectionLabel,
 } from '../lib/live'
 import type { LiveStreamData } from '../types'
 
@@ -135,5 +142,72 @@ describe('live transforms', () => {
 
   it('extrapolates the session clock from the reference time', () => {
     expect(extrapolateClock('01:20:00', '2026-05-25T12:00:00Z', true, Date.parse('2026-05-25T12:00:30Z'))).toBe('01:19:30')
+  })
+})
+
+describe('track status mapping', () => {
+  it('maps all known raw statuses to banner info', () => {
+    expect(trackStatusInfo('1')).toMatchObject({ key: 'green', label: 'TRACK CLEAR' })
+    expect(trackStatusInfo('2')).toMatchObject({ key: 'yellow', label: 'YELLOW FLAG' })
+    expect(trackStatusInfo('4')).toMatchObject({ key: 'sc', label: 'SAFETY CAR' })
+    expect(trackStatusInfo('5')).toMatchObject({ key: 'red', label: 'RED FLAG' })
+    expect(trackStatusInfo('6')).toMatchObject({ key: 'vsc', label: 'VIRTUAL SAFETY CAR' })
+    expect(trackStatusInfo('7')).toMatchObject({ key: 'vsc', label: 'VSC ENDING' })
+  })
+
+  it('falls back to a neutral display for unknown values', () => {
+    expect(trackStatusInfo('9')).toMatchObject({ key: 'unknown', label: 'TRACK STATUS 9' })
+    expect(trackStatusInfo('')).toMatchObject({ key: 'unknown', label: 'TRACK STATUS UNKNOWN' })
+    expect(trackStatusInfo(undefined)).toMatchObject({ key: 'unknown' })
+  })
+
+  it('keeps the compact label helper defensive', () => {
+    expect(trackStatusLabel('7')).toBe('VSC ENDING')
+    expect(trackStatusLabel('99')).toBe('99')
+    expect(trackStatusLabel('')).toBe('UNKNOWN')
+  })
+})
+
+describe('weather and stint helpers', () => {
+  it('maps wind direction degrees to compass points', () => {
+    expect(windDirectionLabel(0)).toBe('N')
+    expect(windDirectionLabel(90)).toBe('E')
+    expect(windDirectionLabel(180)).toBe('S')
+    expect(windDirectionLabel(315)).toBe('NW')
+    expect(windDirectionLabel(359)).toBe('N')
+    expect(windDirectionLabel(null)).toBe('')
+  })
+
+  it('maps stint compounds to classes and letters', () => {
+    expect(compoundClass('SOFT')).toBe('tyre-soft')
+    expect(compoundClass('INTERMEDIATE')).toBe('tyre-inter')
+    expect(compoundClass('')).toBe('tyre-unknown')
+    expect(compoundLetter('MEDIUM')).toBe('M')
+    expect(compoundLetter(undefined)).toBe('?')
+  })
+})
+
+describe('pinned drivers', () => {
+  it('toggles pins with a max of three, dropping the oldest', () => {
+    expect(togglePin([], '1')).toEqual(['1'])
+    expect(togglePin(['1'], '1')).toEqual([])
+    expect(togglePin(['1', '4'], '16')).toEqual(['1', '4', '16'])
+    expect(togglePin(['1', '4', '16'], '44')).toEqual(['4', '16', '44'])
+    expect(togglePin(['1', '4', '16'], '4')).toEqual(['1', '16'])
+  })
+
+  it('round-trips pins through storage and survives corrupt data', () => {
+    const store = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    }
+    savePinnedDrivers(['1', '44'], storage)
+    expect(loadPinnedDrivers(storage)).toEqual(['1', '44'])
+
+    store.set('box-box.live.pins', 'not json {{')
+    expect(loadPinnedDrivers(storage)).toEqual([])
+    store.set('box-box.live.pins', '{"nope":true}')
+    expect(loadPinnedDrivers(storage)).toEqual([])
   })
 })

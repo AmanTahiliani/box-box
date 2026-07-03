@@ -1,10 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchLiveState } from '../api'
 import type { LiveStreamData } from '../types'
-import { parseLiveStateEvent } from '../lib/live'
+import {
+  loadPinnedDrivers,
+  parseLiveStateEvent,
+  savePinnedDrivers,
+  sortLiveTimingRows,
+  togglePin,
+} from '../lib/live'
+import type { GapHistoryMap } from '../lib/gapHistory'
+import { recordGapSamples } from '../lib/gapHistory'
+import { battleNumbers, detectBattles } from '../lib/battles'
 import { SessionBanner } from '../components/live/SessionBanner'
+import { TrackStatusBanner } from '../components/live/TrackStatusBanner'
 import { TimingTower } from '../components/live/TimingTower'
+import { BattleChips } from '../components/live/BattleChips'
+import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
 
 type StreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -14,6 +26,8 @@ export function LiveTimingPage() {
   const [isLive, setIsLive] = useState(false)
   const [streamStatus, setStreamStatus] = useState<StreamStatus>('connecting')
   const [now, setNow] = useState(Date.now())
+  const [gapHistory, setGapHistory] = useState<GapHistoryMap>({})
+  const [pinned, setPinned] = useState<string[]>(() => loadPinnedDrivers())
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['live-state'],
@@ -68,6 +82,33 @@ export function LiveTimingPage() {
     }
   }, [])
 
+  const rows = useMemo(() => sortLiveTimingRows(snapshot), [snapshot])
+
+  // One interval sample per received snapshot, ring-buffered per driver.
+  useEffect(() => {
+    if (rows.length === 0) return
+    setGapHistory((prev) =>
+      recordGapSamples(
+        prev,
+        rows.map((row) => ({ racingNumber: row.RacingNumber, interval: row.Driver.Interval || '' })),
+      ),
+    )
+  }, [rows])
+
+  useEffect(() => {
+    savePinnedDrivers(pinned)
+  }, [pinned])
+
+  const battles = useMemo(
+    () => detectBattles(rows, snapshot?.Session?.SessionType),
+    [rows, snapshot?.Session?.SessionType],
+  )
+  const inBattle = useMemo(() => battleNumbers(battles), [battles])
+
+  const handleTogglePin = (racingNumber: string) => {
+    setPinned((prev) => togglePin(prev, racingNumber))
+  }
+
   return (
     <div className="page live-page" data-testid="live-page">
       {isError && (
@@ -101,12 +142,23 @@ export function LiveTimingPage() {
       {snapshot && (
         <>
           <SessionBanner isLive={isLive} snapshot={snapshot} connection={streamStatus} now={now} />
+          <TrackStatusBanner status={snapshot.TrackStatus} />
+          <PinnedDrivers rows={rows} history={gapHistory} pinned={pinned} onToggle={handleTogglePin} />
           <div className="live-columns">
             <div className="live-tower-col">
               <div className="sec-header">
                 <span className="sec-title">Timing Tower</span>
+                {pinned.length > 0 && <span className="sec-meta">{pinned.length}/3 pinned</span>}
               </div>
-              <TimingTower snapshot={snapshot} />
+              <BattleChips battles={battles} />
+              <TimingTower
+                rows={rows}
+                stints={snapshot.Stints}
+                history={gapHistory}
+                battleNumbers={inBattle}
+                pinned={pinned}
+                onTogglePin={handleTogglePin}
+              />
             </div>
             <div className="live-rc-col">
               <RaceControlFeed messages={snapshot.RCMessages ?? []} />

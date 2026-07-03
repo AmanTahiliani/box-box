@@ -661,6 +661,178 @@ a { color: inherit; text-decoration: none; }
 .tyre-wet { background: var(--tyre-wet); color: #fff; }
 .tyre-unknown { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border-2); }
 
+/* ── Track status banner ── */
+.track-banner {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s4);
+  width: 100%;
+  padding: var(--s3) var(--s5);
+  margin-bottom: var(--s5);
+  border: 1px solid var(--border-2);
+  border-left-width: 3px;
+  border-radius: 2px;
+  font-family: var(--f-mono);
+}
+
+.track-banner-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.track-banner-detail {
+  font-size: 11px;
+  opacity: 0.75;
+  min-width: 0;
+}
+
+.track-banner-green   { background: rgba(57,199,58,.08);   border-color: rgba(57,199,58,.3);   color: var(--green); }
+.track-banner-yellow  { background: rgba(255,214,0,.12);   border-color: rgba(255,214,0,.4);   color: var(--yellow); }
+.track-banner-sc      { background: rgba(255,152,0,.12);   border-color: rgba(255,152,0,.4);   color: #ffb84d; }
+.track-banner-vsc     { background: rgba(194,120,255,.12); border-color: rgba(194,120,255,.4); color: var(--purple); }
+.track-banner-red     { background: rgba(225,6,0,.14);     border-color: rgba(225,6,0,.5);     color: #ff6b6b; animation: track-banner-pulse 1.6s ease-in-out infinite; }
+.track-banner-unknown { background: var(--surface-2);      border-color: var(--border-2);      color: var(--text-2); }
+
+@keyframes track-banner-pulse {
+  0%, 100% { background: rgba(225,6,0,.14); }
+  50%      { background: rgba(225,6,0,.26); }
+}
+
+/* ── Weather strip items ── */
+.weather-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s2);
+  white-space: nowrap;
+}
+.weather-k { color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; }
+.weather-v { color: var(--text-2); font-family: var(--f-mono); font-size: 11px; }
+
+/* ── Gap trend sparkline ── */
+.gap-spark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--text-3);
+  line-height: 1;
+}
+.gap-spark-empty { color: var(--text-3); }
+.gap-spark-svg { display: block; }
+.gap-spark.trend-closing { color: var(--green); }
+.gap-spark.trend-opening { color: #ff6b6b; }
+.gap-spark.trend-steady  { color: var(--text-3); }
+
+.trend-arrow { font-size: 8px; line-height: 1; }
+.trend-arrow-closing { color: var(--green); }
+.trend-arrow-opening { color: #ff6b6b; }
+
+.spark-cell { line-height: 0; }
+
+/* ── Battle highlighting ── */
+.live-tower tr.battle-row td { background: rgba(255,214,0,.045); }
+.live-tower tr.battle-row td:first-child { box-shadow: inset 2px 0 0 rgba(255,214,0,.55); }
+
+.battle-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s3);
+}
+
+.battle-chips-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.battle-chip {
+  padding: 2px 7px;
+  font-size: 11px;
+  border-radius: 2px;
+  background: rgba(255,214,0,.08);
+  border: 1px solid rgba(255,214,0,.25);
+  color: var(--yellow);
+  white-space: nowrap;
+}
+
+/* ── Pinned drivers ── */
+.live-tower tr.pinnable { cursor: pointer; }
+.live-tower tr.pinned-row td { background: rgba(0,128,255,.08); }
+.live-tower tr.pinned-row td:first-child { box-shadow: inset 2px 0 0 rgba(0,128,255,.55); }
+.live-tower tr.battle-row.pinned-row td:first-child {
+  box-shadow: inset 2px 0 0 rgba(0,128,255,.55), inset 4px 0 0 rgba(255,214,0,.55);
+}
+
+.pin-mark { color: #66aaff; font-size: 10px; line-height: 1; }
+
+.pinned-strip {
+  display: flex;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s5);
+}
+
+.pinned-card {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  background: var(--surface);
+  border: 1px solid rgba(0,128,255,.26);
+  border-radius: 2px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.pinned-card:hover { background: var(--surface-h); border-color: rgba(0,128,255,.45); }
+.pinned-card .drv-bar { height: 16px; }
+
+.pinned-pos { font-size: 11px; color: var(--text-2); }
+.pinned-gap { font-size: 11px; color: var(--text-2); min-width: 44px; text-align: right; }
+.pinned-nodata { font-size: 10px; color: var(--text-3); font-family: var(--f-mono); }
+.pinned-unpin { color: var(--text-3); font-size: 12px; line-height: 1; }
+.pinned-card:hover .pinned-unpin { color: #ff6b6b; }
+.pinned-card-missing { border-color: var(--border-2); opacity: 0.75; }
+
+/* ── Stint history ── */
+.stint-seq {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.stint-item { display: inline-flex; align-items: center; gap: 2px; }
+.stint-arrow { color: var(--text-3); font-size: 9px; margin-right: 2px; }
+
+.stint-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  font-family: var(--f-mono);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stint-laps {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--text-3);
+}
+
+.stint-empty { color: var(--text-3); font-family: var(--f-mono); }
+
 .live-rc { margin-bottom: var(--s7); }
 
 .live-rc-list {
@@ -2469,6 +2641,22 @@ a { color: inherit; text-decoration: none; }
   .live-banner h1 { font-size: 16px; }
   .live-weather-strip { gap: var(--s3); }
   .live-rc-scroll { max-height: 220px; }
+
+  .track-banner { padding: var(--s2) var(--s4); }
+  .track-banner-label { font-size: 12px; }
+  .track-banner-detail { display: none; }
+
+  .battle-chips,
+  .pinned-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: var(--s2);
+  }
+  .battle-chips::-webkit-scrollbar,
+  .pinned-strip::-webkit-scrollbar { display: none; }
+  .pinned-card { flex-shrink: 0; }
 
   .dataset-strip {
     flex-wrap: nowrap;

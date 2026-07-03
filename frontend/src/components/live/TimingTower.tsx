@@ -1,16 +1,24 @@
 import { teamColor } from '../../utils'
-import type { LiveStreamData } from '../../types'
+import type { LiveStintData } from '../../types'
+import type { LiveTimingRow } from '../../lib/live'
 import {
   driverCode,
   positionDelta,
   positionDeltaClass,
-  sortLiveTimingRows,
   tyreClass,
   tyreLabel,
 } from '../../lib/live'
+import type { GapHistoryMap } from '../../lib/gapHistory'
+import { GapSparkline } from './GapSparkline'
+import { StintHistory } from './StintHistory'
 
 interface Props {
-  snapshot: LiveStreamData
+  rows: LiveTimingRow[]
+  stints?: Record<string, LiveStintData[]>
+  history?: GapHistoryMap
+  battleNumbers?: Set<string>
+  pinned?: string[]
+  onTogglePin?: (racingNumber: string) => void
 }
 
 function posClass(pos: number): string {
@@ -20,9 +28,14 @@ function posClass(pos: number): string {
   return 'pos-n'
 }
 
-export function TimingTower({ snapshot }: Props) {
-  const rows = sortLiveTimingRows(snapshot)
-
+export function TimingTower({
+  rows,
+  stints,
+  history,
+  battleNumbers,
+  pinned,
+  onTogglePin,
+}: Props) {
   if (rows.length === 0) {
     return (
       <div className="missing-notice">
@@ -33,7 +46,7 @@ export function TimingTower({ snapshot }: Props) {
 
   return (
     <div className="scroll-x">
-      <table className="data-table live-tower" style={{ minWidth: 480 }}>
+      <table className="data-table live-tower" style={{ minWidth: 620 }}>
         <thead>
           <tr>
             <th>Pos</th>
@@ -42,7 +55,9 @@ export function TimingTower({ snapshot }: Props) {
             <th>Tyre</th>
             <th>Last Lap</th>
             <th>Gap</th>
+            <th>Trend</th>
             <th className="hide-mobile">Best</th>
+            <th className="hide-mobile">Stints</th>
             <th className="hide-mobile r">Laps</th>
           </tr>
         </thead>
@@ -51,6 +66,8 @@ export function TimingTower({ snapshot }: Props) {
             const driver = row.Driver
             const delta = positionDelta(driver)
             const deltaClass = positionDeltaClass(driver)
+            const isPinned = pinned?.includes(row.RacingNumber) ?? false
+            const inBattle = battleNumbers?.has(row.RacingNumber) ?? false
             return (
               <tr
                 key={row.RacingNumber}
@@ -58,7 +75,12 @@ export function TimingTower({ snapshot }: Props) {
                   driver.InPit ? 'in-pit' : '',
                   driver.PitOut ? 'pit-out' : '',
                   driver.Retired ? 'retired' : '',
+                  inBattle ? 'battle-row' : '',
+                  isPinned ? 'pinned-row' : '',
+                  onTogglePin ? 'pinnable' : '',
                 ].filter(Boolean).join(' ')}
+                onClick={onTogglePin ? () => onTogglePin(row.RacingNumber) : undefined}
+                title={onTogglePin ? (isPinned ? 'Click to unpin' : 'Click to pin (max 3)') : undefined}
               >
                 <td className={`mono ${posClass(row.Position)}`}>{row.Position}</td>
                 <td className={`pos-delta${deltaClass ? ` ${deltaClass}` : ''}`}>{delta}</td>
@@ -67,6 +89,7 @@ export function TimingTower({ snapshot }: Props) {
                     <div className="drv-bar" style={{ background: teamColor(row.Info?.TeamColour) }} />
                     <span className="drv-code">{driverCode(row)}</span>
                     <span className="drv-num">{row.RacingNumber}</span>
+                    {isPinned && <span className="pin-mark" title="Pinned">◈</span>}
                     {driver.InPit && <span className="badge badge-pit">PIT</span>}
                     {driver.PitOut && !driver.InPit && <span className="badge badge-pit">OUT</span>}
                     {driver.Retired && <span className="badge badge-out">RET</span>}
@@ -82,8 +105,14 @@ export function TimingTower({ snapshot }: Props) {
                   {driver.LastLapTime || '-'}
                 </td>
                 <td className="mono">{driver.GapToLeader || driver.Interval || '-'}</td>
+                <td className="spark-cell">
+                  <GapSparkline samples={history?.[row.RacingNumber]} />
+                </td>
                 <td className={`hide-mobile ${driver.BestLapOB ? 'mono lap-ob' : 'mono'}`}>
                   {driver.BestLapTime || '-'}
+                </td>
+                <td className="hide-mobile">
+                  <StintHistory stints={stints?.[row.RacingNumber]} />
                 </td>
                 <td className="hide-mobile mono r">{driver.NumberOfLaps || '-'}</td>
               </tr>
