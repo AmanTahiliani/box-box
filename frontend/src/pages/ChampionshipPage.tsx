@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchChampionshipHub, fetchSeasons } from '../api'
 import { teamColor } from '../utils'
 import type { ChampHubDriver, ChampionshipHub } from '../types'
+import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
 
-type View = 'drivers' | 'constructors' | 'progression'
+type View = 'drivers' | 'constructors' | 'progression' | 'simulator'
 
 const GOLD = '#ffd700'
 const SILVER = '#c0c0c0'
@@ -208,6 +209,14 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           >
             Progression
           </button>
+          <button
+            type="button"
+            className={`champ-tab${view === 'simulator' ? ' is-active' : ''}`}
+            onClick={() => setView('simulator')}
+            data-testid="champ-tab-simulator"
+          >
+            Simulator
+          </button>
         </div>
       </div>
 
@@ -228,6 +237,7 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
       )}
       {view === 'constructors' && <ConstructorsView hub={hub} />}
       {view === 'progression' && <ProgressionView hub={hub} />}
+      {view === 'simulator' && <ChampionshipSimulator hub={hub} />}
     </div>
   )
 }

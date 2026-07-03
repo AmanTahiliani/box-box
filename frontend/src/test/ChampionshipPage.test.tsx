@@ -95,6 +95,7 @@ function renderPage() {
 describe('ChampionshipPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
     mockFetchSeasons.mockResolvedValue([2025])
     mockFetchHub.mockResolvedValue(hub)
   })
@@ -125,6 +126,18 @@ describe('ChampionshipPage', () => {
     fireEvent.click(screen.getByTestId('champ-tab-progression'))
     expect(screen.getByTestId('champ-view-progression')).toBeInTheDocument()
     expect(screen.getByText('Cumulative points', { exact: false })).toBeInTheDocument()
+  })
+
+  it('switches to the simulator view and projects standings', async () => {
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('champ-tab-simulator'))
+    expect(screen.getByTestId('champ-view-simulator')).toBeInTheDocument()
+    expect(screen.getByTestId('sim-projected')).toBeInTheDocument()
+    // 4 rounds left, default scenario: VER projects to 200 + 4×25 = 300.
+    expect(screen.getByText('300')).toBeInTheDocument()
   })
 
   it('shows the empty state when no drivers are returned', async () => {

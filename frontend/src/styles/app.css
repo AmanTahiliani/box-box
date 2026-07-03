@@ -3898,3 +3898,148 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ══════════════════════ Championship Simulator ══════════════════════ */
+.champ-sim {
+  margin-top: 20px;
+}
+.champ-sim-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.champ-sim-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--f-ui);
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.champ-sim-btn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.champ-sim-rounds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+}
+.champ-sim-round {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--f-mono);
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.champ-sim-round:hover {
+  color: var(--text);
+}
+.champ-sim-round.is-active {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  font-weight: 700;
+}
+.champ-sim-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: start;
+}
+.champ-sim-editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 12px 12px;
+}
+.champ-sim-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: 8px;
+}
+.champ-sim-editor-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.champ-sim-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.champ-sim-slot-pos {
+  width: 26px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.champ-sim-slot-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 1px;
+  flex: none;
+}
+.champ-sim-select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: var(--f-mono);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.champ-sim-select:focus {
+  outline: none;
+  border-color: var(--border-2);
+}
+.champ-sim-slot-pts {
+  width: 32px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.champ-sim-table-wrap .champ-scroll {
+  margin-top: 0;
+}
+.champ-sim-delta {
+  font-size: 11px;
+  font-weight: 700;
+}
+.champ-sim-delta.up {
+  color: var(--green);
+}
+.champ-sim-delta.down {
+  color: var(--red);
+}
+.champ-sim-row-moved td {
+  background: rgba(255, 255, 255, 0.03);
+}
+.champ-sim-caption {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  max-width: 720px;
+}
+@media (max-width: 860px) {
+  .champ-sim-grid {
+    grid-template-columns: 1fr;
+  }
+}
