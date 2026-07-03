@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Copy, Check } from 'lucide-react'
 
 interface Command {
   comment?: string
@@ -39,8 +40,9 @@ function CliCommandLine({ cmd }: { cmd: string }) {
   return (
     <div className="cli-cmd-row">
       <code className="cli-cmd">{cmd}</code>
-      <button type="button" className="cli-copy-btn" onClick={handleCopy} aria-label={`Copy ${cmd}`}>
-        {copied ? 'Copied' : 'Copy'}
+      <button type="button" className="cli-copy-btn interactive" onClick={handleCopy} aria-label={`Copy ${cmd}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: copied ? 'var(--green)' : 'rgba(255,255,255,0.05)', color: copied ? '#000' : 'var(--text)', border: 'none', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s' }}>
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+        <span>{copied ? 'Copied' : 'Copy'}</span>
       </button>
     </div>
   )

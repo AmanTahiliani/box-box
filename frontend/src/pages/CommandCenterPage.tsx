@@ -17,6 +17,7 @@ import {
 import { countryAccent, countryDecal, countryFlag, formatGpDateRange } from '../lib/gpIdentity'
 import type { Meeting, Session, Weekend, WeekendSession } from '../types'
 import { PaddockBriefing } from '../components/PaddockBriefing'
+import { Play, Activity, Calendar } from 'lucide-react'
 
 type WeekendStatusKind = 'live' | 'current' | 'next' | 'recent' | 'fallback'
 
@@ -217,7 +218,7 @@ export function CommandCenterPage() {
       )}
 
       {focusMeeting && (
-        <section className="cc-weekend-band" data-testid="cc-focus">
+        <section className="cc-weekend-band ui-card glass-panel" data-testid="cc-focus">
           <div className="cc-band-accent" aria-hidden="true" />
           <div className="cc-band-body">
             <div className="cc-band-row">
@@ -250,19 +251,19 @@ export function CommandCenterPage() {
         <div className="cc-actions-row" data-testid="cc-actions">
           <Link
             to="/live"
-            className={`cc-pri-action ${liveActive ? 'is-live' : ''}`}
+            className={`cc-pri-action ui-card interactive ${liveActive ? 'is-live ui-cta-primary' : ''}`}
             data-testid="cc-action-live"
           >
-            <span className="cc-pri-label">Watch Live</span>
+            <span className="cc-pri-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Play size={16} /> Watch Live</span>
             <span className="cc-pri-meta mono">{liveActive ? 'Feed active' : 'Standby'}</span>
           </Link>
           <Link
             to="/race-hub"
             search={analysisSessionKey ? { session_key: analysisSessionKey } : {}}
-            className="cc-pri-action"
+            className="cc-pri-action ui-card interactive"
             data-testid="cc-action-race-hub"
           >
-            <span className="cc-pri-label">Open Analysis</span>
+            <span className="cc-pri-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={16} /> Open Analysis</span>
             <span className="cc-pri-meta mono">
               {actionSession
                 ? `${actionSession.session_name} · session ${actionSession.session_key}`
@@ -272,14 +273,14 @@ export function CommandCenterPage() {
           {nextSession && sessionStartTime(nextSession) && (
             <a
               href="#cc-schedule"
-              className="cc-pri-action"
+              className="cc-pri-action ui-card interactive"
               data-testid="cc-action-schedule"
               onClick={(e) => {
                 e.preventDefault()
                 document.getElementById('cc-schedule')?.scrollIntoView({ behavior: 'smooth' })
               }}
             >
-              <span className="cc-pri-label">Schedule</span>
+              <span className="cc-pri-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={16} /> Schedule</span>
               <span className="cc-pri-meta mono">
                 next: {nextSession.session_name}
               </span>
@@ -299,13 +300,14 @@ export function CommandCenterPage() {
               const status = classifySessionStatus(session, nowDate)
               const isNext = nextSession?.session_key === session.session_key
               const isCurrent = currentSession?.session_key === session.session_key
+              const isLive = isCurrent && liveActive
               return (
                 <Link
                   key={session.session_key}
                   to="/race-hub"
                   search={{ session_key: session.session_key }}
-                  className={`cc-session-card cc-status-${status}${isNext ? ' is-next' : ''}${
-                    isCurrent ? ' is-current' : ''
+                  className={`cc-session-card ui-card interactive cc-status-${status}${isNext ? ' is-next' : ''}${
+                    isLive ? ' is-live glass-panel' : ''
                   }`}
                   data-testid={`cc-session-${session.session_key}`}
                   role="listitem"

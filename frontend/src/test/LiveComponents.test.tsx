@@ -176,10 +176,10 @@ describe('TimingTower', () => {
     expect(lecRow).toHaveClass('pinned-row')
   })
 
-  it('toggles a pin when a row is clicked', () => {
+  it('toggles a pin when the pin button is clicked', () => {
     const onTogglePin = vi.fn()
     render(<TimingTower rows={rows} onTogglePin={onTogglePin} />)
-    fireEvent.click(screen.getByText('NOR').closest('tr')!)
+    fireEvent.click(screen.getByText('NOR').closest('tr')!.querySelector('.pin-btn')!)
     expect(onTogglePin).toHaveBeenCalledWith('4')
   })
 

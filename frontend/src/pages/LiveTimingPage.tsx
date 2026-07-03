@@ -18,6 +18,7 @@ import { TimingTower } from '../components/live/TimingTower'
 import { BattleChips } from '../components/live/BattleChips'
 import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
+import { Radio } from 'lucide-react'
 
 type StreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -128,14 +129,15 @@ export function LiveTimingPage() {
       )}
 
       {!isLoading && !snapshot && (
-        <div className="empty-state" data-testid="live-empty">
-          <div className="live-empty-status">
+        <div className="empty-state ui-card glass-panel" style={{ padding: '40px', textAlign: 'center', marginTop: '20vh', maxWidth: '400px', marginLeft: 'auto', marginRight: 'auto' }} data-testid="live-empty">
+          <div className="live-empty-status" style={{ marginBottom: '16px' }}>
             <span className={`live-conn live-conn-${streamStatus}`}>{streamStatus}</span>
           </div>
-          <div className="empty-state-title">No live session active</div>
-          <div className="empty-state-desc">
-            No timing data in the current snapshot. The feed will update automatically when an F1 session goes live.
-          </div>
+          <Radio size={48} style={{ color: 'var(--text-3)', margin: '0 auto 16px auto', display: 'block' }} />
+          <h2 className="empty-state-title" style={{ fontSize: '20px', marginBottom: '8px' }}>No live session active</h2>
+          <p className="empty-state-desc" style={{ color: 'var(--text-2)' }}>
+            The telemetry feed is currently offline. <br /><br /> Check the <a href="/" style={{ color: 'var(--red)', textDecoration: 'underline' }}>Command Center</a> for the weekend schedule or explore historical data in the <a href="/race-hub" style={{ color: 'var(--red)', textDecoration: 'underline' }}>Race Hub</a>.
+          </p>
         </div>
       )}
 
@@ -158,6 +160,7 @@ export function LiveTimingPage() {
                 battleNumbers={inBattle}
                 pinned={pinned}
                 onTogglePin={handleTogglePin}
+                sessionType={snapshot.Session?.SessionType}
               />
             </div>
             <div className="live-rc-col">

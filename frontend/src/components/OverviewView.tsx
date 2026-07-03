@@ -1,6 +1,7 @@
 import type { RaceHub } from '../types'
 import { compareFinishPosition, formatDuration, formatGap, formatLapTime } from '../utils'
 import { countRaceHubDatasets } from '../lib/coverage'
+import { Thermometer, Map, Droplets, Wind, CloudRain } from 'lucide-react'
 
 interface Props {
   data: RaceHub
@@ -74,7 +75,7 @@ export function OverviewView({ data }: Props) {
       </div>
 
       <div className="rh-overview-row">
-        <section className="rh-panel">
+        <section className="rh-panel ui-card">
           <div className="sec-header">
             <span className="sec-title">Conditions</span>
             {latestWeather && (
@@ -83,17 +84,20 @@ export function OverviewView({ data }: Props) {
           </div>
           {latestWeather ? (
             <div className="rh-condition-strip" data-testid="rh-conditions">
-              <ConditionChip label="Air" value={`${latestWeather.air_temperature.toFixed(1)}°C`} />
+              <ConditionChip icon={Thermometer} label="Air" value={`${latestWeather.air_temperature.toFixed(1)}°C`} />
               <ConditionChip
+                icon={Map}
                 label="Track"
                 value={`${latestWeather.track_temperature.toFixed(1)}°C`}
               />
-              <ConditionChip label="Humidity" value={`${latestWeather.humidity.toFixed(0)}%`} />
+              <ConditionChip icon={Droplets} label="Humidity" value={`${latestWeather.humidity.toFixed(0)}%`} />
               <ConditionChip
+                icon={Wind}
                 label="Wind"
                 value={`${latestWeather.wind_speed.toFixed(1)} m/s`}
               />
               <ConditionChip
+                icon={CloudRain}
                 label="Rain"
                 value={latestWeather.rainfall > 0 ? 'Yes' : 'No'}
                 accent={latestWeather.rainfall > 0 ? 'wet' : undefined}
@@ -104,7 +108,7 @@ export function OverviewView({ data }: Props) {
           )}
         </section>
 
-        <section className="rh-panel">
+        <section className="rh-panel ui-card">
           <div className="sec-header">
             <span className="sec-title">Race Control · Latest</span>
             <span className="sec-meta mono">{data.race_control.length}</span>
@@ -126,7 +130,7 @@ export function OverviewView({ data }: Props) {
           )}
         </section>
 
-        <section className="rh-panel">
+        <section className="rh-panel ui-card">
           <div className="sec-header">
             <span className="sec-title">Local Coverage</span>
             <span className="sec-meta mono">
@@ -173,7 +177,7 @@ function StatCard({
 }: StatCardProps) {
   if (placeholder) {
     return (
-      <div className="rh-stat-card rh-stat-empty">
+      <div className="rh-stat-card ui-card rh-stat-empty">
         <div className="rh-stat-label mono">{label}</div>
         <div className="rh-stat-primary">—</div>
         <div className="rh-stat-secondary">No data ingested</div>
@@ -181,7 +185,7 @@ function StatCard({
     )
   }
   return (
-    <div className="rh-stat-card">
+    <div className="rh-stat-card ui-card interactive">
       <div className="rh-stat-label mono">{label}</div>
       <div className="rh-stat-primary" style={primaryColor ? { color: primaryColor } : undefined}>
         {primary}
@@ -196,7 +200,7 @@ function StatCard({
 function PodiumCard({ podium }: { podium: Array<{ name_acronym: string; team_colour: string; position: number; full_name: string; gap_to_leader: number | string | number[] | null; duration: number | number[] | null; driver_number: number }> }) {
   if (podium.length === 0) {
     return (
-      <div className="rh-stat-card rh-stat-empty">
+      <div className="rh-stat-card ui-card rh-stat-empty">
         <div className="rh-stat-label mono">Podium</div>
         <div className="rh-stat-primary">—</div>
         <div className="rh-stat-secondary">No classified finishers</div>
@@ -204,7 +208,7 @@ function PodiumCard({ podium }: { podium: Array<{ name_acronym: string; team_col
     )
   }
   return (
-    <div className="rh-stat-card">
+    <div className="rh-stat-card ui-card interactive">
       <div className="rh-stat-label mono">Podium</div>
       <ol className="rh-podium-list">
         {podium.map((r) => (
@@ -232,13 +236,16 @@ function ConditionChip({
   label,
   value,
   accent,
+  icon: Icon,
 }: {
   label: string
   value: string
   accent?: 'wet'
+  icon?: React.ElementType
 }) {
   return (
-    <div className={`rh-condition-chip${accent === 'wet' ? ' rh-condition-wet' : ''}`}>
+    <div className={`rh-condition-chip${accent === 'wet' ? ' rh-condition-wet' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {Icon && <Icon size={14} style={{ opacity: 0.7 }} />}
       <span className="rh-condition-label mono">{label}</span>
       <span className="rh-condition-value">{value}</span>
     </div>

@@ -1,32 +1,56 @@
 /* ── Design tokens ── */
 :root {
-  --bg:           #0d0d0d;
-  --surface:      #141414;
+  /* Base Backgrounds (Off-black for depth) */
+  --bg:           #0a0a0a;
+  --surface:      #121212;
   --surface-h:    #1a1a1a;
-  --surface-2:    #1e1e1e;
-  --border:       #232323;
-  --border-2:     #333;
+  --surface-2:    #1f1f1f;
+  --surface-3:    #262626;
+  
+  /* Borders - slightly softer */
+  --border:       #262626;
+  --border-2:     #333333;
+  --border-glow:  rgba(255, 255, 255, 0.05);
 
-  --text:         #e0e0e0;
-  --text-2:       #909090;
-  --text-3:       #484848;
+  /* Typography */
+  --text:         #f0f0f0;
+  --text-2:       #a3a3a3;
+  --text-3:       #525252;
 
-  --red:          #e10600;
-  --green:        #39c73a;
-  --yellow:       #ffd600;
-  --purple:       #c278ff;
-  --tyre-soft:    #ff3333;
-  --tyre-medium:  #ffd600;
-  --tyre-hard:    #d8d8d8;
-  --tyre-inter:   #39b54a;
-  --tyre-wet:     #0080ff;
+  /* Accent Colors (Tuned for Dark Mode) */
+  --red:          #e62429;
+  --green:        #10b981;
+  --yellow:       #f59e0b;
+  --purple:       #a855f7;
+  --blue:         #3b82f6;
 
+  /* Tyre Colors */
+  --tyre-soft:    #ef4444;
+  --tyre-medium:  #f59e0b;
+  --tyre-hard:    #e5e5e5;
+  --tyre-inter:   #22c55e;
+  --tyre-wet:     #3b82f6;
+
+  /* Team Colors (Desaturated for WCAG/Halation) */
+  --team-rbr:     #2563eb; /* Red Bull */
+  --team-mer:     #14b8a6; /* Mercedes */
+  --team-fer:     #dc2626; /* Ferrari */
+  --team-mcl:     #f97316; /* McLaren */
+  --team-ast:     #059669; /* Aston Martin */
+  --team-alp:     #f472b6; /* Alpine */
+  --team-wil:     #0ea5e9; /* Williams */
+  --team-rbf:     #6366f1; /* RB */
+  --team-sau:     #84cc16; /* Sauber */
+  --team-haa:     #fafafa; /* Haas */
+
+  /* Fonts */
   --f-ui:   'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --f-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  --f-mono: 'JetBrains Mono', 'Space Grotesk', 'Consolas', monospace;
 
+  /* Spacing & Layout */
   --s1: 2px; --s2: 4px; --s3: 6px; --s4: 10px;
   --s5: 16px; --s6: 24px; --s7: 40px;
-  --nav-h: 44px;
+  --nav-h: 52px; /* Slightly taller nav */
 }
 
 /* ── Reset ── */
@@ -55,8 +79,10 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: var(--s5);
   padding: 0 var(--s6);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: rgba(18, 18, 18, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -4029,6 +4055,29 @@ a { color: inherit; text-decoration: none; }
 .champ-sim-delta.down {
   color: var(--red);
 }
+.data-table .pinnable:hover td {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.interactive-row:hover td {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ko-line-p15 td, .ko-line-p10 td {
+  border-bottom: 1px dashed var(--red) !important;
+}
+
+.txt-purple {
+  color: var(--purple);
+}
+
+.txt-green {
+  color: var(--green);
+}
+
+.txt-yellow {
+  color: var(--yellow);
+}
 .champ-sim-row-moved td {
   background: rgba(255, 255, 255, 0.03);
 }
@@ -4043,3 +4092,45 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ── UI/UX Revamp Styles ── */
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(18, 18, 18, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glow);
+}
+
+/* Base Card Enhancements (Soft borders, inner shadow, hover) */
+.ui-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 12px rgba(0,0,0,0.4);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+}
+
+.ui-card.interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0,0,0,0.6);
+  border-color: var(--border-2);
+}
+
+/* Button & CTA Enhancements */
+.ui-cta-primary {
+  background: var(--red);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 6px 12px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.ui-cta-primary:hover {
+  background: #f82f34;
+  transform: translateY(-1px);
+}
+
