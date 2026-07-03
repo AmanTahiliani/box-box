@@ -17,24 +17,29 @@ test.describe('Race Hub Weekend Workspace', () => {
     )
   })
 
-  test('shows final classification when switching to Race Story', async ({ page }) => {
+  test('shows final running order when switching to Race Story', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
     await page.getByRole('tab', { name: 'Race Story' }).click()
 
-    await expect(page.getByText('Final Classification')).toBeVisible()
-    await expect(page.locator('.drv-code', { hasText: 'VER' })).toBeVisible()
-    await expect(page.locator('.drv-code', { hasText: 'HAM' })).toBeVisible()
+    const verRow = page.locator('.rs-driver-row', {
+      has: page.locator('.rs-driver-name', { hasText: 'VER' }),
+    })
+    const hamRow = page.locator('.rs-driver-row', {
+      has: page.locator('.rs-driver-name', { hasText: 'HAM' }),
+    })
+    await expect(verRow.locator('.rs-pos-col')).toHaveText('1')
+    await expect(hamRow.locator('.rs-pos-col')).toHaveText('2')
   })
 
-  test('Race Story exposes classification, grid, and positions sub-views', async ({ page }) => {
+  test('Race Story renders the position evolution chart for a full session', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
     await page.getByRole('tab', { name: 'Race Story' }).click()
 
-    await page.getByRole('tab', { name: 'Starting Grid' }).click()
-    await expect(page.locator('.sec-title', { hasText: 'Starting Grid' })).toBeVisible()
-
-    await page.getByRole('tab', { name: 'Positions' }).click()
     await expect(page.locator('[data-testid="position-chart"]')).toBeVisible()
+    await expect(
+      page.getByRole('img', { name: 'Position evolution chart' }),
+    ).toBeVisible()
+    await expect(page.getByText('Lap-by-lap positions not available.')).not.toBeVisible()
   })
 
   test('strategy tab renders stint chart when stints are available', async ({ page }) => {
@@ -53,12 +58,11 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(page.locator('[data-testid="strategy-chart"]')).not.toBeVisible()
   })
 
-  test('positions sub-view shows missing notice when positions are unavailable', async ({
+  test('Race Story shows missing notice when positions are unavailable', async ({
     page,
   }) => {
     await page.goto(`/race-hub?session_key=${CORE_ONLY_SESSION}`)
     await page.getByRole('tab', { name: 'Race Story' }).click()
-    await page.getByRole('tab', { name: 'Positions' }).click()
 
     await expect(page.getByText('Lap-by-lap positions not available.')).toBeVisible()
     await expect(page.locator('[data-testid="position-chart"]')).not.toBeVisible()

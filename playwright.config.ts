@@ -24,7 +24,9 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `go run ./scripts/seed-e2e-db/main.go --db ${E2E_DB} && BOXBOX_DISABLE_LIVE=1 go run ./cmd/main.go --web --db ${E2E_DB} --port ${API_PORT}`,
+      // BOXBOX_OPENF1_BASE_URL points at an unreachable address so the e2e stack
+      // never depends on the live OpenF1 API (keeps runs hermetic + date-stable).
+      command: `go run ./scripts/seed-e2e-db/main.go --db ${E2E_DB} && BOXBOX_DISABLE_LIVE=1 BOXBOX_OPENF1_BASE_URL=http://127.0.0.1:9 go run ./cmd/main.go --web --db ${E2E_DB} --port ${API_PORT}`,
       url: `http://localhost:${API_PORT}/api/v1/race-hub?session_key=9472`,
       reuseExistingServer: false,
       timeout: 120_000,

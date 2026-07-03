@@ -172,12 +172,13 @@ Replay: `h`/`l` or arrows scrub laps
 
 - Go: tests in `openf1_test.go` hit the real OpenF1 API and use `skipOnRateLimit(t, err)` to skip on HTTP 429 (require internet). `internal/web` handler tests run offline.
 - Frontend: Vitest + Testing Library in `frontend/src/test/` (`npm run test` inside `frontend/`).
-- E2E/visual: Playwright at repo root (`npm run test:e2e`, `npm run test:visual`). Configs seed a temp domain DB and start the Go server with `BOXBOX_DISABLE_LIVE=1` plus a Vite dev server — no manual setup needed.
+- E2E/visual: Playwright at repo root (`npm run test:e2e`, `npm run test:visual`). Configs seed a temp domain DB and start the Go server with `BOXBOX_DISABLE_LIVE=1` and `BOXBOX_OPENF1_BASE_URL` pointed at an unreachable address (hermetic: no live OpenF1 dependency, date-stable) plus a Vite dev server — no manual setup needed.
 
 ## Environment
 
 - `OPENF1_API_KEY` — Optional Bearer token for paid tier (live session WebSocket access)
 - `BOXBOX_DISABLE_LIVE=1` — Skip the background SignalR live feed in web mode (used by e2e)
+- `BOXBOX_OPENF1_BASE_URL` — Override the OpenF1 API root (default `https://api.openf1.org`; e2e sets an unreachable address for hermetic runs)
 - `BOXBOX_API_PORT` — Go API port that the Vite dev proxy targets (default 8080)
 - Logs: TUI writes `box-box.log` in project root; web/ingest modes log to stderr
 - HTTP cache at `~/.cache/box-box/cache.db`; domain DB at `~/.local/share/box-box/boxbox.db` (override with `--db`)

@@ -41,11 +41,19 @@ func main() {
 		return
 	}
 
+	// BOXBOX_OPENF1_BASE_URL overrides the upstream OpenF1 API root. E2E runs
+	// point it at an unreachable address so tests stay hermetic and
+	// deterministic regardless of wall-clock date or network state.
+	baseURL := os.Getenv("BOXBOX_OPENF1_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.openf1.org"
+	}
+
 	var client *api.OpenF1Client
 	if apiKey := os.Getenv("OPENF1_API_KEY"); apiKey != "" {
-		client = api.NewOpenF1ClientWithKey("https://api.openf1.org", 15*time.Second, apiKey)
+		client = api.NewOpenF1ClientWithKey(baseURL, 15*time.Second, apiKey)
 	} else {
-		client = api.NewOpenF1Client("https://api.openf1.org", 15*time.Second)
+		client = api.NewOpenF1Client(baseURL, 15*time.Second)
 	}
 	defer client.Close()
 
