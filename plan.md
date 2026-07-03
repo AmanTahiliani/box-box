@@ -28,12 +28,13 @@ New views that reconstruct the race narrative and make box-box indispensable dur
 
 ## Phase 3 — "Engineering Room" (Companion Web View)
 
-A lightweight local web UI for visualizations that need a proper canvas.
+Originally scoped as a lightweight canvas for visualizations, this has grown into a full companion web app: a React + Vite SPA (command center, race hub, live timing, championship, briefing, data library) served by the Go server in `internal/web/`, with a `/api/v1` REST surface, an SSE relay of the F1 live feed, and Playwright e2e/visual coverage.
 
 - [x] **`box-box --web` server** — Spawn a localhost SPA from Go embedded assets, sharing the same SQLite cache
 - [x] **SVG Track Map** — Animated car positions on a real circuit layout with team colors
 - [x] **Telemetry Overlay** — Interactive throttle/brake/speed graph through a lap (D3.js or Canvas)
 - [x] **Strategy Timeline** — Visual pit stop and stint timeline for the full field
+- [x] **Championship Hub** — `/championship` page backed by `/api/v1/championship/hub`: official standings aggregated with derived stats (wins, podiums, poles, last-5 form, teammate head-to-head) and per-round cumulative points progression
 
 ---
 
