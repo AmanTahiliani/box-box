@@ -1046,20 +1046,34 @@ type trackPoint struct {
 	Y float64 `json:"y"`
 }
 
+type trackBounds struct {
+	MinX float64 `json:"minX"`
+	MaxX float64 `json:"maxX"`
+	MinY float64 `json:"minY"`
+	MaxY float64 `json:"maxY"`
+}
+
 type trackOutlineResponse struct {
 	CircuitKey int          `json:"circuit_key"`
 	Points     []trackPoint `json:"points"`
+	Bounds     trackBounds  `json:"bounds"`
 }
 
 func (s *Server) handleTrackOutline(w http.ResponseWriter, r *http.Request) {
-	circuitKey, err := strconv.Atoi(r.URL.Query().Get("circuit_key"))
-	if err != nil || circuitKey == 0 {
-		http.Error(w, "circuit_key required", http.StatusBadRequest)
-		return
-	}
 	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
 	if year == 0 {
 		year = time.Now().Year()
+	}
+	circuitKey, err := strconv.Atoi(r.URL.Query().Get("circuit_key"))
+	if err != nil {
+		circuitKey = 0
+	}
+	if circuitKey == 0 {
+		circuitKey = s.resolveCircuitKey(year, r.URL.Query().Get("meeting_name"), r.URL.Query().Get("circuit_name"))
+	}
+	if circuitKey == 0 {
+		http.Error(w, "circuit_key or live meeting identity required", http.StatusBadRequest)
+		return
 	}
 
 	locs, ok := s.client.Cache().GetTrackOutline(circuitKey, year)
@@ -1110,7 +1124,85 @@ func (s *Server) handleTrackOutline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, trackOutlineResponse{CircuitKey: circuitKey, Points: points})
+	writeJSON(w, trackOutlineResponse{
+		CircuitKey: circuitKey,
+		Points:     points,
+		Bounds:     trackBounds{MinX: minX, MaxX: maxX, MinY: minY, MaxY: maxY},
+	})
+}
+
+func (s *Server) resolveCircuitKey(year int, meetingName, circuitName string) int {
+	if !s.hasLocalQuery() {
+		return 0
+	}
+	meetings, err := s.query.ListMeetingsByYear(year)
+	if err != nil {
+		return 0
+	}
+	wantMeeting := normalizeTrackIdentity(meetingName)
+	wantCircuit := normalizeTrackIdentity(circuitName)
+	bestScore := 0
+	bestCircuitKey := 0
+	for _, m := range meetings {
+		if m.CircuitKey == 0 {
+			continue
+		}
+		score := identityScore(wantMeeting, m.MeetingName, m.MeetingOfficialName, m.Location)
+		score += identityScore(wantCircuit, m.CircuitShortName, m.Location, m.MeetingName)
+		if score > bestScore {
+			bestScore = score
+			bestCircuitKey = m.CircuitKey
+		}
+	}
+	if bestScore == 0 {
+		return 0
+	}
+	return bestCircuitKey
+}
+
+func identityScore(want string, candidates ...string) int {
+	if want == "" {
+		return 0
+	}
+	best := 0
+	for _, candidate := range candidates {
+		got := normalizeTrackIdentity(candidate)
+		if got == "" {
+			continue
+		}
+		switch {
+		case got == want:
+			if best < 4 {
+				best = 4
+			}
+		case strings.Contains(got, want) || strings.Contains(want, got):
+			if best < 2 {
+				best = 2
+			}
+		}
+	}
+	return best
+}
+
+func normalizeTrackIdentity(s string) string {
+	s = strings.ToLower(s)
+	replacer := strings.NewReplacer(
+		"grand prix", "",
+		" gp", "",
+		"circuit", "",
+		"autodromo", "",
+		"autódromo", "",
+		"international", "",
+		"street", "",
+		" ", "",
+		"-", "",
+		"_", "",
+		".", "",
+		",", "",
+		"'", "",
+		"’", "",
+	)
+	return strings.TrimSpace(replacer.Replace(s))
 }
 
 // --- /api/v1/strategy ---

@@ -1,6 +1,9 @@
 package live_test
 
 import (
+	"bytes"
+	"compress/flate"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -155,6 +158,64 @@ func TestProcessTopicTimingData(t *testing.T) {
 	}
 	if d.SpeedTrap != "312" {
 		t.Errorf("speed trap = %q, want 312", d.SpeedTrap)
+	}
+}
+
+func TestProcessTopicCompressedPositionAndCarData(t *testing.T) {
+	state := live.NewState()
+	positionPayload := `{
+		"Position": [
+			{"Timestamp": "2026-07-03T14:00:00Z", "Entries": {
+				"1": {"Status": "OnTrack", "X": 1000, "Y": -200, "Z": 3},
+				"44": {"Status": "OffTrack", "X": 1200, "Y": -250, "Z": 2}
+			}}
+		]
+	}`
+	if !state.ProcessTopic("Position.z", encodedDeflatePayload(t, positionPayload)) {
+		t.Fatal("Position.z should update state")
+	}
+
+	snap := state.Snapshot()
+	if !snap.PositionUpdated || snap.SnapshotUpdated {
+		t.Fatalf("position flags = position:%v snapshot:%v", snap.PositionUpdated, snap.SnapshotUpdated)
+	}
+	if got := snap.Positions["1"]; got.X != 1000 || got.Y != -200 || got.Z != 3 || got.Status != "OnTrack" {
+		t.Fatalf("position 1 = %+v", got)
+	}
+	if got := snap.Positions["44"]; got.Status != "OffTrack" {
+		t.Fatalf("position 44 = %+v", got)
+	}
+
+	carPayload := `{
+		"Entries": [
+			{"Utc": "2026-07-03T14:00:00Z", "Cars": {
+				"1": {"Channels": {"0": 11234, "2": 318, "3": 8, "4": 92, "5": 0, "45": 10}}
+			}}
+		]
+	}`
+	if !state.ProcessTopic("CarData.z", encodedDeflatePayload(t, carPayload)) {
+		t.Fatal("CarData.z should update state")
+	}
+	snap = state.Snapshot()
+	if !snap.SnapshotUpdated {
+		t.Fatal("CarData should mark snapshot updated")
+	}
+	tel := snap.Telemetry["1"]
+	if tel.RPM != 11234 || tel.Speed != 318 || tel.NGear != 8 || tel.Throttle != 92 || tel.Brake != 0 || tel.DRS != 10 {
+		t.Fatalf("telemetry = %+v", tel)
+	}
+}
+
+func TestProcessTopicSessionInfoCircuitName(t *testing.T) {
+	state := live.NewState()
+	state.ProcessTopic("SessionInfo", json.RawMessage(`{
+		"Meeting": {"Name": "British Grand Prix", "Circuit": {"ShortName": "Silverstone"}},
+		"Name": "Race",
+		"Type": "Race"
+	}`))
+	s := state.Snapshot().Session
+	if s.MeetingName != "British Grand Prix" || s.CircuitName != "Silverstone" {
+		t.Fatalf("session = %+v", s)
 	}
 }
 
@@ -355,4 +416,24 @@ func TestProcessMessageEmptyPayload(t *testing.T) {
 	if state.ProcessMessage([]byte(`{}`)) {
 		t.Error("empty envelope should not update state")
 	}
+}
+
+func encodedDeflatePayload(t *testing.T, payload string) json.RawMessage {
+	t.Helper()
+	var buf bytes.Buffer
+	w, err := flate.NewWriter(&buf, flate.DefaultCompression)
+	if err != nil {
+		t.Fatalf("flate.NewWriter() error = %v", err)
+	}
+	if _, err := w.Write([]byte(payload)); err != nil {
+		t.Fatalf("flate write error = %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("flate close error = %v", err)
+	}
+	raw, err := json.Marshal(base64.StdEncoding.EncodeToString(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("marshal payload error = %v", err)
+	}
+	return raw
 }

@@ -7,9 +7,10 @@ import { BattleChips } from '../components/live/BattleChips'
 import { GapSparkline } from '../components/live/GapSparkline'
 import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { TimingTower } from '../components/live/TimingTower'
+import { TrackMap } from '../components/live/TrackMap'
 import { detectBattles } from '../lib/battles'
 import type { LiveTimingRow } from '../lib/live'
-import type { LiveDriverData, LiveWeatherData } from '../types'
+import type { LiveDriverData, LiveWeatherData, TrackOutline } from '../types'
 
 function makeRow(
   number: string,
@@ -239,5 +240,68 @@ describe('PinnedDrivers', () => {
   it('renders nothing without pins', () => {
     render(<PinnedDrivers rows={[]} history={{}} pinned={[]} onToggle={() => {}} />)
     expect(screen.queryByTestId('pinned-strip')).not.toBeInTheDocument()
+  })
+})
+
+describe('TrackMap', () => {
+  const outline: TrackOutline = {
+    circuit_key: 9,
+    bounds: { minX: 0, maxX: 100, minY: 0, maxY: 100 },
+    points: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ],
+  }
+
+  it('renders car dots and opens mini telemetry on tap', () => {
+    render(
+      <TrackMap
+        outline={outline}
+        positions={{
+          '4': { x: 50, y: 25, z: 0, status: 'OnTrack' },
+          '81': { x: 25, y: 75, z: 0, status: 'OffTrack' },
+        }}
+        telemetry={{
+          '4': { Speed: 302, Throttle: 88, Brake: 0, DRS: 10, NGear: 8, RPM: 11111 },
+        }}
+        driverInfo={{
+          '4': {
+            RacingNumber: '4',
+            BroadcastName: 'L NORRIS',
+            Tla: 'NOR',
+            TeamName: 'McLaren',
+            TeamColour: 'ff8000',
+            FirstName: 'Lando',
+            LastName: 'Norris',
+          },
+          '81': {
+            RacingNumber: '81',
+            BroadcastName: 'O PIASTRI',
+            Tla: 'PIA',
+            TeamName: 'McLaren',
+            TeamColour: 'ff8000',
+            FirstName: 'Oscar',
+            LastName: 'Piastri',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByTestId('track-map')).toHaveTextContent('2 cars')
+    fireEvent.click(screen.getByRole('button', { name: /NOR telemetry/i }))
+    const readout = screen.getByTestId('track-telemetry')
+    expect(readout).toHaveTextContent('NOR')
+    expect(readout).toHaveTextContent('302km/h')
+    expect(readout).toHaveTextContent('88%')
+    expect(readout).toHaveTextContent('DRS')
+    expect(readout).toHaveTextContent('10')
+    expect(screen.getByRole('button', { name: /PIA telemetry/i })).toHaveClass('track-car-inactive')
+  })
+
+  it('renders an empty state without outline data', () => {
+    render(<TrackMap outline={null} positions={{}} />)
+    expect(screen.getByTestId('track-map')).toHaveTextContent(/track outline unavailable/i)
   })
 })

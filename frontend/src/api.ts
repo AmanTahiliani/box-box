@@ -2,10 +2,12 @@ import type {
   ArticleContent,
   ChampionshipHub,
   LiveStateResponse,
+  LiveSessionMeta,
   Meeting,
   NewsItem,
   RaceHub,
   Session,
+  TrackOutline,
   Weekend,
 } from './types'
 
@@ -74,6 +76,20 @@ export async function fetchChampionshipHub(year?: number): Promise<ChampionshipH
 
 export async function fetchLiveState(): Promise<LiveStateResponse> {
   const res = await fetch('/api/v1/live/state')
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+export async function fetchLiveTrackOutline(
+  session: LiveSessionMeta,
+  year = new Date().getFullYear(),
+): Promise<TrackOutline> {
+  const params = new URLSearchParams({ year: year.toString() })
+  if (session.MeetingName) params.set('meeting_name', session.MeetingName)
+  if (session.CircuitName) params.set('circuit_name', session.CircuitName)
+  const res = await fetch(`/api/v1/track-outline?${params.toString()}`)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

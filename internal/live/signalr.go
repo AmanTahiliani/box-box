@@ -96,6 +96,8 @@ func connectToF1SignalRCore(dataChan chan LiveStreamData) error {
 	topics := []string{
 		"Heartbeat",
 		"TimingData",
+		"Position.z",
+		"CarData.z",
 		"DriverList",
 		"LapCount",
 		"ExtrapolatedClock",
@@ -194,7 +196,7 @@ func connectToF1LegacySignalR(dataChan chan LiveStreamData) error {
 		return err
 	}
 
-	subscribeMsg := []byte(`{"H":"Streaming","M":"Subscribe","A":[["Heartbeat","TimingData","DriverList","LapCount","ExtrapolatedClock","TrackStatus","RaceControlMessages","WeatherData","SessionInfo","CurrentTyres","TimingAppData","TimingStats"]],"I":1}`)
+	subscribeMsg := []byte(`{"H":"Streaming","M":"Subscribe","A":[["Heartbeat","TimingData","Position.z","CarData.z","DriverList","LapCount","ExtrapolatedClock","TrackStatus","RaceControlMessages","WeatherData","SessionInfo","CurrentTyres","TimingAppData","TimingStats"]],"I":1}`)
 	err = c.WriteMessage(websocket.TextMessage, subscribeMsg)
 	if err != nil {
 		return err
