@@ -646,10 +646,97 @@ type meetingRace struct {
 	Grid           []models.StartingGrid
 }
 
+// champHubWorkers bounds the concurrent per-meeting fetches for the hub.
+const champHubWorkers = 5
+
+// champHubCurrentTTL / champHubPastTTL control how long an aggregated hub
+// response stays cached: short for the in-progress season, long for past
+// seasons whose results are final.
+const (
+	champHubCurrentTTL = 15 * time.Minute
+	champHubPastTTL    = 24 * time.Hour
+)
+
+// champHubTTL returns the in-memory cache TTL for a season's hub response.
+func champHubTTL(year int, now time.Time) time.Duration {
+	if year >= now.Year() {
+		return champHubCurrentTTL
+	}
+	return champHubPastTTL
+}
+
+type champHubEntry struct {
+	resp    champHubResponse
+	expires time.Time
+}
+
+// champHubCache is an in-memory cache of aggregated hub responses keyed by
+// year. The zero value is ready to use.
+type champHubCache struct {
+	mu      sync.Mutex
+	entries map[int]champHubEntry
+}
+
+func (c *champHubCache) get(year int, now time.Time) (champHubResponse, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[year]
+	if !ok || now.After(e.expires) {
+		return champHubResponse{}, false
+	}
+	return e.resp, true
+}
+
+func (c *champHubCache) put(year int, resp champHubResponse, now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries == nil {
+		c.entries = map[int]champHubEntry{}
+	}
+	c.entries[year] = champHubEntry{resp: resp, expires: now.Add(champHubTTL(year, now))}
+}
+
+// fetchMeetingRaces fans fetch out across meetings with bounded concurrency.
+// The returned slice preserves the input meeting order regardless of
+// completion order; meetings for which fetch reports ok=false are skipped.
+func fetchMeetingRaces(meetings []models.Meeting, workers int, fetch func(models.Meeting) (meetingRace, bool)) []meetingRace {
+	if workers < 1 {
+		workers = 1
+	}
+	slots := make([]*meetingRace, len(meetings))
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	for i, m := range meetings {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if mr, ok := fetch(m); ok {
+				slots[i] = &mr
+			}
+		}()
+	}
+	wg.Wait()
+
+	races := make([]meetingRace, 0, len(meetings))
+	for _, mr := range slots {
+		if mr != nil {
+			races = append(races, *mr)
+		}
+	}
+	return races
+}
+
 func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
 	if year == 0 {
 		year = time.Now().Year()
+	}
+
+	if resp, ok := s.hubCache.get(year, time.Now()); ok {
+		writeJSON(w, resp)
+		return
 	}
 
 	meetings, err := s.client.GetMeetingsForYear(year)
@@ -676,11 +763,10 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 
 	sort.Slice(meetings, func(i, j int) bool { return meetings[i].DateStart < meetings[j].DateStart })
 
-	races := make([]meetingRace, 0, len(meetings))
-	for _, m := range meetings {
+	races := fetchMeetingRaces(meetings, champHubWorkers, func(m models.Meeting) (meetingRace, bool) {
 		sessions, serr := s.client.GetSessionsForMeeting(int(m.MeetingKey))
 		if serr != nil {
-			continue
+			return meetingRace{}, false
 		}
 		raceKey := 0
 		for _, sess := range sessions {
@@ -690,14 +776,16 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if raceKey == 0 {
-			continue // not a GP meeting (e.g. pre-season testing)
+			return meetingRace{}, false // not a GP meeting (e.g. pre-season testing)
 		}
 		results, _ := s.client.GetSessionResult(raceKey)
 		grid, _ := s.client.GetStartingGrid(raceKey)
-		races = append(races, meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid})
-	}
+		return meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}, true
+	})
 
-	writeJSON(w, aggregateChampionshipHub(year, races, champ, teams, driverInfo))
+	resp := aggregateChampionshipHub(year, races, champ, teams, driverInfo)
+	s.hubCache.put(year, resp, time.Now())
+	writeJSON(w, resp)
 }
 
 // aggregateChampionshipHub is the pure aggregation core (no network) so it can be

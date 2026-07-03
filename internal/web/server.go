@@ -20,10 +20,11 @@ var assetsFS embed.FS
 
 // Server is the box-box web companion HTTP server.
 type Server struct {
-	client *api.OpenF1Client
-	query  *query.Service
-	hub    *SSEHub
-	addr   string
+	client   *api.OpenF1Client
+	query    *query.Service
+	hub      *SSEHub
+	addr     string
+	hubCache champHubCache // aggregated championship hub responses, keyed by year
 }
 
 // NewServer creates a new Server. Call Start() to begin serving.

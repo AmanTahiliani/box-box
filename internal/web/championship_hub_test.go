@@ -1,7 +1,9 @@
 package web
 
 import (
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
 )
@@ -138,5 +140,118 @@ func TestAggregateChampionshipHubEmpty(t *testing.T) {
 	resp := aggregateChampionshipHub(2025, nil, nil, nil, map[int]models.Driver{})
 	if resp.Round != 0 || resp.TotalRounds != 0 || len(resp.Drivers) != 0 {
 		t.Errorf("empty aggregation should be zero-valued, got %+v", resp)
+	}
+}
+
+func TestFetchMeetingRacesPreservesOrderAndSkips(t *testing.T) {
+	const n = 12
+	meetings := make([]models.Meeting, n)
+	for i := range meetings {
+		meetings[i] = models.Meeting{MeetingKey: int32(i + 1)}
+	}
+
+	races := fetchMeetingRaces(meetings, 5, func(m models.Meeting) (meetingRace, bool) {
+		// Later meetings finish first to shuffle completion order.
+		time.Sleep(time.Duration(n-int(m.MeetingKey)) * time.Millisecond)
+		if m.MeetingKey%3 == 0 {
+			return meetingRace{}, false // simulate skip (fetch error / no Race session)
+		}
+		return meetingRace{Meeting: m, RaceSessionKey: int(m.MeetingKey) * 100}, true
+	})
+
+	want := 0
+	for i := 1; i <= n; i++ {
+		if i%3 != 0 {
+			want++
+		}
+	}
+	if len(races) != want {
+		t.Fatalf("races = %d, want %d", len(races), want)
+	}
+	prev := int32(0)
+	for _, r := range races {
+		if r.Meeting.MeetingKey <= prev {
+			t.Fatalf("races out of input order: key %d after %d", r.Meeting.MeetingKey, prev)
+		}
+		if r.Meeting.MeetingKey%3 == 0 {
+			t.Fatalf("skipped meeting %d present in output", r.Meeting.MeetingKey)
+		}
+		if r.RaceSessionKey != int(r.Meeting.MeetingKey)*100 {
+			t.Fatalf("meeting %d has mismatched race key %d", r.Meeting.MeetingKey, r.RaceSessionKey)
+		}
+		prev = r.Meeting.MeetingKey
+	}
+}
+
+func TestFetchMeetingRacesBoundsConcurrency(t *testing.T) {
+	const workers = 3
+	var inFlight, peak atomic.Int32
+	meetings := make([]models.Meeting, 20)
+	for i := range meetings {
+		meetings[i] = models.Meeting{MeetingKey: int32(i + 1)}
+	}
+
+	fetchMeetingRaces(meetings, workers, func(m models.Meeting) (meetingRace, bool) {
+		cur := inFlight.Add(1)
+		for {
+			p := peak.Load()
+			if cur <= p || peak.CompareAndSwap(p, cur) {
+				break
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+		inFlight.Add(-1)
+		return meetingRace{Meeting: m, RaceSessionKey: 1}, true
+	})
+
+	if p := peak.Load(); p > workers {
+		t.Errorf("peak concurrent fetches = %d, want <= %d", p, workers)
+	}
+}
+
+func TestChampHubTTL(t *testing.T) {
+	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+	if got := champHubTTL(2026, now); got != champHubCurrentTTL {
+		t.Errorf("current year TTL = %v, want %v", got, champHubCurrentTTL)
+	}
+	if got := champHubTTL(2027, now); got != champHubCurrentTTL {
+		t.Errorf("future year TTL = %v, want %v", got, champHubCurrentTTL)
+	}
+	if got := champHubTTL(2024, now); got != champHubPastTTL {
+		t.Errorf("past year TTL = %v, want %v", got, champHubPastTTL)
+	}
+}
+
+func TestChampHubCache(t *testing.T) {
+	var c champHubCache
+	now := time.Date(2026, 7, 3, 12, 0, 0, 0, time.UTC)
+
+	if _, ok := c.get(2026, now); ok {
+		t.Fatal("empty cache should miss")
+	}
+
+	c.put(2026, champHubResponse{Season: 2026, Round: 10}, now)
+	c.put(2024, champHubResponse{Season: 2024, Round: 24}, now)
+
+	// Current-year entry: hit within 15 min, miss after.
+	if resp, ok := c.get(2026, now.Add(14*time.Minute)); !ok || resp.Round != 10 {
+		t.Errorf("current-year get within TTL = (%+v, %v), want hit with Round 10", resp, ok)
+	}
+	if _, ok := c.get(2026, now.Add(16*time.Minute)); ok {
+		t.Error("current-year entry should expire after 15 minutes")
+	}
+
+	// Past-year entry: hit well beyond 15 min, miss after 24 h.
+	if resp, ok := c.get(2024, now.Add(12*time.Hour)); !ok || resp.Round != 24 {
+		t.Errorf("past-year get within TTL = (%+v, %v), want hit with Round 24", resp, ok)
+	}
+	if _, ok := c.get(2024, now.Add(25*time.Hour)); ok {
+		t.Error("past-year entry should expire after 24 hours")
+	}
+
+	// Re-put refreshes the entry.
+	c.put(2026, champHubResponse{Season: 2026, Round: 11}, now.Add(20*time.Minute))
+	if resp, ok := c.get(2026, now.Add(30*time.Minute)); !ok || resp.Round != 11 {
+		t.Errorf("refreshed entry = (%+v, %v), want hit with Round 11", resp, ok)
 	}
 }
