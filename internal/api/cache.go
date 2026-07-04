@@ -94,6 +94,12 @@ func cacheDBPath() string {
 	return filepath.Join(".cache", "box-box", "cache.db")
 }
 
+// DefaultCacheDBPath returns the HTTP cache database path used by the OpenF1
+// client in both TUI and web modes.
+func DefaultCacheDBPath() string {
+	return cacheDBPath()
+}
+
 // ttlForURL determines the appropriate TTL based on the URL pattern.
 // Returns 0 (CacheTTLForever) for historical data that will never change.
 func ttlForURL(url string) time.Duration {
