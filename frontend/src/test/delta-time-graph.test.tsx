@@ -78,6 +78,23 @@ describe('computeCumulativeDeltas', () => {
     expect(result[0].deltas[2]).toBeCloseTo(-3)
   })
 
+  it('gaps challenger laps beyond a shorter reference series', () => {
+    const shortReference: DeltaSeries = {
+      label: 'VER',
+      color: '#3671C6',
+      lapTimes: [90, 91],
+    }
+    const longerChallenger: DeltaSeries = {
+      label: 'HAM',
+      color: '#E8002D',
+      lapTimes: [89, 92, 90],
+    }
+    const result = computeCumulativeDeltas([shortReference, longerChallenger])
+    expect(result[0].deltas[0]).toBeCloseTo(-1)
+    expect(result[0].deltas[1]).toBeCloseTo(0)
+    expect(result[0].deltas[2]).toBeNull()
+  })
+
   it('returns an empty array when only one series is provided', () => {
     expect(computeCumulativeDeltas([reference])).toEqual([])
   })

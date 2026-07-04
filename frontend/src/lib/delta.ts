@@ -35,12 +35,12 @@ function buildAlignedCumulative(
   const length = Math.max(lapTimes.length, referenceLapTimes.length)
 
   for (let i = 0; i < length; i++) {
-    if (referenceLapTimes[i] === null) {
+    if (referenceLapTimes[i] == null) {
       cumulative.push(running)
       continue
     }
     const lap = lapTimes[i]
-    if (lap !== null) {
+    if (lap != null) {
       running += lap
     }
     cumulative.push(running)
@@ -84,7 +84,7 @@ export function computeCumulativeDeltas(
       const deltas: (number | null)[] = []
 
       for (let i = 0; i < lapCount; i++) {
-        if (refLapTimes[i] === null || driver.lapTimes[i] === null) {
+        if (refLapTimes[i] == null || driver.lapTimes[i] == null) {
           deltas.push(null)
           continue
         }
