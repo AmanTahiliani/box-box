@@ -11,6 +11,18 @@
 
 # ---- MUST-HAVE ----
 
+harness_disabled_reason() {              # <name> -> reason on stdout; 0 means disabled
+  case "$1" in
+    agy)
+      cat <<'EOF'
+agy is disabled for implementation dispatch as of 2026-07-04: Antigravity headless mode was observed to ignore prompts with --new-project, resume stale conversations without it, and hang past print timeouts. Use codex or cursor until a fresh headless invocation is verified.
+EOF
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 harness_claude() {                      # Claude Code — print mode, auto-accept edits
   local dir="$1" prompt="$2"
   ( cd "$dir" && claude -p "$(cat "$prompt")" --permission-mode acceptEdits )
@@ -31,14 +43,11 @@ harness_cursor() {                      # Cursor CLI agent — composer-2.5, hea
   ( cd "$dir" && cursor-agent -p "$(cat "$prompt")" --model composer-2.5 --force --trust )
 }
 
-harness_agy() {                         # Antigravity CLI — UNRELIABLE headless (2026-07): with
-  # --new-project it ignores the prompt and asks to scaffold a project; without it, it
-  # resumes the previous conversation (silently keeping its old model — --model only
-  # applies to new conversations) and can hang past the print timeout. Do not trust for
-  # dispatch until fixed upstream; verify with a trivial prompt first.
-  local dir="$1" prompt="$2"
-  ( cd "$dir" && agy --print --print-timeout 60m \
-      --model="Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$(cat "$prompt")" )
+harness_agy() {                         # Antigravity CLI — disabled until headless is verified
+  local reason
+  reason="$(harness_disabled_reason agy)"
+  echo "harness_agy: $reason" >&2
+  return 2
 }
 
 # ---- NICE-TO-HAVE (verify the exact invocation for your version before trusting) ----
