@@ -158,6 +158,37 @@ export interface Lap {
   is_pit_out_lap: boolean
 }
 
+export interface CarDataSample {
+  brake: number
+  date: string
+  driver_number: number
+  drs: number
+  meeting_key: number
+  n_gear: number
+  rpm: number
+  session_key: number
+  speed: number
+  throttle: number
+}
+
+export interface ComparisonLap extends Lap {
+  compound?: string
+}
+
+export interface ComparisonDriver {
+  driver_number: number
+  name_acronym: string
+  team_colour: string
+  laps: ComparisonLap[]
+}
+
+export interface LapsComparisonResponse {
+  session_key: number
+  sc_periods: unknown[]
+  pit_laps: Record<string, number[]>
+  drivers: ComparisonDriver[]
+}
+
 export interface WeekendSession {
   session: Session
   source: 'local' | 'partial' | 'none' | 'cancelled'
