@@ -52,6 +52,15 @@ dispatch() { # <issue#> <harness> [--dry-run] [--base <branch>]
   if ! declare -f "harness_$harness" >/dev/null 2>&1; then
     echo "no adapter for harness '$harness' — add harness_$harness() to .agents/harnesses.sh" >&2; return 2
   fi
+  if [ "$dry" != 1 ] && declare -f harness_disabled_reason >/dev/null 2>&1; then
+    local disabled_reason
+    if disabled_reason="$(harness_disabled_reason "$harness")"; then
+      echo "harness '$harness' is disabled for non-dry-run dispatch." >&2
+      echo "  $disabled_reason" >&2
+      echo "  Use --dry-run for prompt inspection, or dispatch with --harness codex/cursor." >&2
+      return 2
+    fi
+  fi
 
   local repo_root title body slug branch wt prompt
   repo_root="$(git rev-parse --show-toplevel)" || return 1

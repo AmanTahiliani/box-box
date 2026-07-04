@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # .agents/bin/dev — box-box agentic dev CLI. Works from any harness's shell.
 #
-#   dev implement <issue#> --harness <claude|codex|opencode|pi|cursor> [--dry-run] [--base <branch>]
+#   dev implement <issue#> --harness <codex|cursor|claude|opencode|pi|agy> [--dry-run] [--base <branch>]
 #
 # Grooming is driven interactively via the Claude Code /groom skill; this CLI covers
 # the implement lane (dispatch a Ready issue to a harness → worktree → gate → PR).
@@ -15,7 +15,7 @@ box-box dev CLI
 
   dev implement <issue#> --harness <name> [--dry-run] [--base <branch>]
 
-harnesses: claude, codex, opencode (supported) · pi, cursor (verify flags in .agents/harnesses.sh)
+harnesses: codex, cursor (recommended) · claude, opencode (available) · agy (dry-run only, disabled for dispatch) · pi (verify flags)
   --dry-run   render the prompt + plan, touch nothing (no worktree/PR/state change)
   --base      base branch for the worktree/PR (default: main)
 EOF
