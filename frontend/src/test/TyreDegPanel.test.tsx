@@ -52,7 +52,16 @@ describe('TyreDegPanel', () => {
     const panel = screen.getByTestId('tyredeg-panel')
     expect(panel).toHaveTextContent('VER')
     expect(panel).toHaveTextContent('M +5')
+    expect(panel).toHaveTextContent('fresh')
     expect(panel).toHaveTextContent('warming up')
+  })
+
+  it('annotates tyre age meaning on stint rows', () => {
+    const rows = [
+      makeRow('1', 1, 'VER', { NumberOfLaps: 10, LastLapTime: '1:30.000' }, { Compound: 'MEDIUM', Age: 12 }),
+    ]
+    render(<TyreDegPanel rows={rows} sessionType="Race" pinned={[]} />)
+    expect(screen.getByText('mid-life')).toBeInTheDocument()
   })
 
   it('renders slope and rejoin estimate once laps accumulate across snapshots', () => {
