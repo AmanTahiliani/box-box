@@ -26,6 +26,7 @@ type State struct {
 	Weather            LiveWeatherData
 	Session            LiveSessionMeta
 	TeamRadio          []LiveRadioCapture
+	SessionStatus      string
 	TrackStatus        string
 	CurrentLap         int
 	TotalLaps          int
@@ -93,6 +94,7 @@ func (s *State) Snapshot() LiveStreamData {
 		Weather:            s.Weather,
 		Session:            s.Session,
 		TeamRadio:          cpyRadio,
+		SessionStatus:      s.SessionStatus,
 		TrackStatus:        s.TrackStatus,
 		CurrentLap:         s.CurrentLap,
 		TotalLaps:          s.TotalLaps,
@@ -271,6 +273,14 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 		}
 		if json.Unmarshal(data, &ts) == nil && ts.Status != "" {
 			s.TrackStatus = ts.Status
+			updated = true
+		}
+	case "SessionStatus":
+		var ss struct {
+			Status string `json:"Status"`
+		}
+		if json.Unmarshal(data, &ss) == nil && ss.Status != "" {
+			s.SessionStatus = ss.Status
 			updated = true
 		}
 	case "RaceControlMessages":

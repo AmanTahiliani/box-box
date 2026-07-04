@@ -273,6 +273,40 @@ func TestProcessTopicTrackStatus(t *testing.T) {
 	}
 }
 
+func TestProcessTopicSessionStatus(t *testing.T) {
+	state := live.NewState()
+	if !state.ProcessTopic("SessionStatus", json.RawMessage(`{"Status": "Finished"}`)) {
+		t.Fatal("SessionStatus should update state")
+	}
+	snap := state.Snapshot()
+	if snap.SessionStatus != "Finished" {
+		t.Fatalf("session status = %q, want Finished", snap.SessionStatus)
+	}
+	if !snap.SnapshotUpdated {
+		t.Fatal("SessionStatus should mark snapshot updated")
+	}
+}
+
+func TestSessionStatusIsActive(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		{"Started", true},
+		{"Resumed", true},
+		{"Finished", false},
+		{"Finalised", false},
+		{"Ends", false},
+		{"Aborted", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := live.SessionStatusIsActive(tt.status); got != tt.want {
+			t.Errorf("SessionStatusIsActive(%q) = %v, want %v", tt.status, got, tt.want)
+		}
+	}
+}
+
 func TestProcessTopicRaceControlMessages(t *testing.T) {
 	state := live.NewState()
 	data := json.RawMessage(`{

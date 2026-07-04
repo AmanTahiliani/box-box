@@ -163,6 +163,20 @@ describe('live transforms', () => {
     expect(parsed?.data?.Drivers['16'].RacingNumber).toBe('16')
   })
 
+  it('parses archived EventSource snapshots separately from active data', () => {
+    const parsed = parseLiveStateEvent(JSON.stringify({
+      is_live: false,
+      data: null,
+      last_snapshot: snapshot,
+      last_positions: { '16': { x: 1, y: 2, z: 3, status: 'OnTrack' } },
+      last_snapshot_at: '2026-07-04T14:00:00Z',
+    }))
+    expect(parsed?.is_live).toBe(false)
+    expect(parsed?.data).toBeNull()
+    expect(parsed?.last_snapshot?.Drivers['16'].RacingNumber).toBe('16')
+    expect(parsed?.last_positions?.['16'].status).toBe('OnTrack')
+  })
+
   it('sorts timing rows by live position and includes drivers with metadata only', () => {
     const rows = sortLiveTimingRows(snapshot)
     expect(rows.map((row) => row.RacingNumber)).toEqual(['16', '1', '44'])

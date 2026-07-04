@@ -27,12 +27,16 @@ import { EventRail } from '../components/live/EventRail'
 import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
 import { TrackMap } from '../components/live/TrackMap'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
-import { Radio } from 'lucide-react'
+import { Archive, Radio } from 'lucide-react'
 
 type StreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 export function LiveTimingPage() {
-  const [snapshot, setSnapshot] = useState<LiveStreamData | null>(null)
+  const [activeSnapshot, setActiveSnapshot] = useState<LiveStreamData | null>(null)
+  const [archiveSnapshot, setArchiveSnapshot] = useState<LiveStreamData | null>(null)
+  const [archivePositions, setArchivePositions] = useState<Record<string, LivePosition>>({})
+  const [archiveSnapshotAt, setArchiveSnapshotAt] = useState<string | null>(null)
+  const [archiveMode, setArchiveMode] = useState(false)
   const [isLive, setIsLive] = useState(false)
   const [streamStatus, setStreamStatus] = useState<StreamStatus>('connecting')
   const [now, setNow] = useState(Date.now())
@@ -43,6 +47,10 @@ export function LiveTimingPage() {
   const [events, setEvents] = useState<LiveEvent[]>([])
   const prevSnapshotRef = useRef<LiveStreamData | null>(null)
   const sessionSigRef = useRef('')
+  const isLiveRef = useRef(false)
+  const archiveModeRef = useRef(false)
+  const snapshot = isLive ? activeSnapshot : archiveMode ? archiveSnapshot : null
+  const hasArchive = Boolean(archiveSnapshot)
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['live-state'],
@@ -64,9 +72,28 @@ export function LiveTimingPage() {
 
   useEffect(() => {
     if (!data) return
-    setIsLive(data.is_live)
-    setSnapshot(data.data)
+    const nextLive = data.is_live && Boolean(data.data)
+    setIsLive(nextLive)
+    isLiveRef.current = nextLive
+    if (nextLive && data.data) {
+      setActiveSnapshot(data.data)
+      setArchiveMode(false)
+      return
+    }
+
+    setActiveSnapshot(null)
+    setArchiveSnapshot(data.last_snapshot ?? null)
+    setArchivePositions(data.last_positions ?? {})
+    setArchiveSnapshotAt(data.last_snapshot_at ?? null)
+    setArchiveMode((current) => current && Boolean(data.last_snapshot))
   }, [data])
+
+  useEffect(() => {
+    archiveModeRef.current = archiveMode
+    if (archiveMode) {
+      setPositions(archivePositions)
+    }
+  }, [archiveMode, archivePositions])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -90,8 +117,23 @@ export function LiveTimingPage() {
     events.addEventListener('snapshot', (event) => {
       const state = parseLiveStateEvent(event.data)
       if (!state || cancelled) return
-      setIsLive(state.is_live)
-      setSnapshot(state.data)
+      const nextLive = state.is_live && Boolean(state.data)
+      setIsLive(nextLive)
+      if (nextLive && state.data) {
+        if (!isLiveRef.current || archiveModeRef.current) {
+          setPositions({})
+        }
+        isLiveRef.current = true
+        setActiveSnapshot(state.data)
+        setArchiveMode(false)
+      } else {
+        isLiveRef.current = false
+        setActiveSnapshot(null)
+        setArchiveSnapshot(state.last_snapshot ?? null)
+        setArchivePositions(state.last_positions ?? {})
+        setArchiveSnapshotAt(state.last_snapshot_at ?? null)
+        setArchiveMode((current) => current && Boolean(state.last_snapshot))
+      }
       setStreamStatus('connected')
     })
 
@@ -174,6 +216,19 @@ export function LiveTimingPage() {
     setPinned((prev) => togglePin(prev, racingNumber))
   }
 
+  const handleViewArchive = () => {
+    if (!archiveSnapshot) return
+    setIsLive(false)
+    setArchiveMode(true)
+    setPositions(archivePositions)
+  }
+
+  const archiveTimestamp = archiveSnapshotAt ? new Date(archiveSnapshotAt) : null
+  const archiveLabel =
+    archiveTimestamp && !Number.isNaN(archiveTimestamp.getTime())
+      ? `Archived snapshot from ${archiveTimestamp.toLocaleString()}`
+      : 'Archived live timing snapshot'
+
   return (
     <div className="page live-page" data-testid="live-page">
       {isError && (
@@ -182,9 +237,15 @@ export function LiveTimingPage() {
         </div>
       )}
 
-      {streamStatus === 'disconnected' && snapshot && (
+      {streamStatus === 'disconnected' && snapshot && !archiveMode && (
         <div className="live-status-strip live-status-warn">
           Stream disconnected — showing last received snapshot
+        </div>
+      )}
+
+      {archiveMode && snapshot && (
+        <div className="live-status-strip live-status-archive" data-testid="live-archive-strip">
+          {archiveLabel} — live updates are paused for this archive view
         </div>
       )}
 
@@ -202,12 +263,25 @@ export function LiveTimingPage() {
           <p className="empty-state-desc" style={{ color: 'var(--text-2)' }}>
             The telemetry feed is currently offline. <br /><br /> Check the <a href="/" style={{ color: 'var(--red)', textDecoration: 'underline' }}>Command Center</a> for the weekend schedule or explore historical data in the <a href="/race-hub" style={{ color: 'var(--red)', textDecoration: 'underline' }}>Race Hub</a>.
           </p>
+          {hasArchive && (
+            <button type="button" className="live-archive-btn" onClick={handleViewArchive}>
+              <Archive size={15} />
+              View Last Session
+            </button>
+          )}
         </div>
       )}
 
       {snapshot && (
         <>
-          <SessionBanner isLive={isLive} snapshot={snapshot} rows={rows} connection={streamStatus} now={now} />
+          <SessionBanner
+            isLive={isLive}
+            isArchive={archiveMode}
+            snapshot={snapshot}
+            rows={rows}
+            connection={streamStatus}
+            now={now}
+          />
           <TrackStatusBanner status={snapshot.TrackStatus} />
           <PinnedDrivers rows={rows} history={gapHistory} pinned={pinned} onToggle={handleTogglePin} />
           <TrackMap

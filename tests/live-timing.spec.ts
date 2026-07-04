@@ -239,4 +239,39 @@ test.describe('Live Timing (no session)', () => {
     await expect(page.getByTestId('live-empty')).toBeVisible()
     await expect(page.getByTestId('live-page')).toContainText('No live session active')
   })
+
+  test('renders an archived snapshot only after View Last Session', async ({ page }) => {
+    await page.route('**/api/v1/live/state', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          is_live: false,
+          data: null,
+          last_snapshot: {
+            ...raceSnapshot.data,
+            SessionStatus: 'Finished',
+          },
+          last_positions: {
+            '1': { x: 100, y: -50, z: 2, status: 'OnTrack' },
+          },
+          last_snapshot_at: '2026-07-04T14:00:00Z',
+        }),
+      }),
+    )
+    await page.route('**/api/v1/live/stream', (route) =>
+      route.fulfill({
+        contentType: 'text/event-stream',
+        body: 'event: heartbeat\ndata: {}\n\n',
+      }),
+    )
+
+    await page.goto('/live')
+    await expect(page.getByTestId('live-empty')).toContainText('No live session active')
+    await expect(page.getByText('Timing Tower')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'View Last Session' }).click()
+    await expect(page.getByTestId('live-archive-strip')).toContainText('Archived snapshot')
+    await expect(page.getByText('Timing Tower')).toBeVisible()
+    await expect(page.locator('.live-state')).toContainText('archive')
+  })
 })

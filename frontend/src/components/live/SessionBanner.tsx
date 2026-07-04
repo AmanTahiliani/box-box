@@ -5,18 +5,20 @@ import { WeatherStrip } from './WeatherStrip'
 
 interface Props {
   isLive: boolean
+  isArchive?: boolean
   snapshot: LiveStreamData
   rows: LiveTimingRow[]
   connection: 'connected' | 'connecting' | 'disconnected' | 'error'
   now: number
 }
 
-export function SessionBanner({ isLive, snapshot, rows, connection, now }: Props) {
+export function SessionBanner({ isLive, isArchive = false, snapshot, rows, connection, now }: Props) {
   const session = snapshot.Session
   const clock = extrapolateClock(snapshot.Clock, snapshot.ClockRefTime, snapshot.ClockExtrapolating, now)
   const display = liveSessionDisplay(session, rows)
   const atRiskLabel =
     display.atRiskStart && display.atRiskEnd ? `P${display.atRiskStart}-P${display.atRiskEnd} at risk` : ''
+  const stateLabel = isLive ? 'live' : isArchive ? 'archive' : 'stale'
 
   return (
     <section className="live-banner">
@@ -39,7 +41,7 @@ export function SessionBanner({ isLive, snapshot, rows, connection, now }: Props
             <span>
               L<strong>{snapshot.CurrentLap || '-'}</strong>/<strong>{snapshot.TotalLaps || '-'}</strong>
             </span>
-            <span className={isLive ? 'live-state live-state-on' : 'live-state'}>{isLive ? 'live' : 'stale'}</span>
+            <span className={isLive ? 'live-state live-state-on' : 'live-state'}>{stateLabel}</span>
           </div>
         </div>
       </div>
