@@ -47,7 +47,7 @@ describe('computeCumulativeDeltas', () => {
     expect(result[0].deltas[2]).toBeCloseTo(2)
   })
 
-  it('emits null for missing lap times while carrying cumulative forward', () => {
+  it('emits null for challenger missing lap times while carrying cumulative forward', () => {
     const withNull: DeltaSeries = {
       label: 'NOR',
       color: '#FF8000',
@@ -58,6 +58,41 @@ describe('computeCumulativeDeltas', () => {
     expect(result[0].deltas[1]).toBeNull()
     // After null: NOR cum=181, VER cum=273 → delta -92
     expect(result[0].deltas[2]).toBeCloseTo(-92)
+  })
+
+  it('gaps all drivers when the reference lap is null and resumes without that window', () => {
+    const refWithNull: DeltaSeries = {
+      label: 'VER',
+      color: '#3671C6',
+      lapTimes: [90, null, 92],
+    }
+    const validChallenger: DeltaSeries = {
+      label: 'HAM',
+      color: '#E8002D',
+      lapTimes: [89, 91, 90],
+    }
+    const result = computeCumulativeDeltas([refWithNull, validChallenger])
+    expect(result[0].deltas[0]).toBeCloseTo(-1)
+    expect(result[0].deltas[1]).toBeNull()
+    // Lap 3 excludes the reference-null window for both: (89+90) - (90+92) = -3
+    expect(result[0].deltas[2]).toBeCloseTo(-3)
+  })
+
+  it('gaps challenger laps beyond a shorter reference series', () => {
+    const shortReference: DeltaSeries = {
+      label: 'VER',
+      color: '#3671C6',
+      lapTimes: [90, 91],
+    }
+    const longerChallenger: DeltaSeries = {
+      label: 'HAM',
+      color: '#E8002D',
+      lapTimes: [89, 92, 90],
+    }
+    const result = computeCumulativeDeltas([shortReference, longerChallenger])
+    expect(result[0].deltas[0]).toBeCloseTo(-1)
+    expect(result[0].deltas[1]).toBeCloseTo(0)
+    expect(result[0].deltas[2]).toBeNull()
   })
 
   it('returns an empty array when only one series is provided', () => {
@@ -97,6 +132,19 @@ describe('DeltaTimeGraph', () => {
     expect(screen.queryByTestId('delta-line-VER')).not.toBeInTheDocument()
   })
 
+  it('splits polylines at reference-null laps', () => {
+    const refWithNull: DeltaSeries = {
+      label: 'VER',
+      color: '#3671C6',
+      lapTimes: [90, null, 92],
+    }
+    const { container } = render(
+      <DeltaTimeGraph series={[refWithNull, challenger]} />,
+    )
+    const lines = container.querySelectorAll('.delta-graph-driver-line')
+    expect(lines.length).toBeGreaterThan(1)
+  })
+
   it('shows a crosshair tooltip on hover', () => {
     vi.spyOn(SVGSVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0,
@@ -116,6 +164,33 @@ describe('DeltaTimeGraph', () => {
     expect(screen.getByTestId('delta-crosshair')).toBeInTheDocument()
     expect(screen.getByTestId('delta-tooltip')).toBeInTheDocument()
     expect(screen.getByText(/Lap 1/)).toBeInTheDocument()
+    vi.restoreAllMocks()
+  })
+
+  it('omits tooltip rows on reference-null laps', () => {
+    vi.spyOn(SVGSVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      width: 640,
+      height: 220,
+      right: 640,
+      bottom: 220,
+      toJSON: () => ({}),
+    })
+    const refWithNull: DeltaSeries = {
+      label: 'VER',
+      color: '#3671C6',
+      lapTimes: [90, null, 92],
+    }
+    const { container } = render(
+      <DeltaTimeGraph series={[refWithNull, challenger]} />,
+    )
+    const hoverLayer = container.querySelector('.delta-graph-hover-layer')
+    fireEvent.mouseMove(hoverLayer!, { clientX: 352, clientY: 100 })
+    expect(screen.getByTestId('delta-crosshair')).toBeInTheDocument()
+    expect(screen.queryByTestId('delta-tooltip')).not.toBeInTheDocument()
     vi.restoreAllMocks()
   })
 })
