@@ -2,6 +2,7 @@ export type Tab =
   | 'overview'
   | 'race_story'
   | 'strategy'
+  | 'compare'
   | 'lap_data'
   | 'conditions'
   | 'race_control'
@@ -11,6 +12,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'race_story', label: 'Race Story' },
   { id: 'strategy', label: 'Strategy' },
+  { id: 'compare', label: 'Compare' },
   { id: 'lap_data', label: 'Lap Data' },
   { id: 'conditions', label: 'Conditions' },
   { id: 'race_control', label: 'Race Control' },

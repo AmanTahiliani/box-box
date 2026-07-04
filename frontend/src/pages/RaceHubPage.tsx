@@ -13,6 +13,7 @@ import { TabBar, type Tab } from '../components/TabBar'
 import { DatasetStatusView } from '../components/DatasetStatusView'
 import { StrategyView } from '../components/StrategyView'
 import { LapsView } from '../components/LapsView'
+import { CompareView } from '../components/CompareView'
 import { RaceControlView } from '../components/RaceControlView'
 import { WeatherView } from '../components/WeatherView'
 import { OverviewView } from '../components/OverviewView'
@@ -303,6 +304,19 @@ export function RaceHubPage({ sessionKey }: Props) {
             stints={data.stints}
             pit_stops={data.pit_stops}
             hasStints={data.datasets['stints']?.status === 'available'}
+          />
+        </div>
+      )}
+
+      {activeTab === 'compare' && (
+        <div className="data-section">
+          <div className="sec-header">
+            <span className="sec-title">Driver Compare</span>
+          </div>
+          <CompareView
+            sessionKey={sessionKey}
+            results={data.results}
+            drivers={data.drivers}
           />
         </div>
       )}
