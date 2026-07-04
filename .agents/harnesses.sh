@@ -26,16 +26,24 @@ harness_opencode() {                    # opencode — non-interactive run
   ( cd "$dir" && opencode run "$(cat "$prompt")" )
 }
 
+harness_cursor() {                      # Cursor CLI agent — composer-2.5, headless full-auto
+  local dir="$1" prompt="$2"
+  ( cd "$dir" && cursor-agent -p "$(cat "$prompt")" --model composer-2.5 --force --trust )
+}
+
+harness_agy() {                         # Antigravity CLI — Gemini 3.1 Pro, headless full-auto
+  # --new-project is required for --model to take effect (otherwise agy resumes the
+  # previous conversation and silently keeps its old model).
+  local dir="$1" prompt="$2"
+  ( cd "$dir" && agy --print --new-project --print-timeout 60m \
+      --model="Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$(cat "$prompt")" )
+}
+
 # ---- NICE-TO-HAVE (verify the exact invocation for your version before trusting) ----
 
 harness_pi() {                          # pi — CONFIRM headless CLI + flags
   local dir="$1" prompt="$2"
   ( cd "$dir" && pi run "$(cat "$prompt")" )        # placeholder — verify
-}
-
-harness_cursor() {                      # Cursor CLI agent — CONFIRM flags
-  local dir="$1" prompt="$2"
-  ( cd "$dir" && cursor-agent -p "$(cat "$prompt")" --force )   # placeholder — verify
 }
 
 # ---- build/typecheck gate (fast, local) ----
