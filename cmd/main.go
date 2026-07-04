@@ -27,6 +27,7 @@ func main() {
 	ingestMeeting := flag.Int("ingest-meeting", 0, "Ingest meeting metadata and Race Hub datasets for all sessions")
 	ingestSession := flag.Int("ingest-session", 0, "Ingest Race Hub datasets for a session key")
 	ingestNews := flag.Bool("ingest-news", false, "Refresh RSS/Atom paddock briefing feeds")
+	prefetchTrackOutlines := flag.Int("prefetch-track-outlines", 0, "Warm the web track-outline cache for a season year (for web-only hosts, run before --web so /api/v1/track-outline can serve live maps)")
 	dryRun := flag.Bool("dry-run", false, "Preview ingestion without writing domain rows")
 	force := flag.Bool("force", false, "Re-ingest datasets even if already tracked in the session_coverage table as completed")
 	coverageYear := flag.Int("coverage", 0, "Show season coverage report for the given year")
@@ -76,10 +77,20 @@ func main() {
 	if *ingestNews {
 		ingestFlags++
 	}
+	if *prefetchTrackOutlines != 0 {
+		ingestFlags++
+	}
 	if ingestFlags > 0 {
 		if ingestFlags > 1 {
-			fmt.Fprintln(os.Stderr, "box-box: only one of --ingest-year, --backfill-season, --ingest-meeting, --ingest-session, or --ingest-news may be set")
+			fmt.Fprintln(os.Stderr, "box-box: only one of --ingest-year, --backfill-season, --ingest-meeting, --ingest-session, --ingest-news, or --prefetch-track-outlines may be set")
 			os.Exit(1)
+		}
+		if *prefetchTrackOutlines != 0 {
+			if err := runTrackOutlinePrefetch(client, *prefetchTrackOutlines); err != nil {
+				fmt.Fprintf(os.Stderr, "box-box track outline prefetch error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
 		if *ingestNews {
 			if err := runNewsIngestion(*dryRun, *dbPath); err != nil {
@@ -88,7 +99,7 @@ func main() {
 			}
 			return
 		}
-		
+
 		yearVal := *ingestYear
 		if *backfillSeason != 0 {
 			yearVal = *backfillSeason
@@ -172,6 +183,35 @@ func runIngestion(client *api.OpenF1Client, year, meetingKey, sessionKey int, fo
 		_, err = svc.IngestSession(sessionKey)
 	}
 	return err
+}
+
+func runTrackOutlinePrefetch(client *api.OpenF1Client, year int) error {
+	log.SetOutput(os.Stderr)
+
+	fmt.Fprintf(os.Stderr, "track outlines: warming HTTP cache %s for %d\n", api.DefaultCacheDBPath(), year)
+
+	meetings, err := client.GetMeetingsForYear(year)
+	if err != nil {
+		return fmt.Errorf("fetch meetings for %d: %w", year, err)
+	}
+
+	result := client.PrefetchTrackOutlinesForYear(year, meetings)
+	fmt.Printf(
+		"track outlines %d: cached %d/%d unique circuit(s) before, %d/%d after; %d skipped, %d fetched, %d failed\n",
+		result.Year,
+		result.CachedBefore,
+		result.UniqueCircuits,
+		result.CachedAfter,
+		result.UniqueCircuits,
+		result.Skipped,
+		result.Fetched,
+		result.Failed,
+	)
+
+	if result.CachedAfter == 0 {
+		return fmt.Errorf("cached zero track outlines for %d", year)
+	}
+	return nil
 }
 
 func runNewsIngestion(dryRun bool, dbPath string) error {
@@ -275,7 +315,7 @@ func runCoverageReport(year int, dbPath string) error {
 	}
 
 	fmt.Printf("\n--- Season %d Coverage Report ---\n\n", year)
-	fmt.Printf("%-35s | %-5s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s\n", 
+	fmt.Printf("%-35s | %-5s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s | %-2s\n",
 		"Meeting / Session (Key)", "ID", "DR", "SR", "SG", "ST", "PS", "PO", "RC", "WE", "LA")
 	fmt.Println(strings.Repeat("-", 82))
 

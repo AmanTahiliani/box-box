@@ -623,6 +623,19 @@ func (c *OpenF1Client) GetTeamRadio(sessionKey, driverNumber int) ([]models.Team
 // to maximise the chance of finding data quickly.
 var candidateDrivers = []int{1, 11, 44, 16, 55, 4, 14, 63, 81, 24}
 
+// TrackOutlinePrefetchResult summarizes a season track-outline cache warming
+// run. Counts are scoped to the unique non-zero circuit keys in the provided
+// meeting list.
+type TrackOutlinePrefetchResult struct {
+	Year           int
+	UniqueCircuits int
+	CachedBefore   int
+	CachedAfter    int
+	Skipped        int
+	Fetched        int
+	Failed         int
+}
+
 // PrefetchTrackOutlines fetches GPS location data for every circuit in the
 // provided meeting list and stores it in the cache so the track map tab can
 // render during live sessions when the free-tier API is locked.
@@ -632,28 +645,58 @@ var candidateDrivers = []int{1, 11, 44, 16, 55, 4, 14, 63, 81, 24}
 // Errors per-circuit are silently ignored — this is a best-effort operation
 // and must never block or crash the main UI.
 func (c *OpenF1Client) PrefetchTrackOutlines(meetings []models.Meeting) {
+	year := time.Now().Year()
+	for _, m := range meetings {
+		if m.Year != 0 {
+			year = m.Year
+			break
+		}
+	}
+	_ = c.PrefetchTrackOutlinesForYear(year, meetings)
+}
+
+// PrefetchTrackOutlinesForYear fetches and caches track outlines for unique
+// circuits in the provided meeting list, storing them under the explicit season
+// year. Unlike PrefetchTrackOutlines, it returns accounting suitable for CLI
+// cache-warming workflows.
+func (c *OpenF1Client) PrefetchTrackOutlinesForYear(year int, meetings []models.Meeting) TrackOutlinePrefetchResult {
 	const maxWorkers = 3
 
-	year := time.Now().Year()
-
-	// Filter to meetings that need fetching.
-	var pending []models.Meeting
+	result := TrackOutlinePrefetchResult{Year: year}
+	uniqueByCircuit := make(map[int]models.Meeting)
+	var unique []models.Meeting
 	for _, m := range meetings {
 		if m.CircuitKey == 0 {
 			continue
 		}
+		if _, exists := uniqueByCircuit[m.CircuitKey]; exists {
+			continue
+		}
+		uniqueByCircuit[m.CircuitKey] = m
+		unique = append(unique, m)
+	}
+
+	result.UniqueCircuits = len(unique)
+
+	// Filter to meetings that need fetching.
+	var pending []models.Meeting
+	for _, m := range unique {
 		if _, ok := c.cache.GetTrackOutline(m.CircuitKey, year); ok {
+			result.CachedBefore++
+			result.Skipped++
 			continue // already cached for this season
 		}
 		pending = append(pending, m)
 	}
 
 	if len(pending) == 0 {
-		return
+		result.CachedAfter = result.CachedBefore
+		return result
 	}
 
 	sem := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 
 	for _, mtg := range pending {
 		mtg := mtg // capture
@@ -662,19 +705,34 @@ func (c *OpenF1Client) PrefetchTrackOutlines(meetings []models.Meeting) {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			c.prefetchCircuit(mtg, year)
+			ok := c.prefetchCircuit(mtg, year)
+			mu.Lock()
+			if ok {
+				result.Fetched++
+			} else {
+				result.Failed++
+			}
+			mu.Unlock()
 		}()
 	}
 
 	wg.Wait()
+
+	for _, m := range unique {
+		if _, ok := c.cache.GetTrackOutline(m.CircuitKey, year); ok {
+			result.CachedAfter++
+		}
+	}
+
+	return result
 }
 
 // prefetchCircuit fetches the track outline for a single meeting and stores it.
 // It prefers completed sessions (past date_end) so the data is full and stable.
-func (c *OpenF1Client) prefetchCircuit(mtg models.Meeting, year int) {
+func (c *OpenF1Client) prefetchCircuit(mtg models.Meeting, year int) bool {
 	sessions, err := c.GetSessionsForMeeting(int(mtg.MeetingKey))
 	if err != nil || len(sessions) == 0 {
-		return
+		return false
 	}
 
 	// Pick the best session: prefer a completed race, then any session with
@@ -696,7 +754,7 @@ func (c *OpenF1Client) prefetchCircuit(mtg models.Meeting, year int) {
 		}
 	}
 	if bestSession == nil {
-		return
+		return false
 	}
 
 	// Try candidate drivers in order until we find one with enough points.
@@ -706,7 +764,7 @@ func (c *OpenF1Client) prefetchCircuit(mtg models.Meeting, year int) {
 			continue
 		}
 		// Store under the circuit key for this year and stop.
-		_ = c.cache.SetTrackOutline(mtg.CircuitKey, year, locs)
-		return
+		return c.cache.SetTrackOutline(mtg.CircuitKey, year, locs) == nil
 	}
+	return false
 }
