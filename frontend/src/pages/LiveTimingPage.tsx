@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLiveState, fetchLiveTrackOutline } from '../api'
+import { fetchLiveState } from '../api'
 import type { LivePosition, LiveStreamData } from '../types'
 import {
   loadPinnedDrivers,
@@ -25,7 +25,6 @@ import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
 import { EventRail } from '../components/live/EventRail'
 import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
-import { TrackMap } from '../components/live/TrackMap'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
 import { Archive, Radio } from 'lucide-react'
 
@@ -56,18 +55,6 @@ export function LiveTimingPage() {
     queryKey: ['live-state'],
     queryFn: fetchLiveState,
     staleTime: 5_000,
-  })
-
-  const trackOutlineQuery = useQuery({
-    queryKey: [
-      'live-track-outline',
-      snapshot?.Session?.MeetingName ?? '',
-      snapshot?.Session?.CircuitName ?? '',
-    ],
-    queryFn: () => fetchLiveTrackOutline(snapshot!.Session),
-    enabled: Boolean(snapshot?.Session?.MeetingName || snapshot?.Session?.CircuitName),
-    staleTime: Infinity,
-    retry: false,
   })
 
   useEffect(() => {
@@ -284,14 +271,6 @@ export function LiveTimingPage() {
           />
           <TrackStatusBanner status={snapshot.TrackStatus} />
           <PinnedDrivers rows={rows} history={gapHistory} pinned={pinned} onToggle={handleTogglePin} />
-          <TrackMap
-            outline={trackOutlineQuery.data}
-            positions={positions}
-            telemetry={snapshot.Telemetry}
-            drivers={snapshot.Drivers}
-            driverInfo={snapshot.DriverInfo}
-            loading={trackOutlineQuery.isLoading}
-          />
           <TyreDegPanel rows={rows} sessionType={snapshot.Session?.SessionType} pinned={pinned} />
           <div className="live-columns">
             <div className="live-tower-col">
