@@ -201,6 +201,7 @@ describe('TimingTower', () => {
           CircuitName: 'Silverstone',
           SessionType: 'Sprint Qualifying',
           SessionName: 'Sprint Qualifying',
+          Path: '',
         }}
       />,
     )

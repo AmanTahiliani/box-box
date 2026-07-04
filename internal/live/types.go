@@ -85,6 +85,7 @@ type LiveSessionMeta struct {
 	CircuitName string
 	SessionType string
 	SessionName string
+	Path        string
 }
 
 // LivePositionData is the latest raw F1 GPS position for one driver.
@@ -144,6 +145,13 @@ type LiveStintData struct {
 	Laps     int
 }
 
+// LiveRadioCapture is one team radio audio clip from the live timing feed.
+type LiveRadioCapture struct {
+	Utc          string
+	RacingNumber string
+	Path         string
+}
+
 // LiveStreamData is an immutable snapshot of all live timing state.
 type LiveStreamData struct {
 	Drivers            map[string]LiveDriverData
@@ -153,6 +161,7 @@ type LiveStreamData struct {
 	RCMessages         []LiveRCMessage
 	Weather            LiveWeatherData
 	Session            LiveSessionMeta
+	TeamRadio          []LiveRadioCapture
 	TrackStatus        string // "1"=green "2"=yellow "4"=SC "5"=red "6"=VSC
 	CurrentLap         int
 	TotalLaps          int
