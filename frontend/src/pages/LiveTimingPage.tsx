@@ -22,6 +22,7 @@ import { BattleChips } from '../components/live/BattleChips'
 import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
 import { TrackMap } from '../components/live/TrackMap'
+import { TyreDegPanel } from '../components/live/TyreDegPanel'
 import { Radio } from 'lucide-react'
 
 type StreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -193,6 +194,7 @@ export function LiveTimingPage() {
             driverInfo={snapshot.DriverInfo}
             loading={trackOutlineQuery.isLoading}
           />
+          <TyreDegPanel rows={rows} sessionType={snapshot.Session?.SessionType} pinned={pinned} />
           <div className="live-columns">
             <div className="live-tower-col">
               <div className="sec-header">

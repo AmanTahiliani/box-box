@@ -1,0 +1,84 @@
+/* Live tyre-degradation & pit-window panel (see components/live/TyreDegPanel.tsx) */
+
+.live-tyredeg-panel {
+  margin-bottom: var(--s5);
+}
+
+.tyredeg-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tyredeg-chevron {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.tyredeg-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tyredeg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s2) var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.tyredeg-row .drv-bar { height: 16px; }
+
+.tyredeg-pos {
+  min-width: 28px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.tyredeg-spark { display: block; }
+.tyredeg-spark-empty { color: var(--text-3); }
+
+.tyredeg-trend { display: inline-flex; align-items: center; }
+.tyredeg-trend-improving { color: var(--green); }
+.tyredeg-trend-stable    { color: var(--text-3); }
+.tyredeg-trend-degrading { color: #ff6b6b; }
+
+.tyredeg-slope {
+  min-width: 78px;
+  font-size: 11px;
+}
+
+.tyredeg-warmup {
+  color: var(--text-3);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.tyredeg-rejoin {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s3);
+  color: var(--text-2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tyredeg-rejoin-between {
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+@media (max-width: 640px) {
+  .tyredeg-rejoin-between { display: none; }
+  .tyredeg-slope { min-width: 0; }
+}
