@@ -12,6 +12,9 @@ import {
   tyreLabel,
 } from '../../lib/live'
 import type { GapHistoryMap } from '../../lib/gapHistory'
+import { parseIntervalSeconds } from '../../lib/gapHistory'
+import { intervalMeaning } from '../../lib/meaning'
+import { Meaning } from '../Meaning'
 import { GapSparkline } from './GapSparkline'
 import { StintHistory } from './StintHistory'
 import { Pin } from 'lucide-react'
@@ -100,7 +103,11 @@ export function TimingTower({
             const showCutoffAfter = row.Position === sessionDisplay.cutoffPosition
 
             const gapText = gapMode === 'interval' && isRace ? (driver.Interval || driver.GapToLeader) : driver.GapToLeader
-            
+            const intervalAnnotation =
+              gapMode === 'interval' && isRace && row.Position > 1
+                ? intervalMeaning(parseIntervalSeconds(gapText))
+                : null
+
             const renderSector = (idx: number) => {
               const sec = driver.Sectors?.[idx]
               if (!sec) return '-'
@@ -149,7 +156,14 @@ export function TimingTower({
                   <td className={driver.LastLapOB ? 'mono lap-ob' : driver.LastLapPB ? 'mono lap-pb' : 'mono'}>
                     {driver.LastLapTime || '-'}
                   </td>
-                  <td className="mono">{gapText || '-'}</td>
+                  <td className="mono">
+                    <Meaning
+                      value={gapText || '-'}
+                      meaning={intervalAnnotation?.caption}
+                      title={intervalAnnotation?.title}
+                      tone={intervalAnnotation?.tone}
+                    />
+                  </td>
                   
                   {isRace && (
                     <td className="spark-cell">

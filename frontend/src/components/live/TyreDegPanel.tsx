@@ -13,6 +13,8 @@ import {
   recordStintSamples,
   stintInputFromRow,
 } from '../../lib/tyredeg'
+import { tyreAgeMeaning } from '../../lib/meaning'
+import { Meaning } from '../Meaning'
 import '../../styles/tyredeg.css'
 
 const TOP_DRIVER_COUNT = 10
@@ -92,12 +94,20 @@ export function TyreDegPanel({ rows, sessionType, pinned }: Props) {
           {visible.map((row) => {
             const model = degradationModel(stints[row.RacingNumber]?.samples ?? [])
             const rejoin = isRace ? estimatePitRejoin(rows, row.RacingNumber) : null
+            const ageAnnotation = tyreAgeMeaning(row.Tyre?.Compound, row.Tyre?.Age)
             return (
               <div className="tyredeg-row" key={row.RacingNumber} data-testid="tyredeg-row">
                 <span className="tyredeg-pos mono">P{row.Position}</span>
                 <span className="drv-bar" style={{ background: teamColor(row.Info?.TeamColour) }} />
                 <span className="drv-code">{driverCode(row)}</span>
-                <span className={`tyre-badge ${compoundClass(row.Tyre?.Compound)}`}>{tyreLabel(row.Tyre)}</span>
+                <span className={`tyre-badge ${compoundClass(row.Tyre?.Compound)}`}>
+                  <Meaning
+                    value={tyreLabel(row.Tyre)}
+                    meaning={ageAnnotation?.caption}
+                    title={ageAnnotation?.title}
+                    tone={ageAnnotation?.tone}
+                  />
+                </span>
                 {model ? (
                   <>
                     <span className={`tyredeg-trend tyredeg-trend-${model.trend}`}>

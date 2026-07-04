@@ -4,6 +4,8 @@ import { fetchChampionshipHub, fetchSeasons } from '../api'
 import { teamColor } from '../utils'
 import type { ChampHubDriver, ChampionshipHub } from '../types'
 import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
+import { Meaning } from '../components/Meaning'
+import { pointsGapMeaning } from '../lib/meaning'
 
 type View = 'drivers' | 'constructors' | 'progression' | 'simulator'
 
@@ -138,6 +140,8 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           color: teamColor(d.team_colour),
           gapLeader: i === 0 ? 'LEADER' : `+${fmtPts(gapLeaderNum)}`,
           gapAhead: gapAheadNum == null ? '—' : `+${fmtPts(gapAheadNum)}`,
+          gapAheadNum,
+          driverAhead: i === 0 ? null : drivers[i - 1].name_acronym,
           spark: sparkPoints(d.form),
           h2h: `${d.teammate_wins}–${d.teammate_losses}`,
           h2hWin: d.teammate_wins >= d.teammate_losses,
@@ -233,7 +237,12 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
       </div>
 
       {view === 'drivers' && (
-        <DriversView enriched={enriched} leaderPoints={leader.points} titleMath={titleMath} />
+        <DriversView
+          enriched={enriched}
+          leaderPoints={leader.points}
+          titleMath={titleMath}
+          roundsLeft={hub.rounds_left}
+        />
       )}
       {view === 'constructors' && <ConstructorsView hub={hub} />}
       {view === 'progression' && <ProgressionView hub={hub} />}
@@ -248,6 +257,8 @@ interface EnrichedDriver {
   color: string
   gapLeader: string
   gapAhead: string
+  gapAheadNum: number | null
+  driverAhead: string | null
   spark: string
   h2h: string
   h2hWin: boolean
@@ -259,10 +270,12 @@ function DriversView({
   enriched,
   leaderPoints,
   titleMath,
+  roundsLeft,
 }: {
   enriched: EnrichedDriver[]
   leaderPoints: number
   titleMath: string
+  roundsLeft: number
 }) {
   const podium = enriched.slice(0, 3)
   return (
@@ -357,7 +370,19 @@ function DriversView({
                 <td className="champ-td-team">{e.d.team_name}</td>
                 <td className="r mono champ-td-pts">{fmtPts(e.d.points)}</td>
                 <td className="r mono champ-td-muted">{e.gapLeader}</td>
-                <td className="r mono champ-td-dim">{e.gapAhead}</td>
+                <td className="r mono champ-td-dim">
+                  {(() => {
+                    const gapAnnotation = pointsGapMeaning(e.gapAheadNum, roundsLeft, e.driverAhead)
+                    return (
+                      <Meaning
+                        value={e.gapAhead}
+                        meaning={gapAnnotation?.caption}
+                        title={gapAnnotation?.title}
+                        tone={gapAnnotation?.tone}
+                      />
+                    )
+                  })()}
+                </td>
                 <td className="c mono" style={{ color: e.d.wins > 0 ? 'var(--text)' : 'var(--text-3)' }}>
                   {e.d.wins}
                 </td>

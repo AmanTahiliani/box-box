@@ -189,6 +189,26 @@ describe('TimingTower', () => {
     expect(screen.getByText(/no driver timing rows/i)).toBeInTheDocument()
   })
 
+  it('annotates DRS-range intervals in race mode', () => {
+    const raceRows = [
+      makeRow('1', 1, 'VER'),
+      makeRow('4', 2, 'NOR', { Interval: '+0.4', GapToLeader: '+0.4' }),
+    ]
+    render(
+      <TimingTower
+        rows={raceRows}
+        session={{
+          MeetingName: 'Monaco Grand Prix',
+          CircuitName: 'Monaco',
+          SessionType: 'Race',
+          SessionName: 'Race',
+          Path: '',
+        }}
+      />,
+    )
+    expect(screen.getByText('DRS range')).toBeInTheDocument()
+  })
+
   it('renders the SQ1 cutoff after P17 and marks rows below as at risk', () => {
     const sprintRows = Array.from({ length: 22 }, (_, index) =>
       makeRow(String(index + 1), index + 1, `D${index + 1}`),

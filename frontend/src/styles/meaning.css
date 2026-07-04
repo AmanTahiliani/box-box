@@ -1,0 +1,48 @@
+/* Compact value + muted meaning caption (issue #18). */
+
+.meaning {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: inherit;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.meaning-value {
+  /* inherits table cell mono styling from parent */
+}
+
+.meaning-caption {
+  font-size: 10px;
+  font-family: var(--f-mono);
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.meaning-caption--good {
+  color: var(--green);
+}
+
+.meaning-caption--bad {
+  color: var(--red);
+}
+
+.meaning-caption--warn {
+  color: var(--yellow, #e8c547);
+}
+
+.meaning-caption--neutral {
+  color: var(--text-3);
+}
+
+/* Table cells: right-align caption under numeric values */
+td.r .meaning,
+.champ-td-dim .meaning,
+.champ-td-muted .meaning {
+  align-items: flex-end;
+}
+
+.tyredeg-row .meaning {
+  align-items: flex-start;
+}
