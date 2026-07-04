@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"sort"
 	"strings"
 	"time"
 )
@@ -23,6 +25,7 @@ type State struct {
 	RCMessages         []LiveRCMessage
 	Weather            LiveWeatherData
 	Session            LiveSessionMeta
+	TeamRadio          []LiveRadioCapture
 	TrackStatus        string
 	CurrentLap         int
 	TotalLaps          int
@@ -34,6 +37,7 @@ type State struct {
 }
 
 const signalRRecordSeparator = byte(0x1e)
+const maxTeamRadioCaptures = 20
 
 // NewState returns an empty live timing accumulator.
 func NewState() *State {
@@ -71,6 +75,8 @@ func (s *State) Snapshot() LiveStreamData {
 	}
 	cpyRC := make([]LiveRCMessage, len(s.RCMessages))
 	copy(cpyRC, s.RCMessages)
+	cpyRadio := make([]LiveRadioCapture, len(s.TeamRadio))
+	copy(cpyRadio, s.TeamRadio)
 	cpyStints := make(map[string][]LiveStintData, len(s.Stints))
 	for k, v := range s.Stints {
 		st := make([]LiveStintData, len(v))
@@ -86,6 +92,7 @@ func (s *State) Snapshot() LiveStreamData {
 		RCMessages:         cpyRC,
 		Weather:            s.Weather,
 		Session:            s.Session,
+		TeamRadio:          cpyRadio,
 		TrackStatus:        s.TrackStatus,
 		CurrentLap:         s.CurrentLap,
 		TotalLaps:          s.TotalLaps,
@@ -335,6 +342,7 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 			} `json:"Meeting"`
 			Name string `json:"Name"`
 			Type string `json:"Type"`
+			Path string `json:"Path"`
 		}
 		if json.Unmarshal(data, &si) == nil {
 			if si.Meeting.Name != "" {
@@ -349,8 +357,13 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 			if si.Type != "" {
 				s.Session.SessionType = si.Type
 			}
+			if si.Path != "" {
+				s.Session.Path = si.Path
+			}
 			updated = true
 		}
+	case "TeamRadio":
+		updated = s.updateTeamRadio(data)
 	case "CurrentTyres":
 		var ct map[string]json.RawMessage
 		if json.Unmarshal(data, &ct) == nil {
@@ -481,6 +494,62 @@ func readCompressed(r io.ReadCloser, err error) ([]byte, bool) {
 	defer r.Close()
 	out, err := io.ReadAll(r)
 	return out, err == nil
+}
+
+func (s *State) updateTeamRadio(data json.RawMessage) bool {
+	var payload struct {
+		Captures json.RawMessage `json:"Captures"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		log.Printf("live: skipping malformed TeamRadio payload: %v", err)
+		return false
+	}
+	if len(payload.Captures) == 0 || string(payload.Captures) == "null" {
+		log.Printf("live: skipping TeamRadio payload without Captures")
+		return false
+	}
+
+	captures := indexedRawValues(payload.Captures)
+	if len(captures) == 0 {
+		log.Printf("live: skipping TeamRadio payload with unexpected Captures shape")
+		return false
+	}
+
+	updated := false
+	for _, captureRaw := range captures {
+		var capture LiveRadioCapture
+		if err := json.Unmarshal(captureRaw.Raw, &capture); err != nil {
+			log.Printf("live: skipping malformed TeamRadio capture: %v", err)
+			continue
+		}
+		if capture.Utc == "" || capture.RacingNumber == "" || capture.Path == "" {
+			log.Printf("live: skipping incomplete TeamRadio capture: utc=%q racing_number=%q path=%q", capture.Utc, capture.RacingNumber, capture.Path)
+			continue
+		}
+		if s.hasTeamRadioCapture(capture) {
+			continue
+		}
+		s.TeamRadio = append(s.TeamRadio, capture)
+		updated = true
+	}
+	if updated {
+		sort.SliceStable(s.TeamRadio, func(i, j int) bool {
+			return s.TeamRadio[i].Utc < s.TeamRadio[j].Utc
+		})
+		if len(s.TeamRadio) > maxTeamRadioCaptures {
+			s.TeamRadio = append([]LiveRadioCapture(nil), s.TeamRadio[len(s.TeamRadio)-maxTeamRadioCaptures:]...)
+		}
+	}
+	return updated
+}
+
+func (s *State) hasTeamRadioCapture(capture LiveRadioCapture) bool {
+	for _, existing := range s.TeamRadio {
+		if existing.Utc == capture.Utc && existing.RacingNumber == capture.RacingNumber && existing.Path == capture.Path {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) updatePositions(data json.RawMessage) bool {
@@ -799,6 +868,9 @@ func indexedRawValues(raw json.RawMessage) []indexedRaw {
 			fmt.Sscanf(k, "%d", &i)
 			values = append(values, indexedRaw{Index: i, Raw: v})
 		}
+		sort.Slice(values, func(i, j int) bool {
+			return values[i].Index < values[j].Index
+		})
 		return values
 	}
 

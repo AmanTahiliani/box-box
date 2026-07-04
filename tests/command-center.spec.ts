@@ -9,7 +9,7 @@ test.describe('Command Center', () => {
     await expect(page.getByTestId('command-center')).toBeVisible()
     await expect(page.getByTestId('cc-focus')).toBeVisible()
     await expect(page.getByTestId('cc-session-9472')).toBeVisible()
-    await expect(page.getByTestId('cc-actions')).toBeVisible()
+    await expect(page.getByTestId('hero-last-race-link')).toBeVisible()
   })
 
   test('nav link reaches command center from race hub', async ({ page }) => {
@@ -21,8 +21,8 @@ test.describe('Command Center', () => {
 
   test('open analysis action opens race hub for the focus session', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByTestId('cc-action-race-hub')).toContainText(String(FULL_SESSION))
-    await page.getByTestId('cc-action-race-hub').click()
+    await expect(page.getByTestId('hero-last-race-link')).toBeVisible()
+    await page.getByTestId('hero-last-race-link').click()
     await expect(page).toHaveURL(new RegExp(`/race-hub\\?session_key=${FULL_SESSION}`))
     await expect(page.getByTestId('rh-identity')).toBeVisible()
     await expect(page.getByTestId(`rh-session-${FULL_SESSION}`)).toBeVisible()

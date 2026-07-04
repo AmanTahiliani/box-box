@@ -112,6 +112,7 @@ describe('ChampionshipPage', () => {
     expect(screen.getAllByText('VER').length).toBeGreaterThan(0)
     expect(screen.getByText('Monaco GP', { exact: false })).toBeInTheDocument()
     expect(screen.getByTestId('champ-titlemath')).toHaveTextContent('mathematically win the title')
+    expect(screen.getAllByText('~10 pts/round').length).toBeGreaterThan(0)
   })
 
   it('switches to constructors and progression views', async () => {

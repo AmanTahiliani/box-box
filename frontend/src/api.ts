@@ -1,6 +1,8 @@
 import type {
   ArticleContent,
+  CarDataSample,
   ChampionshipHub,
+  LapsComparisonResponse,
   LiveStateResponse,
   LiveSessionMeta,
   Meeting,
@@ -125,4 +127,33 @@ export async function markNewsRead(articleUrl: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url: articleUrl }),
   })
+}
+
+export async function fetchTelemetry(
+  sessionKey: number,
+  driverNumber: number,
+): Promise<CarDataSample[]> {
+  const res = await fetch(
+    `/api/v1/telemetry?session_key=${sessionKey}&driver_number=${driverNumber}`,
+  )
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
+export async function fetchLapsComparison(
+  sessionKey: number,
+  drivers?: number[],
+): Promise<LapsComparisonResponse> {
+  const params = new URLSearchParams({ session_key: String(sessionKey) })
+  if (drivers?.length) {
+    params.set('drivers', drivers.join(','))
+  }
+  const res = await fetch(`/api/v1/laps/comparison?${params}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
 }

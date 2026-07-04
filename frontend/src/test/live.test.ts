@@ -100,7 +100,8 @@ const snapshot: LiveStreamData = {
     { Time: '14:08', Category: 'Drs', Flag: '', Message: 'DRS ENABLED', Lap: 3 },
   ],
   Weather: { AirTemp: 20, TrackTemp: 31, Humidity: 55, WindSpeed: 2, WindDir: 180, Rainfall: false },
-  Session: { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Race', SessionName: 'Race' },
+  Session: { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Race', SessionName: 'Race', Path: '2026/Monaco/Race' },
+  TeamRadio: [],
   TrackStatus: '1',
   CurrentLap: 21,
   TotalLaps: 78,
@@ -220,7 +221,7 @@ describe('track status mapping', () => {
 describe('live qualifying display', () => {
   it('puts the SQ1 cutoff after P17 for a 22-car sprint qualifying session', () => {
     const display = liveSessionDisplay(
-      { MeetingName: 'British Grand Prix', CircuitName: 'Silverstone', SessionType: 'Sprint Qualifying', SessionName: 'Sprint Qualifying' },
+      { MeetingName: 'British Grand Prix', CircuitName: 'Silverstone', SessionType: 'Sprint Qualifying', SessionName: 'Sprint Qualifying', Path: '' },
       rows(22),
     )
     expect(display.phaseLabel).toBe('SQ1')
@@ -232,7 +233,7 @@ describe('live qualifying display', () => {
 
   it('keeps the normal Q1 cutoff after P15 for a 20-car qualifying session', () => {
     const display = liveSessionDisplay(
-      { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Qualifying', SessionName: 'Qualifying' },
+      { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Qualifying', SessionName: 'Qualifying', Path: '' },
       rows(20),
     )
     expect(display.phaseLabel).toBe('Q1')
@@ -241,7 +242,7 @@ describe('live qualifying display', () => {
 
   it('moves phase 2 cutoff after P10 once five cars are knocked out', () => {
     const display = liveSessionDisplay(
-      { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Qualifying', SessionName: 'Qualifying' },
+      { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Qualifying', SessionName: 'Qualifying', Path: '' },
       rows(20, 5),
     )
     expect(display.phaseLabel).toBe('Q2')
@@ -251,13 +252,13 @@ describe('live qualifying display', () => {
   it('shows no cutoff for race sessions or Q3', () => {
     expect(
       liveSessionDisplay(
-        { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Race', SessionName: 'Race' },
+        { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Race', SessionName: 'Race', Path: '' },
         rows(20),
       ).cutoffPosition,
     ).toBeNull()
     expect(
       liveSessionDisplay(
-        { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Qualifying', SessionName: 'Q3' },
+        { MeetingName: 'Monaco Grand Prix', CircuitName: 'Monaco', SessionType: 'Qualifying', SessionName: 'Q3', Path: '' },
         rows(10),
       ).cutoffPosition,
     ).toBeNull()

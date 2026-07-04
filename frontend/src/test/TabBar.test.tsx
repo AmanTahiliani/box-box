@@ -8,6 +8,7 @@ describe('TabBar', () => {
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Race Story' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Strategy' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Compare' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Lap Data' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Conditions' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Race Control' })).toBeInTheDocument()
