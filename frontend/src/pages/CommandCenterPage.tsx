@@ -1,37 +1,37 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { fetchLiveState, fetchLocalMeetings, fetchSeasonMeetings, fetchSeasons, fetchSessions, fetchWeekend, fetchChampionshipHub } from '../api'
+import {
+  fetchChampionshipHub,
+  fetchLiveState,
+  fetchLocalMeetings,
+  fetchRaceHub,
+  fetchSeasonMeetings,
+  fetchSeasons,
+  fetchSessions,
+  fetchWeekend,
+} from '../api'
+import { CommandCenterHero } from '../components/CommandCenterHero'
+import { PaddockBriefing } from '../components/PaddockBriefing'
 import { RACE_HUB_DATASETS, countWeekendStats, formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
+import { countryAccent, countryDecal, countryFlag, formatGpDateRange } from '../lib/gpIdentity'
+import { classifySessionStatus, heroState } from '../lib/hero'
 import {
   currentAndNextSession,
   focusMeetingKind,
-  formatCountdown,
   formatSessionScheduleTime,
   meetingHasStarted,
+  mostRecentPastMeeting,
+  nextUpcomingMeeting,
   pickFocusMeeting,
-  sessionEndTime,
-  sessionStartTime,
   sortSessionsByStart,
 } from '../lib/schedule'
-import { countryAccent, countryDecal, countryFlag, formatGpDateRange } from '../lib/gpIdentity'
 import type { Meeting, Session, Weekend, WeekendSession } from '../types'
-import { PaddockBriefing } from '../components/PaddockBriefing'
-import { Play, Activity, Calendar, Trophy } from 'lucide-react'
-
-type WeekendStatusKind = 'live' | 'current' | 'next' | 'recent' | 'fallback'
+import { Trophy } from 'lucide-react'
 
 const missingDatasets = Object.fromEntries(
   RACE_HUB_DATASETS.map((dataset) => [dataset, { status: 'missing', source: 'none', count: 0 }]),
 ) as WeekendSession['datasets']
-
-function classifySessionStatus(session: Session, now: Date): 'live' | 'done' | 'upcoming' {
-  const start = sessionStartTime(session)
-  const end = sessionEndTime(session)
-  if (start && end && now >= start && now < end) return 'live'
-  if (start && now >= start) return 'done'
-  return 'upcoming'
-}
 
 function meetingStatus(meeting: Meeting, focusKey: number | undefined, now: Date) {
   if (meeting.meeting_key === focusKey) return 'focus'
@@ -148,7 +148,36 @@ export function CommandCenterPage() {
     focusWeekendSessions[0]?.session
   const analysisSessionKey = actionSession?.session_key
 
-  const weekendsLoading = weekendQueries.some((q) => q.isLoading)
+  const liveActive = liveQuery.data?.is_live === true
+  const heroStateKind = heroState({
+    now: nowDate,
+    liveActive,
+    currentSession,
+    focusKind,
+  })
+
+  const lastPastMeeting = useMemo(
+    () => mostRecentPastMeeting(focusMeetings, nowDate),
+    [focusMeetings, nowDate],
+  )
+  const lastPastWeekend = lastPastMeeting ? weekendsByKey.get(lastPastMeeting.meeting_key) : undefined
+  const lastRaceAnalysis = pickAnalysisSession(lastPastWeekend)
+  const lastRaceSessionKey = lastRaceAnalysis?.session.session_key
+
+  const lastRaceHubQuery = useQuery({
+    queryKey: ['race-hub', lastRaceSessionKey, 'hero-podium'],
+    queryFn: () => fetchRaceHub(lastRaceSessionKey!),
+    enabled: lastRaceSessionKey != null && heroStateKind === 'between',
+    staleTime: 60_000,
+  })
+
+  const nextMeetingForHero = useMemo(() => {
+    if (heroStateKind !== 'between') return null
+    return nextUpcomingMeeting(focusMeetings, nowDate)
+  }, [heroStateKind, focusMeetings, nowDate])
+
+  const lastRacePodium = lastRaceHubQuery.data?.results ?? []
+  const lastRaceName = champHub?.last_race ?? lastPastMeeting?.meeting_name ?? ''
 
   if (seasonsQuery.isLoading) {
     return <div className="page loading-state">loading command center…</div>
@@ -189,19 +218,7 @@ export function CommandCenterPage() {
     )
   }
 
-  const liveActive = liveQuery.data?.is_live === true
-  const statusKind: WeekendStatusKind = liveActive
-    ? 'live'
-    : focusKind === 'current'
-      ? 'current'
-      : focusKind === 'next'
-        ? 'next'
-        : focusKind === 'recent'
-          ? 'recent'
-          : 'fallback'
-
   const accent = countryAccent(focusMeeting ?? null)
-  const decal = countryDecal(focusMeeting ?? null)
   const accentStyle = { '--gp-accent': accent } as React.CSSProperties
 
   return (
@@ -224,76 +241,25 @@ export function CommandCenterPage() {
         </div>
       )}
 
-      {focusMeeting && (
-        <div className="cc-hero">
-          <section className="cc-weekend-band ui-card glass-panel" data-testid="cc-focus">
-            <div className="cc-band-accent" aria-hidden="true" />
-            <div className="cc-band-body">
-              <div className="cc-band-row">
-                <span className="cc-band-decal mono">{decal}</span>
-                <div className="cc-band-titles">
-                  <div className="cc-band-eyebrow mono">
-                    <WeekendKindLabel kind={statusKind} />
-                  </div>
-                  <h1 className="cc-band-name">{focusMeeting.meeting_name}</h1>
-                  <div className="cc-band-sub mono">
-                    {[focusMeeting.location, focusMeeting.circuit_short_name]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </div>
-                  <div className="cc-band-sub mono cc-band-dates">{formatGpDateRange(focusMeeting)}</div>
-                </div>
-                <CountdownBlock
-                  liveActive={liveActive}
-                  currentSession={currentSession}
-                  nextSession={nextSession}
-                  meeting={focusMeeting}
-                  now={nowDate}
-                />
-              </div>
-            </div>
-          </section>
-
-          <div className="cc-actions-row" data-testid="cc-actions">
-            <Link
-              to="/live"
-              className={`cc-pri-action ui-card interactive ${liveActive ? 'is-live ui-cta-primary' : ''}`}
-              data-testid="cc-action-live"
-            >
-              <span className="cc-pri-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Play size={16} /> Watch Live</span>
-              <span className="cc-pri-meta mono">{liveActive ? 'Feed active' : 'Standby'}</span>
-            </Link>
-            <Link
-              to="/race-hub"
-              search={analysisSessionKey ? { session_key: analysisSessionKey } : {}}
-              className="cc-pri-action ui-card interactive"
-              data-testid="cc-action-race-hub"
-            >
-              <span className="cc-pri-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Activity size={16} /> Open Analysis</span>
-              <span className="cc-pri-meta mono">
-                {actionSession
-                  ? `${actionSession.session_name} · session ${actionSession.session_key}`
-                  : 'Pick a session'}
-              </span>
-            </Link>
-            {nextSession && sessionStartTime(nextSession) && (
-              <a
-                href="#cc-schedule"
-                className="cc-pri-action ui-card interactive"
-                data-testid="cc-action-schedule"
-                onClick={(e) => {
-                  e.preventDefault()
-                  document.getElementById('cc-schedule')?.scrollIntoView({ behavior: 'smooth' })
-                }}
-              >
-                <span className="cc-pri-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={16} /> Schedule</span>
-                <span className="cc-pri-meta mono">
-                  next: {nextSession.session_name}
-                </span>
-              </a>
-            )}
-          </div>
-        </div>
+      {focusMeeting && focusKind && (
+        <CommandCenterHero
+          state={heroStateKind}
+          now={nowDate}
+          accent={accent}
+          liveActive={liveActive}
+          liveData={liveQuery.data?.data}
+          focusMeeting={focusMeeting}
+          focusKind={focusKind}
+          sessions={focusWeekendSessions}
+          currentSession={currentSession}
+          nextSession={nextSession}
+          analysisSessionKey={analysisSessionKey}
+          analysisSessionName={actionSession?.session_name}
+          lastRaceName={lastRaceName}
+          lastRacePodium={lastRacePodium}
+          lastRaceSessionKey={lastRaceSessionKey}
+          nextMeeting={nextMeetingForHero}
+        />
       )}
 
       <div className="cc-dashboard-grid">
@@ -483,65 +449,3 @@ function FormSparkline({ form, color }: { form: number[], color: string }) {
   )
 }
 
-function WeekendKindLabel({ kind }: { kind: WeekendStatusKind }) {
-  switch (kind) {
-    case 'live':
-      return <span className="cc-kind cc-kind-live">● Live now</span>
-    case 'current':
-      return <span className="cc-kind cc-kind-current">Current weekend</span>
-    case 'next':
-      return <span className="cc-kind cc-kind-next">Next weekend</span>
-    case 'recent':
-      return <span className="cc-kind cc-kind-recent">Recent weekend</span>
-    default:
-      return <span className="cc-kind">Weekend</span>
-  }
-}
-
-interface CountdownBlockProps {
-  liveActive: boolean
-  currentSession: Session | null
-  nextSession: Session | null
-  meeting: Meeting
-  now: Date
-}
-
-function CountdownBlock({ liveActive, currentSession, nextSession, meeting, now }: CountdownBlockProps) {
-  if (liveActive) {
-    return (
-      <div className="cc-countdown-block">
-        <div className="cc-cd-label mono">SignalR</div>
-        <div className="cc-cd-value cc-cd-live">LIVE</div>
-        <div className="cc-cd-sub mono">{currentSession?.session_name ?? 'Feed connected'}</div>
-      </div>
-    )
-  }
-  if (currentSession) {
-    return (
-      <div className="cc-countdown-block">
-        <div className="cc-cd-label mono">On Track</div>
-        <div className="cc-cd-value cc-cd-current">{currentSession.session_name}</div>
-        <div className="cc-cd-sub mono">In session</div>
-      </div>
-    )
-  }
-  if (nextSession && sessionStartTime(nextSession)) {
-    return (
-      <div className="cc-countdown-block">
-        <div className="cc-cd-label mono">Next · {nextSession.session_name}</div>
-        <div className="cc-cd-value mono">{formatCountdown(sessionStartTime(nextSession)!, now)}</div>
-        <div className="cc-cd-sub mono">{formatSessionScheduleTime(nextSession.date_start)}</div>
-      </div>
-    )
-  }
-  if (meetingHasStarted(meeting, now)) {
-    return (
-      <div className="cc-countdown-block">
-        <div className="cc-cd-label mono">Status</div>
-        <div className="cc-cd-value cc-cd-done">Complete</div>
-        <div className="cc-cd-sub mono">Weekend finished</div>
-      </div>
-    )
-  }
-  return null
-}

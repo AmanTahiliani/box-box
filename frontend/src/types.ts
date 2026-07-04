@@ -261,12 +261,19 @@ export interface LiveSessionMeta {
   CircuitName: string
   SessionType: string
   SessionName: string
+  Path: string
 }
 
 export interface LiveStintData {
   Compound: string
   New: boolean
   Laps: number
+}
+
+export interface LiveRadioCapture {
+  Utc: string
+  RacingNumber: string
+  Path: string
 }
 
 export interface LiveStreamData {
@@ -277,6 +284,7 @@ export interface LiveStreamData {
   RCMessages: LiveRCMessage[]
   Weather: LiveWeatherData
   Session: LiveSessionMeta
+  TeamRadio: LiveRadioCapture[]
   TrackStatus: string
   CurrentLap: number
   TotalLaps: number

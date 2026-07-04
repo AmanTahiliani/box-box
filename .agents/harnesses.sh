@@ -31,11 +31,13 @@ harness_cursor() {                      # Cursor CLI agent — composer-2.5, hea
   ( cd "$dir" && cursor-agent -p "$(cat "$prompt")" --model composer-2.5 --force --trust )
 }
 
-harness_agy() {                         # Antigravity CLI — Gemini 3.1 Pro, headless full-auto
-  # --new-project is required for --model to take effect (otherwise agy resumes the
-  # previous conversation and silently keeps its old model).
+harness_agy() {                         # Antigravity CLI — UNRELIABLE headless (2026-07): with
+  # --new-project it ignores the prompt and asks to scaffold a project; without it, it
+  # resumes the previous conversation (silently keeping its old model — --model only
+  # applies to new conversations) and can hang past the print timeout. Do not trust for
+  # dispatch until fixed upstream; verify with a trivial prompt first.
   local dir="$1" prompt="$2"
-  ( cd "$dir" && agy --print --new-project --print-timeout 60m \
+  ( cd "$dir" && agy --print --print-timeout 60m \
       --model="Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$(cat "$prompt")" )
 }
 
