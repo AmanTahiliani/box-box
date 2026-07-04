@@ -12,7 +12,7 @@ interface Props {
   hasStints: boolean
 }
 
-export function StrategyView({ results, stints, pit_stops: _pitStops, hasStints }: Props) {
+export function StrategyView({ results, stints, pit_stops, hasStints }: Props) {
   if (!hasStints) {
     return (
       <div>
@@ -88,6 +88,10 @@ export function StrategyView({ results, stints, pit_stops: _pitStops, hasStints 
         lapEnd: s.lap_end,
         isNew: s.tyre_age_at_start === 0,
       })),
+    pitStops: pit_stops
+      .filter((p) => p.driver_number === driver.driver_number)
+      .map((p) => p.lap_number)
+      .sort((a, b) => a - b),
   }))
 
   return (

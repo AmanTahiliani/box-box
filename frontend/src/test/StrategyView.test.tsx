@@ -106,6 +106,17 @@ describe('StrategyView — stints available', () => {
     )
     expect(screen.queryByText(/Stints not available/i)).not.toBeInTheDocument()
   })
+
+  it('maps pit_stops into timeline pit markers for the matching driver', () => {
+    const { container } = render(
+      <StrategyView results={results} stints={stints} pit_stops={pitStops} hasStints={true} />
+    )
+    const markers = container.querySelectorAll('[data-testid="pit-marker"]')
+    expect(markers).toHaveLength(1)
+    expect(markers[0]).toHaveAttribute('data-lap', '19')
+    const titles = [...container.querySelectorAll('title')].map((t) => t.textContent)
+    expect(titles).toContain('HAM pit stop · L19')
+  })
 })
 
 describe('StrategyView — stints missing', () => {
