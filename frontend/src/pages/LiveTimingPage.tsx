@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchLiveState, fetchLiveTrackOutline } from '../api'
 import type { LivePosition, LiveStreamData } from '../types'
@@ -15,12 +15,15 @@ import type { VisibleSectorState } from '../lib/live'
 import type { GapHistoryMap } from '../lib/gapHistory'
 import { recordGapSamples } from '../lib/gapHistory'
 import { battleNumbers, detectBattles } from '../lib/battles'
+import type { LiveEvent } from '../lib/events'
+import { appendEvents, diffSnapshots, sessionSignature } from '../lib/events'
 import { SessionBanner } from '../components/live/SessionBanner'
 import { TrackStatusBanner } from '../components/live/TrackStatusBanner'
 import { TimingTower } from '../components/live/TimingTower'
 import { BattleChips } from '../components/live/BattleChips'
 import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
+import { EventRail } from '../components/live/EventRail'
 import { TrackMap } from '../components/live/TrackMap'
 import { Radio } from 'lucide-react'
 
@@ -35,6 +38,9 @@ export function LiveTimingPage() {
   const [pinned, setPinned] = useState<string[]>(() => loadPinnedDrivers())
   const [visibleSectors, setVisibleSectors] = useState<VisibleSectorState>({})
   const [positions, setPositions] = useState<Record<string, LivePosition>>({})
+  const [events, setEvents] = useState<LiveEvent[]>([])
+  const prevSnapshotRef = useRef<LiveStreamData | null>(null)
+  const sessionSigRef = useRef('')
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['live-state'],
@@ -111,6 +117,23 @@ export function LiveTimingPage() {
       events.close()
     }
   }, [])
+
+  // Synthesize "what just happened" events from successive snapshots; the
+  // buffer resets whenever a different session starts streaming.
+  useEffect(() => {
+    if (!snapshot) return
+    const signature = sessionSignature(snapshot.Session)
+    const prev = prevSnapshotRef.current
+    prevSnapshotRef.current = snapshot
+    if (signature !== sessionSigRef.current) {
+      sessionSigRef.current = signature
+      setEvents([])
+      return
+    }
+    if (!prev || prev === snapshot) return
+    const fresh = diffSnapshots(prev, snapshot)
+    if (fresh.length > 0) setEvents((current) => appendEvents(current, fresh))
+  }, [snapshot])
 
   const rawRows = useMemo(() => sortLiveTimingRows(snapshot), [snapshot])
 
@@ -212,6 +235,7 @@ export function LiveTimingPage() {
             </div>
             <div className="live-rc-col">
               <RaceControlFeed messages={snapshot.RCMessages ?? []} driverInfo={snapshot.DriverInfo} />
+              <EventRail events={events} driverInfo={snapshot.DriverInfo} />
             </div>
           </div>
         </>
