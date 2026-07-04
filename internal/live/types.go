@@ -162,6 +162,7 @@ type LiveStreamData struct {
 	Weather            LiveWeatherData
 	Session            LiveSessionMeta
 	TeamRadio          []LiveRadioCapture
+	SessionStatus      string
 	TrackStatus        string // "1"=green "2"=yellow "4"=SC "5"=red "6"=VSC
 	CurrentLap         int
 	TotalLaps          int
@@ -172,4 +173,28 @@ type LiveStreamData struct {
 	Positions          map[string]LivePositionData `json:"-"`
 	PositionUpdated    bool                        `json:"-"`
 	SnapshotUpdated    bool                        `json:"-"`
+}
+
+// SessionStatusIsActive reports whether a raw F1 live timing SessionStatus
+// value represents an actively running session.
+func SessionStatusIsActive(status string) bool {
+	switch normalizeSessionStatus(status) {
+	case "started", "resumed":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeSessionStatus(status string) string {
+	out := make([]rune, 0, len(status))
+	for _, r := range status {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			out = append(out, r+'a'-'A')
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			out = append(out, r)
+		}
+	}
+	return string(out)
 }

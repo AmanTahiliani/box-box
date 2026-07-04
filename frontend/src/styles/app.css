@@ -808,11 +808,40 @@ a { color: inherit; text-decoration: none; }
   color: var(--yellow);
 }
 
+.live-status-archive {
+  background: rgba(70, 140, 255, 0.08);
+  border: 1px solid rgba(70, 140, 255, 0.24);
+  color: #8bb7ff;
+}
+
 /* ── Live empty state ── */
 .live-empty-status {
   display: flex;
   justify-content: center;
   margin-bottom: var(--s4);
+}
+
+.live-archive-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  margin-top: var(--s5);
+  min-height: 36px;
+  padding: 0 var(--s4);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.live-archive-btn:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .mono { font-family: var(--f-mono); }

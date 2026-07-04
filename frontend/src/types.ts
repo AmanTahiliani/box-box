@@ -206,6 +206,9 @@ export interface Weekend {
 export interface LiveStateResponse {
   is_live: boolean
   data: LiveStreamData | null
+  last_snapshot?: LiveStreamData | null
+  last_positions?: Record<string, LivePosition> | null
+  last_snapshot_at?: string
 }
 
 export interface LivePosition {
@@ -316,6 +319,7 @@ export interface LiveStreamData {
   Weather: LiveWeatherData
   Session: LiveSessionMeta
   TeamRadio: LiveRadioCapture[]
+  SessionStatus?: string
   TrackStatus: string
   CurrentLap: number
   TotalLaps: number
