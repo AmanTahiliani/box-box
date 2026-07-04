@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CompareView } from '../components/CompareView'
 import type { Driver, EnrichedResult, LapsComparisonResponse } from '../types'
@@ -158,13 +158,89 @@ const comparison: LapsComparisonResponse = {
   ],
 }
 
-function renderCompareView() {
+const nextSessionResults: EnrichedResult[] = [
+  {
+    driver_number: 16,
+    position: 1,
+    name_acronym: 'LEC',
+    full_name: 'Charles Leclerc',
+    team_name: 'Ferrari',
+    team_colour: 'E8002D',
+    dnf: false,
+    dns: false,
+    dsq: false,
+    duration: null,
+    gap_to_leader: null,
+    number_of_laps: 57,
+    points: 25,
+    session_key: 9550,
+    meeting_key: 1234,
+  },
+  {
+    driver_number: 55,
+    position: 2,
+    name_acronym: 'SAI',
+    full_name: 'Carlos Sainz',
+    team_name: 'Williams',
+    team_colour: '64C4FF',
+    dnf: false,
+    dns: false,
+    dsq: false,
+    duration: null,
+    gap_to_leader: 3.2,
+    number_of_laps: 57,
+    points: 18,
+    session_key: 9550,
+    meeting_key: 1234,
+  },
+]
+
+const nextSessionDrivers: Driver[] = [
+  {
+    driver_number: 16,
+    name_acronym: 'LEC',
+    full_name: 'Charles Leclerc',
+    first_name: 'Charles',
+    last_name: 'Leclerc',
+    team_name: 'Ferrari',
+    team_colour: 'E8002D',
+    headshot_url: '',
+    broadcast_name: 'C LECLERC',
+    session_key: 9550,
+    meeting_key: 1234,
+  },
+  {
+    driver_number: 55,
+    name_acronym: 'SAI',
+    full_name: 'Carlos Sainz',
+    first_name: 'Carlos',
+    last_name: 'Sainz',
+    team_name: 'Williams',
+    team_colour: '64C4FF',
+    headshot_url: '',
+    broadcast_name: 'C SAINZ',
+    session_key: 9550,
+    meeting_key: 1234,
+  },
+]
+
+function renderCompareView(
+  props: {
+    sessionKey?: number
+    results?: EnrichedResult[]
+    drivers?: Driver[]
+  } = {},
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={client}>
-      <CompareView sessionKey={9472} results={results} drivers={drivers} />
+      <CompareView
+        sessionKey={props.sessionKey ?? 9472}
+        results={props.results ?? results}
+        drivers={props.drivers ?? drivers}
+      />
     </QueryClientProvider>,
   )
 }
@@ -303,6 +379,28 @@ describe('CompareView', () => {
     expect(screen.getByTestId('compare-picker-b')).toHaveValue('44')
     expect(screen.getAllByText('VER').length).toBeGreaterThan(0)
     expect(screen.getAllByText('HAM').length).toBeGreaterThan(0)
+  })
+
+  it('resets the selected pair when the mounted session changes', async () => {
+    const { rerender } = renderCompareView()
+
+    fireEvent.change(screen.getByTestId('compare-picker-a'), { target: { value: '44' } })
+    expect(screen.getByTestId('compare-picker-a')).toHaveValue('44')
+
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CompareView
+          sessionKey={9550}
+          results={nextSessionResults}
+          drivers={nextSessionDrivers}
+        />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('compare-picker-a')).toHaveValue('16')
+      expect(screen.getByTestId('compare-picker-b')).toHaveValue('55')
+    })
   })
 
   it('renders telemetry and pace sections with mocked queries', async () => {

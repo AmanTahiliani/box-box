@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchLapsComparison, fetchTelemetry } from '../api'
 import {
@@ -57,16 +57,23 @@ export function CompareView({ sessionKey, results, drivers }: Props) {
     [results, drivers],
   )
 
+  const previousSessionKey = useRef(sessionKey)
   const [driverA, setDriverA] = useState<number | null>(initialPair?.[0] ?? null)
   const [driverB, setDriverB] = useState<number | null>(initialPair?.[1] ?? null)
 
   useEffect(() => {
+    if (previousSessionKey.current !== sessionKey) {
+      previousSessionKey.current = sessionKey
+      setDriverA(initialPair?.[0] ?? null)
+      setDriverB(initialPair?.[1] ?? null)
+      return
+    }
+
     if (driverA != null && driverB != null) return
-    const pair = defaultCompareDriverNumbers(results, drivers)
-    if (!pair) return
-    setDriverA(pair[0])
-    setDriverB(pair[1])
-  }, [results, drivers, driverA, driverB])
+    if (!initialPair) return
+    setDriverA(initialPair[0])
+    setDriverB(initialPair[1])
+  }, [sessionKey, initialPair, driverA, driverB])
 
   const pair = useMemo((): [number, number] | null => {
     if (driverA == null || driverB == null || driverA === driverB) return null
