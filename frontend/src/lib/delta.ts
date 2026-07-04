@@ -21,15 +21,31 @@ export function formatDeltaSeconds(delta: number): string {
   return `${sign}${delta.toFixed(1)}s`
 }
 
-function buildCumulative(lapTimes: ReadonlyArray<number | null>): number[] {
+/**
+ * Cumulative lap time aligned to reference-valid laps only.
+ * Laps where the reference is null are skipped for every series so later deltas
+ * do not compare against a frozen baseline while challengers keep accumulating.
+ */
+function buildAlignedCumulative(
+  lapTimes: ReadonlyArray<number | null>,
+  referenceLapTimes: ReadonlyArray<number | null>,
+): number[] {
   const cumulative: number[] = []
   let running = 0
-  for (const lap of lapTimes) {
+  const length = Math.max(lapTimes.length, referenceLapTimes.length)
+
+  for (let i = 0; i < length; i++) {
+    if (referenceLapTimes[i] === null) {
+      cumulative.push(running)
+      continue
+    }
+    const lap = lapTimes[i]
     if (lap !== null) {
       running += lap
     }
     cumulative.push(running)
   }
+
   return cumulative
 }
 
@@ -47,7 +63,8 @@ function resolveReference(
 /**
  * Compute per-lap cumulative time delta for each non-reference driver.
  * Positive = behind reference; negative = ahead.
- * Null laps carry cumulative forward but emit null in deltas (skip when plotting).
+ * Deltas are only emitted where the reference lap is valid; reference-null laps
+ * gap every series. Challenger-null laps gap only that driver's line.
  */
 export function computeCumulativeDeltas(
   series: ReadonlyArray<DeltaSeries>,
@@ -56,24 +73,22 @@ export function computeCumulativeDeltas(
   const reference = resolveReference(series, referenceLabel)
   if (!reference) return []
 
-  const refCumulative = buildCumulative(reference.lapTimes)
+  const refLapTimes = reference.lapTimes
+  const refCumulative = buildAlignedCumulative(refLapTimes, refLapTimes)
 
   return series
     .filter((s) => s.label !== reference.label)
     .map((driver) => {
-      const driverCumulative = buildCumulative(driver.lapTimes)
+      const driverCumulative = buildAlignedCumulative(driver.lapTimes, refLapTimes)
       const lapCount = Math.max(driver.lapTimes.length, refCumulative.length)
       const deltas: (number | null)[] = []
 
       for (let i = 0; i < lapCount; i++) {
-        if (driver.lapTimes[i] === null) {
+        if (refLapTimes[i] === null || driver.lapTimes[i] === null) {
           deltas.push(null)
           continue
         }
-        const refValue = refCumulative[i] ?? refCumulative[refCumulative.length - 1] ?? 0
-        const driverValue =
-          driverCumulative[i] ?? driverCumulative[driverCumulative.length - 1] ?? 0
-        deltas.push(driverValue - refValue)
+        deltas.push(driverCumulative[i] - refCumulative[i])
       }
 
       return {

@@ -229,7 +229,9 @@ export function CompareView({ sessionKey, results, drivers }: Props) {
         <div>
           <div className="compare-section-title">Race pace</div>
           <div className="compare-section-meta">
-            Cumulative lap-time delta vs {referenceLabel ?? 'reference'}
+            Cumulative lap-time delta vs {referenceLabel ?? 'reference'}. Deltas are plotted
+            only where the reference lap is valid; gaps appear when the reference has no lap
+            time.
           </div>
         </div>
         <SectionState
