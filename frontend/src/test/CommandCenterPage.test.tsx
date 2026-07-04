@@ -12,9 +12,20 @@ vi.mock('../api', () => ({
   fetchSessions: vi.fn(),
   fetchWeekend: vi.fn(),
   fetchLiveState: vi.fn(),
+  fetchChampionshipHub: vi.fn(),
+  fetchRaceHub: vi.fn(),
 }))
 
-import { fetchSeasons, fetchLocalMeetings, fetchSeasonMeetings, fetchSessions, fetchWeekend, fetchLiveState } from '../api'
+import {
+  fetchSeasons,
+  fetchLocalMeetings,
+  fetchSeasonMeetings,
+  fetchSessions,
+  fetchWeekend,
+  fetchLiveState,
+  fetchChampionshipHub,
+  fetchRaceHub,
+} from '../api'
 
 const mockFetchSeasons = vi.mocked(fetchSeasons)
 const mockFetchLocalMeetings = vi.mocked(fetchLocalMeetings)
@@ -22,6 +33,8 @@ const mockFetchSeasonMeetings = vi.mocked(fetchSeasonMeetings)
 const mockFetchSessions = vi.mocked(fetchSessions)
 const mockFetchWeekend = vi.mocked(fetchWeekend)
 const mockFetchLiveState = vi.mocked(fetchLiveState)
+const mockFetchChampionshipHub = vi.mocked(fetchChampionshipHub)
+const mockFetchRaceHub = vi.mocked(fetchRaceHub)
 
 const meeting: Meeting = {
   meeting_key: 1229,
@@ -102,6 +115,48 @@ describe('CommandCenterPage', () => {
     vi.clearAllMocks()
     mockFetchLiveState.mockResolvedValue({ is_live: false, data: null })
     mockFetchSessions.mockResolvedValue([])
+    mockFetchChampionshipHub.mockResolvedValue({
+      season: 2025,
+      round: 1,
+      total_rounds: 1,
+      rounds_left: 0,
+      last_race: 'Monaco',
+      round_labels: ['R1'],
+      drivers: [],
+      teams: [],
+    })
+    mockFetchRaceHub.mockResolvedValue({
+      source: 'local',
+      session_key: 9472,
+      datasets: fullDatasets,
+      results: [
+        {
+          driver_number: 1,
+          position: 1,
+          name_acronym: 'VER',
+          full_name: 'Max Verstappen',
+          team_name: 'Red Bull Racing',
+          team_colour: '3671c6',
+          dnf: false,
+          dns: false,
+          dsq: false,
+          duration: 7200,
+          gap_to_leader: null,
+          number_of_laps: 78,
+          points: 25,
+          session_key: 9472,
+          meeting_key: 1229,
+        },
+      ],
+      starting_grid: [],
+      drivers: [],
+      stints: [],
+      pit_stops: [],
+      positions: [],
+      race_control: [],
+      weather: [],
+      laps: [],
+    })
   })
 
   it('shows empty state when no seasons are ingested', async () => {
@@ -131,11 +186,10 @@ describe('CommandCenterPage', () => {
       expect(screen.getByTestId('cc-session-9472')).toBeInTheDocument()
     })
     expect(screen.getByTestId('cc-focus')).toHaveTextContent('Monaco')
-    expect(screen.getByTestId('cc-focus')).toHaveTextContent('MON')
     expect(screen.getByTestId('cc-season-calendar')).toHaveTextContent('Season Calendar')
     expect(screen.getByTestId('cc-calendar-1229')).toHaveTextContent('R01')
     expect(screen.getByText('No live session')).toBeInTheDocument()
-    expect(screen.getByTestId('cc-action-race-hub')).toHaveTextContent('Race')
+    expect(screen.getByTestId('hero-last-race-link')).toHaveTextContent('Monaco')
   })
 
   it('uses OpenF1 calendar metadata to focus the current weekend when local ingest is behind', async () => {
@@ -181,9 +235,9 @@ describe('CommandCenterPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cc-focus')).toHaveTextContent('Monaco')
     })
-    expect(screen.getByTestId('cc-focus')).toHaveTextContent('Current weekend')
+    expect(screen.getByTestId('cc-focus')).toHaveTextContent('Live now')
     expect(screen.getByTestId('cc-session-9602')).toHaveTextContent('On track')
-    expect(screen.getByTestId('cc-action-race-hub')).toHaveTextContent('Qualifying')
+    expect(screen.getByTestId('hero-live-link')).toHaveAttribute('href', '/live')
 
     vi.useRealTimers()
   })
