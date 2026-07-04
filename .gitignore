@@ -22,7 +22,8 @@ frontend/node_modules/
 frontend/dist/
 
 # Local Claude workspace settings
-.claude/
+.claude/*
+!.claude/skills
 
 # Playwright
 node_modules/
@@ -31,3 +32,9 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# agentic dev: isolated implementation worktrees
+.worktrees/
+
+# agentic dev: local review packets
+.review/
