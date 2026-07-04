@@ -40,6 +40,13 @@
   stroke-dasharray: 2 1;
 }
 
+.stint-timeline__pit-marker {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  opacity: 0.7;
+  pointer-events: stroke;
+}
+
 .stint-timeline__axis-tick {
   font-family: var(--f-mono);
   font-size: 9px;

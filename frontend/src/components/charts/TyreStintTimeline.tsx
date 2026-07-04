@@ -12,6 +12,8 @@ export interface StintTimelineRow {
   label: string
   color: string
   stints: StintTimelineStint[]
+  /** Lap numbers where the driver pitted; optional — rows without stops render normally. */
+  pitStops?: number[]
 }
 
 interface TyreStintTimelineProps {
@@ -55,6 +57,14 @@ function stintBarX(stint: StintTimelineStint, totalLaps: number): number {
 
 function stintBarW(stint: StintTimelineStint, totalLaps: number): number {
   return Math.max(2, (stintLength(stint) / totalLaps) * BAR_W)
+}
+
+function pitMarkerX(lapNumber: number, totalLaps: number): number {
+  return LEFT + ((lapNumber - 1) / totalLaps) * BAR_W
+}
+
+function pitMarkerTitle(driverLabel: string, lapNumber: number): string {
+  return `${driverLabel} pit stop · L${lapNumber}`
 }
 
 function axisTicks(totalLaps: number): number[] {
@@ -129,6 +139,21 @@ export function TyreStintTimeline({ rows, totalLaps }: TyreStintTimelineProps) {
                   >
                     <title>{stintTitle(stint)}</title>
                   </rect>
+                ))}
+
+                {(row.pitStops ?? []).map((lapNumber, pi) => (
+                  <line
+                    key={`pit-${pi}`}
+                    x1={pitMarkerX(lapNumber, safeTotal)}
+                    x2={pitMarkerX(lapNumber, safeTotal)}
+                    y1={BAR_Y - 3}
+                    y2={BAR_Y + BAR_H + 3}
+                    className="stint-timeline__pit-marker"
+                    data-testid="pit-marker"
+                    data-lap={lapNumber}
+                  >
+                    <title>{pitMarkerTitle(row.label, lapNumber)}</title>
+                  </line>
                 ))}
               </g>
             )

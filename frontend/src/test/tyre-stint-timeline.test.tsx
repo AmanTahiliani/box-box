@@ -71,6 +71,61 @@ describe('TyreStintTimeline', () => {
     expect(screen.getByTestId('stint-timeline-empty')).toBeInTheDocument()
     expect(screen.getByText(/No stint data/i)).toBeInTheDocument()
   })
+
+  it('renders one pit marker per stop at the correct lap position', () => {
+    const rowsWithPits: StintTimelineRow[] = [
+      {
+        label: 'HAM',
+        color: '#E8002D',
+        stints: [{ compound: 'SOFT', lapStart: 1, lapEnd: 18 }],
+        pitStops: [19],
+      },
+      {
+        label: 'VER',
+        color: '#3671C6',
+        stints: [
+          { compound: 'MEDIUM', lapStart: 1, lapEnd: 30 },
+          { compound: 'SOFT', lapStart: 31, lapEnd: 78 },
+        ],
+        pitStops: [31, 52],
+      },
+    ]
+    const { container } = render(
+      <TyreStintTimeline rows={rowsWithPits} totalLaps={78} />,
+    )
+    const markers = container.querySelectorAll('[data-testid="pit-marker"]')
+    expect(markers).toHaveLength(3)
+    expect(markers[0]).toHaveAttribute('data-lap', '19')
+    expect(markers[1]).toHaveAttribute('data-lap', '31')
+    expect(markers[2]).toHaveAttribute('data-lap', '52')
+    expect(container.querySelectorAll('.stint-timeline__bar')).toHaveLength(3)
+  })
+
+  it('positions pit markers using lap_number and includes driver in tooltip', () => {
+    const rows: StintTimelineRow[] = [
+      {
+        label: 'HAM',
+        color: '#E8002D',
+        stints: [{ compound: 'SOFT', lapStart: 1, lapEnd: 18 }],
+        pitStops: [19],
+      },
+    ]
+    const { container } = render(<TyreStintTimeline rows={rows} totalLaps={78} />)
+    const marker = container.querySelector('[data-testid="pit-marker"]') as SVGLineElement
+    expect(marker).toBeTruthy()
+    // lap 19 → x = 48 + (18/78) * 580 ≈ 181.85
+    expect(Number(marker.getAttribute('x1'))).toBeCloseTo(181.85, 1)
+    const titles = [...container.querySelectorAll('title')].map((t) => t.textContent)
+    expect(titles).toContain('HAM pit stop · L19')
+  })
+
+  it('leaves rows without pit data unchanged', () => {
+    const { container } = render(
+      <TyreStintTimeline rows={sampleRows} totalLaps={78} />,
+    )
+    expect(container.querySelectorAll('[data-testid="pit-marker"]')).toHaveLength(0)
+    expect(container.querySelectorAll('.stint-timeline__bar')).toHaveLength(3)
+  })
 })
 
 const results: EnrichedResult[] = [
