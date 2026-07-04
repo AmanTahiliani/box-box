@@ -21,6 +21,7 @@ import { TimingTower } from '../components/live/TimingTower'
 import { BattleChips } from '../components/live/BattleChips'
 import { PinnedDrivers } from '../components/live/PinnedDrivers'
 import { RaceControlFeed } from '../components/live/RaceControlFeed'
+import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
 import { TrackMap } from '../components/live/TrackMap'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
 import { Radio } from 'lucide-react'
@@ -213,6 +214,11 @@ export function LiveTimingPage() {
               />
             </div>
             <div className="live-rc-col">
+              <TeamRadioTicker
+                captures={snapshot.TeamRadio ?? []}
+                driverInfo={snapshot.DriverInfo}
+                session={snapshot.Session}
+              />
               <RaceControlFeed messages={snapshot.RCMessages ?? []} driverInfo={snapshot.DriverInfo} />
             </div>
           </div>

@@ -1,0 +1,76 @@
+.delta-graph {
+  width: 100%;
+  min-width: 280px;
+  max-width: 640px;
+}
+
+.delta-graph-svg {
+  display: block;
+  width: 100%;
+}
+
+.delta-graph-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.delta-graph-zero-line {
+  stroke: var(--text-3);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.delta-graph-grid-line {
+  stroke: var(--border);
+  stroke-width: 0.5;
+}
+
+.delta-graph-axis-label {
+  fill: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: 9px;
+}
+
+.delta-graph-driver-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.delta-graph-crosshair {
+  stroke: var(--text-2);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.delta-graph-hover-layer {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.delta-graph-tooltip {
+  pointer-events: none;
+}
+
+.delta-graph-tooltip-bg {
+  fill: var(--bg-elevated, var(--bg));
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.delta-graph-tooltip-title {
+  fill: var(--text-1);
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.delta-graph-tooltip-row {
+  fill: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: 9px;
+}

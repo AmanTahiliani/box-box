@@ -5,6 +5,7 @@ import (
 	"compress/flate"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -211,11 +212,15 @@ func TestProcessTopicSessionInfoCircuitName(t *testing.T) {
 	state.ProcessTopic("SessionInfo", json.RawMessage(`{
 		"Meeting": {"Name": "British Grand Prix", "Circuit": {"ShortName": "Silverstone"}},
 		"Name": "Race",
-		"Type": "Race"
+		"Type": "Race",
+		"Path": "2026/2026-07-05_British_Grand_Prix/2026-07-05_Race/"
 	}`))
 	s := state.Snapshot().Session
 	if s.MeetingName != "British Grand Prix" || s.CircuitName != "Silverstone" {
 		t.Fatalf("session = %+v", s)
+	}
+	if s.Path != "2026/2026-07-05_British_Grand_Prix/2026-07-05_Race/" {
+		t.Fatalf("session path = %q", s.Path)
 	}
 }
 
@@ -282,6 +287,68 @@ func TestProcessTopicRaceControlMessages(t *testing.T) {
 	}
 	if rc[0].Time != "15:04" || rc[0].Flag != "YELLOW" || rc[0].Message != "Yellow in sector 2" || rc[0].Lap != 8 {
 		t.Errorf("RC message = %+v", rc[0])
+	}
+}
+
+func TestProcessTopicTeamRadioSnapshotAndPatch(t *testing.T) {
+	state := live.NewState()
+	snapshot := json.RawMessage(`{
+		"Captures": [
+			{"Utc": "2026-07-05T14:05:30Z", "RacingNumber": "4", "Path": "TeamRadio/NOR-1.mp3"},
+			{"Utc": "2026-07-05T14:04:10Z", "RacingNumber": "16", "Path": "TeamRadio/LEC-1.mp3"}
+		]
+	}`)
+
+	if !state.ProcessTopic("TeamRadio", snapshot) {
+		t.Fatal("TeamRadio snapshot should update state")
+	}
+
+	patch := json.RawMessage(`{
+		"Captures": {
+			"2": {"Utc": "2026-07-05T14:06:00Z", "RacingNumber": "44", "Path": "TeamRadio/HAM-1.mp3"}
+		}
+	}`)
+	if !state.ProcessTopic("TeamRadio", patch) {
+		t.Fatal("TeamRadio keyed patch should update state")
+	}
+
+	radio := state.Snapshot().TeamRadio
+	if len(radio) != 3 {
+		t.Fatalf("radio captures = %d, want 3", len(radio))
+	}
+	if radio[0].RacingNumber != "16" || radio[1].RacingNumber != "4" || radio[2].RacingNumber != "44" {
+		t.Fatalf("radio order = %+v", radio)
+	}
+}
+
+func TestProcessTopicTeamRadioMalformed(t *testing.T) {
+	state := live.NewState()
+	if state.ProcessTopic("TeamRadio", json.RawMessage(`{"Captures": {"1": {"Utc": "2026-07-05T14:06:00Z", "Path": "missing-driver.mp3"}}}`)) {
+		t.Fatal("incomplete TeamRadio capture should not update state")
+	}
+	if state.ProcessTopic("TeamRadio", json.RawMessage(`{"Captures": "not-a-list"}`)) {
+		t.Fatal("unexpected TeamRadio captures shape should not update state")
+	}
+	if len(state.Snapshot().TeamRadio) != 0 {
+		t.Fatalf("malformed captures mutated state: %+v", state.Snapshot().TeamRadio)
+	}
+}
+
+func TestProcessTopicTeamRadioCapsAtTwenty(t *testing.T) {
+	state := live.NewState()
+	for i := 0; i < 25; i++ {
+		payload := json.RawMessage([]byte(fmt.Sprintf(`{
+			"Captures": [{"Utc": "2026-07-05T14:%02d:00Z", "RacingNumber": "%d", "Path": "TeamRadio/%02d.mp3"}]
+		}`, i, i, i)))
+		state.ProcessTopic("TeamRadio", payload)
+	}
+
+	radio := state.Snapshot().TeamRadio
+	if len(radio) != 20 {
+		t.Fatalf("radio captures = %d, want 20", len(radio))
+	}
+	if radio[0].Utc != "2026-07-05T14:05:00Z" || radio[19].Utc != "2026-07-05T14:24:00Z" {
+		t.Fatalf("radio cap kept wrong captures: first=%+v last=%+v", radio[0], radio[19])
 	}
 }
 
