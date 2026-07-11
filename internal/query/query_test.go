@@ -375,3 +375,56 @@ func TestGetWeekendWithSessions(t *testing.T) {
 		t.Fatalf("first session drivers = %+v, want available", weekend.Sessions[0].Datasets["drivers"])
 	}
 }
+
+func TestGetChampionshipInputsIncludesSprintPoints(t *testing.T) {
+	// Regression for #57: Race-only aggregation dropped Sprint points.
+	// Setup: same meeting 1229 has Race (9472) 25pts + Sprint (9473) 8pts => total 33.
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	// Add sprint session for same meeting
+	if err := svc.store.UpsertSession(store.Session{
+		SessionKey:  9473,
+		MeetingKey:  1229,
+		SessionName: "Sprint",
+		SessionType: "Race", // OpenF1 uses SessionType Race even for Sprint
+		DateStart:   "2025-05-24T13:00:00+00:00",
+	}); err != nil {
+		t.Fatalf("UpsertSession sprint error = %v", err)
+	}
+	if err := svc.store.UpsertSessionDriver(store.SessionDriver{
+		SessionKey: 9473, DriverNumber: 1, MeetingKey: 1229, TeamName: "Red Bull Racing",
+	}); err != nil {
+		t.Fatalf("UpsertSessionDriver sprint error = %v", err)
+	}
+
+	// Race points 25
+	if err := svc.store.UpsertSessionResult(store.SessionResult{
+		SessionKey: 9472, DriverNumber: 1, MeetingKey: 1229, Position: 1, Points: 25,
+	}); err != nil {
+		t.Fatalf("UpsertSessionResult race error = %v", err)
+	}
+	// Sprint points 8
+	if err := svc.store.UpsertSessionResult(store.SessionResult{
+		SessionKey: 9473, DriverNumber: 1, MeetingKey: 1229, Position: 1, Points: 8,
+	}); err != nil {
+		t.Fatalf("UpsertSessionResult sprint error = %v", err)
+	}
+
+	inputs, err := svc.GetChampionshipInputs(2025)
+	if err != nil {
+		t.Fatalf("GetChampionshipInputs() error = %v", err)
+	}
+	if len(inputs.Races) != 1 {
+		t.Fatalf("Races len = %d, want 1 race entry", len(inputs.Races))
+	}
+	if len(inputs.Champ) != 1 {
+		t.Fatalf("Champ len = %d, want 1", len(inputs.Champ))
+	}
+	if inputs.Champ[0].PointsCurrent != 33 {
+		t.Fatalf("PointsCurrent = %v, want 33 (25 race + 8 sprint)", inputs.Champ[0].PointsCurrent)
+	}
+	if len(inputs.Teams) != 1 || inputs.Teams[0].PointsCurrent != 33 {
+		t.Fatalf("Teams = %+v, want Red Bull 33", inputs.Teams)
+	}
+}
