@@ -78,6 +78,7 @@ func (s *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/grid", s.handleGrid)
 	mux.HandleFunc("/api/v1/laps/comparison", s.handleLapsComparison)
 	mux.HandleFunc("/api/v1/laps", s.handleLaps)
+	mux.HandleFunc("/api/v1/replay/frames", s.handleReplayFrames)
 	mux.HandleFunc("/api/v1/weather", s.handleWeather)
 	mux.HandleFunc("/api/v1/race-control", s.handleRaceControl)
 	mux.HandleFunc("/api/v1/telemetry", s.handleTelemetry)
