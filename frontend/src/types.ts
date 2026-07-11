@@ -91,6 +91,17 @@ export interface RaceHub {
   race_control: RaceControlMessage[]
   weather: WeatherSample[]
   laps: Lap[]
+  chapters: Chapter[]
+}
+
+export interface Chapter {
+  kind: 'start' | 'safety_car' | 'virtual_safety_car' | 'red_flag' | 'pit_phase' | 'decisive_swing' | 'finish' | string
+  title: string
+  start_lap: number
+  end_lap: number
+  start_time?: string
+  end_time?: string
+  driver_numbers: number[]
 }
 
 export interface Stint {
