@@ -5,6 +5,8 @@ import { teamColor } from '../utils'
 import type { ChampHubDriver, ChampionshipHub } from '../types'
 import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
 import { Meaning } from '../components/Meaning'
+import { TeammateH2H } from '../components/TeammateH2H'
+import { teammatePairs } from '../lib/h2h'
 import { pointsGapMeaning } from '../lib/meaning'
 
 type View = 'drivers' | 'constructors' | 'progression' | 'simulator'
@@ -242,6 +244,7 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           leaderPoints={leader.points}
           titleMath={titleMath}
           roundsLeft={hub.rounds_left}
+          drivers={drivers}
         />
       )}
       {view === 'constructors' && <ConstructorsView hub={hub} />}
@@ -271,13 +274,17 @@ function DriversView({
   leaderPoints,
   titleMath,
   roundsLeft,
+  drivers,
 }: {
   enriched: EnrichedDriver[]
   leaderPoints: number
   titleMath: string
   roundsLeft: number
+  drivers: ChampHubDriver[]
 }) {
   const podium = enriched.slice(0, 3)
+  const h2hPairs = useMemo(() => teammatePairs(drivers), [drivers])
+
   return (
     <div data-testid="champ-view-drivers">
       <div className="champ-podium">
@@ -335,6 +342,29 @@ function DriversView({
         <span className="champ-titlemath-tag mono">Title Math</span>
         <span className="champ-titlemath-text">{titleMath}</span>
       </div>
+
+      {h2hPairs.length > 0 && (
+        <section className="h2h-section" data-testid="champ-teammate-battles">
+          <div className="h2h-section-head">
+            <h2 className="h2h-section-title">Teammate battles</h2>
+            <span className="h2h-section-sub">race finishes · closest first</span>
+          </div>
+          <div className="h2h-list">
+            {h2hPairs.map((pair) => (
+              <TeammateH2H
+                key={pair.teamName}
+                teamName={pair.teamName}
+                teamColour={pair.teamColour}
+                driverATla={pair.driverA.name_acronym}
+                driverBTla={pair.driverB.name_acronym}
+                winsA={pair.driverA.teammate_wins}
+                winsB={pair.driverB.teammate_wins}
+                extraNote={pair.extraCount > 0 ? `+${pair.extraCount}` : undefined}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="champ-scroll">
         <table className="champ-table champ-table-drivers">
