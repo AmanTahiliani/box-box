@@ -70,6 +70,9 @@ func (s *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("/api/v1/news", s.handleNews)
 	mux.HandleFunc("/api/v1/meetings", s.handleMeetings)
 	mux.HandleFunc("/api/v1/sessions", s.handleSessions)
+	// /api/v1/driver/summary before /api/v1/drivers: distinct prefixes today,
+	// but keep the more specific driver/* paths registered first.
+	mux.HandleFunc("/api/v1/driver/summary", s.handleDriverSummary)
 	mux.HandleFunc("/api/v1/drivers", s.handleDrivers)
 	mux.HandleFunc("/api/v1/results", s.handleResults)
 	mux.HandleFunc("/api/v1/grid", s.handleGrid)

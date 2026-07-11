@@ -2,6 +2,7 @@ import type {
   ArticleContent,
   CarDataSample,
   ChampionshipHub,
+  DriverSummary,
   EnrichedGrid,
   EnrichedResult,
   LapsComparisonResponse,
@@ -102,6 +103,19 @@ export async function fetchChampionshipHub(year?: number): Promise<ChampionshipH
   if (year) params.set('year', year.toString())
   const url = `/api/v1/championship/hub?${params.toString()}`
   const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+export async function fetchDriverSummary(
+  driverNumber: number,
+  year?: number,
+): Promise<DriverSummary> {
+  const params = new URLSearchParams({ driver_number: String(driverNumber) })
+  if (year) params.set('year', String(year))
+  const res = await fetch(`/api/v1/driver/summary?${params.toString()}`)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }
