@@ -373,6 +373,7 @@ export interface ChampHubDriver {
   poles: number
   form: number[]
   cumulative: number[]
+  round_positions: number[]
   teammate_wins: number
   teammate_losses: number
 }

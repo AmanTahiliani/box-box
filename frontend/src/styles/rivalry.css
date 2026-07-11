@@ -1,0 +1,134 @@
+.rivalry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+
+.rivalry-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  align-items: flex-end;
+}
+
+.rivalry-vs {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-bottom: var(--s3);
+}
+
+.rivalry-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 200px;
+}
+
+.rivalry-picker-label {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.rivalry-picker-select {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.rivalry-picker-select:focus {
+  outline: 2px solid var(--red);
+  outline-offset: 1px;
+}
+
+.rivalry-h2h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4) var(--s5);
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.rivalry-h2h-score {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+}
+
+.rivalry-h2h-code {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rivalry-h2h-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rivalry-h2h-meta {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.rivalry-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+}
+
+.rivalry-strip-label {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-right: var(--s2);
+}
+
+.rivalry-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: var(--s1) var(--s3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.rivalry-chip-round {
+  font-size: 9px;
+  color: var(--text-3);
+}
+
+.rivalry-chip-winner {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rivalry-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.rivalry-caption {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 0;
+}

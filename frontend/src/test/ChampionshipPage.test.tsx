@@ -29,6 +29,7 @@ function driver(over: Partial<ChampHubDriver>): ChampHubDriver {
     poles: 4,
     form: [25, 18, 25, 15, 25],
     cumulative: [25, 43, 68, 83, 108, 200],
+    round_positions: [1, 2, 1, 3, 1, 1],
     teammate_wins: 9,
     teammate_losses: 1,
     ...over,
@@ -47,6 +48,7 @@ const drivers: ChampHubDriver[] = [
     position: 2,
     wins: 3,
     cumulative: [18, 36, 54, 80, 120, 160],
+    round_positions: [2, 1, 2, 2, 2, 2],
   }),
   driver({
     driver_number: 16,
@@ -58,6 +60,7 @@ const drivers: ChampHubDriver[] = [
     position: 3,
     wins: 1,
     cumulative: [15, 28, 40, 60, 90, 120],
+    round_positions: [3, 3, 3, 0, 3, 3],
   }),
 ]
 
@@ -127,6 +130,22 @@ describe('ChampionshipPage', () => {
     fireEvent.click(screen.getByTestId('champ-tab-progression'))
     expect(screen.getByTestId('champ-view-progression')).toBeInTheDocument()
     expect(screen.getByText('Cumulative points', { exact: false })).toBeInTheDocument()
+  })
+
+  it('switches to the rivalry view with the top two drivers preselected', async () => {
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('champ-tab-rivalry'))
+    expect(screen.getByTestId('champ-view-rivalry')).toBeInTheDocument()
+    // Default pair is the top two in the standings: VER vs NOR.
+    expect(screen.getByTestId('rivalry-pick-a')).toHaveValue('1')
+    expect(screen.getByTestId('rivalry-pick-b')).toHaveValue('4')
+    // VER beats NOR in rounds 1, 3, 5, 6 → 4–2.
+    expect(screen.getByTestId('rivalry-h2h-num')).toHaveTextContent('4–2')
+    expect(screen.getByTestId('rivalry-points-race')).toBeInTheDocument()
+    expect(screen.getByTestId('rivalry-gap')).toBeInTheDocument()
   })
 
   it('switches to the simulator view and projects standings', async () => {
