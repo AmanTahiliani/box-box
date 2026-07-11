@@ -383,6 +383,39 @@ export interface ChampionshipHub {
   teams: ChampHubTeam[]
 }
 
+export interface DriverSummaryRound {
+  meeting_key: number
+  meeting_name: string
+  country_code: string
+  country_name: string
+  race_position: number
+  grid_position: number
+  quali_position?: number
+  points: number
+  dnf: boolean
+  dns: boolean
+  dsq: boolean
+}
+
+export interface DriverSummary {
+  season: number
+  driver_number: number
+  name_acronym: string
+  full_name: string
+  team_name: string
+  team_colour: string
+  headshot_url: string
+  points: number
+  position: number
+  wins: number
+  podiums: number
+  poles: number
+  form: number[]
+  cumulative: number[]
+  round_labels: string[]
+  rounds: DriverSummaryRound[]
+}
+
 export interface NewsItem {
   source: string
   title: string
