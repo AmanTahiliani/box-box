@@ -1,0 +1,130 @@
+/* Teammate head-to-head bars (issue #23). */
+
+.h2h-section {
+  margin: 20px 0 24px;
+  padding: 16px 18px;
+  background: var(--surface-1, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.h2h-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.h2h-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.h2h-section-sub {
+  font-size: 11px;
+  font-family: var(--f-mono);
+  color: var(--text-3);
+}
+
+.h2h-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.h2h-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 140px) 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.h2h-team {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.h2h-team-name {
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.h2h-extra {
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.h2h-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.h2h-tla {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+  width: 28px;
+}
+
+.h2h-tla--left {
+  text-align: right;
+}
+
+.h2h-tla--right {
+  text-align: left;
+}
+
+.h2h-bar {
+  position: relative;
+  flex: 1;
+  display: flex;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.h2h-bar-seg {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.h2h-bar-seg--muted {
+  opacity: 0.35;
+}
+
+.h2h-score {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .h2h-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .h2h-bar-wrap {
+    width: 100%;
+  }
+}
