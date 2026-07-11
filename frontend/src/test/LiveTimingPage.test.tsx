@@ -152,4 +152,15 @@ describe('LiveTimingPage archive mode', () => {
     expect(await screen.findByTestId('live-empty')).toHaveTextContent('No live session active')
     expect(screen.queryByRole('button', { name: /view last session/i })).not.toBeInTheDocument()
   })
+
+  it('temporarily omits the track map while live GPS is unavailable', async () => {
+    renderPage({
+      is_live: true,
+      data: { ...archivedSnapshot, SessionStatus: 'Started' },
+    })
+
+    expect(await screen.findByText('Timing Tower')).toBeInTheDocument()
+    expect(screen.queryByText('Track Map')).not.toBeInTheDocument()
+    expect(mockFetchLiveTrackOutline).not.toHaveBeenCalled()
+  })
 })
