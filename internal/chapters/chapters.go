@@ -38,6 +38,7 @@ type Lap = models.Lap
 type Chapter struct {
 	Kind          string `json:"kind"`
 	Title         string `json:"title"`
+	Headline      string `json:"headline"`
 	StartLap      int    `json:"start_lap"`
 	EndLap        int    `json:"end_lap"`
 	StartTime     string `json:"start_time,omitempty"`
