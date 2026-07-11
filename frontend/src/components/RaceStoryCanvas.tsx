@@ -1,5 +1,8 @@
-import { useState, useMemo, useRef, useCallback } from 'react'
-import type { EnrichedResult, EnrichedGrid, PositionSample, Lap, Session } from '../types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import type { Driver, EnrichedResult, EnrichedGrid, PositionSample, Lap, Meeting, Session } from '../types'
+import { fetchReplayFrames, fetchTrackOutline } from '../api'
+import { ReplayTrackMap } from './ReplayTrackMap'
 import { gridDelta, gridDeltaClass, formatDuration, formatGap } from '../utils'
 
 interface Props {
@@ -12,28 +15,97 @@ interface Props {
     race_control?: any[]
     pit_stops?: any[]
     session?: Session
+    meeting?: Meeting
+    drivers?: Driver[]
   }
 }
 
 export function RaceStoryCanvas({ data }: Props) {
-  const { results, starting_grid: grid, positions, datasets, race_control = [], pit_stops = [], laps = [] } = data
+  const {
+    results,
+    starting_grid: grid,
+    positions,
+    datasets,
+    race_control = [],
+    pit_stops = [],
+    laps = [],
+    session,
+    meeting,
+    drivers = [],
+  } = data
   const hasPositions = datasets['positions']?.status === 'available'
 
   const [scrubTime, setScrubTime] = useState<number | null>(null)
   const [hoverDriver, setHoverDriver] = useState<number | null>(null)
+  const [mapOpen, setMapOpen] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState(10)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // Position Evolution Chart Logic
   const allTimes = useMemo(() => [...new Set(positions.map((p) => p.date))].sort(), [positions])
   const hasChartData = hasPositions && allTimes.length > 0
+  const chartTiming = useMemo(() => {
+    if (!hasChartData) return null
+    const tMin = new Date(allTimes[0]).getTime()
+    const tMax = new Date(allTimes[allTimes.length - 1]).getTime()
+    return { tMin, tMax, tRange: Math.max(tMax - tMin, 1) }
+  }, [allTimes, hasChartData])
+  const circuitKey = session?.circuit_key ?? meeting?.circuit_key ?? 0
+  const outlineYear = meeting?.year ?? (session?.date_start ? new Date(session.date_start).getFullYear() : 0)
+
+  const replayQuery = useQuery({
+    queryKey: ['replay-frames', session?.session_key, 5000],
+    queryFn: () => fetchReplayFrames(session!.session_key, 5000),
+    enabled: mapOpen && Boolean(session?.session_key),
+  })
+  const outlineQuery = useQuery({
+    queryKey: ['track-outline', circuitKey, outlineYear],
+    queryFn: () => fetchTrackOutline(circuitKey, outlineYear),
+    enabled: mapOpen && circuitKey > 0 && outlineYear > 0,
+  })
+
+  useEffect(() => {
+    if (!isPlaying || !chartTiming) return
+
+    let frame = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const delta = now - last
+      last = now
+      setScrubTime((current) => {
+        const next = Math.min(1, (current ?? 0) + (delta * playbackSpeed) / chartTiming.tRange)
+        if (next >= 1) {
+          setIsPlaying(false)
+        }
+        return next
+      })
+      frame = requestAnimationFrame(tick)
+    }
+
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [chartTiming, isPlaying, playbackSpeed])
+
+  const replayTMs = useMemo(() => {
+    const replay = replayQuery.data
+    const frames = replay?.frames ?? []
+    if (frames.length === 0) return 0
+    const lastFrameT = frames[frames.length - 1].t
+    const progress = scrubTime ?? 0
+    if (!chartTiming || !replay?.start_time) {
+      return Math.max(0, Math.min(lastFrameT, Math.round(progress * lastFrameT)))
+    }
+    const replayStart = new Date(replay.start_time).getTime()
+    const chartTime = chartTiming.tMin + progress * chartTiming.tRange
+    return Math.max(0, Math.min(lastFrameT, Math.round(chartTime - replayStart)))
+  }, [chartTiming, replayQuery.data, scrubTime])
 
   let chartContent = null
   let displayResults = results
 
-  if (hasChartData) {
-    const tMin = new Date(allTimes[0]).getTime()
-    const tMax = new Date(allTimes[allTimes.length - 1]).getTime()
-    const tRange = Math.max(tMax - tMin, 1)
+  if (hasChartData && chartTiming) {
+    const { tMin, tRange } = chartTiming
 
     const byDriver = new Map<number, Array<{ t: number; pos: number }>>()
     for (const p of positions) {
@@ -137,6 +209,7 @@ export function RaceStoryCanvas({ data }: Props) {
     }
 
     const handlePointerMove = (e: React.PointerEvent<SVGRectElement>) => {
+      setIsPlaying(false)
       if (!svgRef.current) return
       const rect = svgRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left
@@ -288,24 +361,78 @@ export function RaceStoryCanvas({ data }: Props) {
             height={plotH}
             fill="transparent"
             onPointerMove={handlePointerMove}
-            onPointerLeave={() => setScrubTime(null)}
+            onPointerLeave={() => {
+              if (!isPlaying) setScrubTime(null)
+            }}
             style={{ cursor: 'crosshair', touchAction: 'none' }}
           />
         </svg>
+        <div className="rs-replay-tools" aria-label="Race replay controls">
+          <button
+            type="button"
+            className={`rs-tool-btn ${isPlaying ? 'active' : ''}`}
+            onClick={() => {
+              setScrubTime((current) => current ?? 0)
+              setIsPlaying((current) => !current)
+            }}
+          >
+            {isPlaying ? 'Pause' : 'Play'}
+          </button>
+          <div className="rs-speed-group" aria-label="Playback speed">
+            {[1, 10, 30].map((speed) => (
+              <button
+                key={speed}
+                type="button"
+                className={`rs-speed-btn ${playbackSpeed === speed ? 'active' : ''}`}
+                onClick={() => setPlaybackSpeed(speed)}
+              >
+                {speed}x
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`rs-tool-btn ${mapOpen ? 'active' : ''}`}
+            onClick={() => setMapOpen((current) => !current)}
+          >
+            Map
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="race-story-canvas">
-      {hasChartData ? (
-        chartContent
-      ) : (
-        <div className="analysis-notice">
-          <strong>Lap-by-lap positions not available.</strong> This session does not
-          have ingested position samples in <code>/api/v1/race-hub</code>.
+      <div className="rs-replay-shell">
+        <div className="rs-replay-main">
+          {hasChartData ? (
+            chartContent
+          ) : (
+            <div className="analysis-notice">
+              <strong>Lap-by-lap positions not available.</strong> This session does not
+              have ingested position samples in <code>/api/v1/race-hub</code>.
+            </div>
+          )}
         </div>
-      )}
+        {mapOpen && (
+          <div className="rs-replay-map-slot">
+            {circuitKey > 0 && outlineYear > 0 ? (
+              <ReplayTrackMap
+                outline={outlineQuery.data}
+                replay={replayQuery.data}
+                tMs={replayTMs}
+                drivers={drivers}
+                results={results}
+                loading={outlineQuery.isLoading || replayQuery.isLoading}
+                error={outlineQuery.isError || replayQuery.isError}
+              />
+            ) : (
+              <div className="rs-replay-map-placeholder">track identity unavailable for replay map</div>
+            )}
+          </div>
+        )}
+      </div>
 
       {displayResults.length > 0 && (
         <div className="rs-field-list">

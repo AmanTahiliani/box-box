@@ -360,6 +360,23 @@ export interface TrackOutline {
   bounds: TrackBounds
 }
 
+export interface ReplayCarPosition {
+  x: number
+  y: number
+}
+
+export interface ReplayFrame {
+  t: number
+  cars: Record<string, ReplayCarPosition>
+}
+
+export interface ReplayFramesResponse {
+  session_key: number
+  interval_ms: number
+  start_time: string
+  frames: ReplayFrame[]
+}
+
 export interface ChampHubDriver {
   driver_number: number
   name_acronym: string

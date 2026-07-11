@@ -10,6 +10,7 @@ import type {
   Meeting,
   NewsItem,
   RaceHub,
+  ReplayFramesResponse,
   Session,
   TrackOutline,
   Weekend,
@@ -78,6 +79,21 @@ export async function fetchTrackOutline(circuitKey: number, year: number): Promi
   const data = await res.json()
   if (data?.error || !Array.isArray(data?.points) || data.points.length < 2) return null
   return data as TrackOutline
+}
+
+export async function fetchReplayFrames(
+  sessionKey: number,
+  intervalMs = 5000,
+): Promise<ReplayFramesResponse> {
+  const params = new URLSearchParams({
+    session_key: String(sessionKey),
+    interval_ms: String(intervalMs),
+  })
+  const res = await fetch(`/api/v1/replay/frames?${params}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
 }
 
 export async function fetchSessions(meetingKey: number, source = 'openf1'): Promise<Session[]> {
