@@ -156,6 +156,7 @@ describe('CommandCenterPage', () => {
       race_control: [],
       weather: [],
       laps: [],
+      chapters: [],
     })
   })
 

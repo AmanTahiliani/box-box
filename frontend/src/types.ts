@@ -12,6 +12,7 @@ export interface Meeting {
   country_name: string
   country_code: string
   country_flag: string
+  circuit_key?: number
   circuit_short_name: string
   date_start: string
   date_end: string
@@ -23,6 +24,7 @@ export interface Session {
   session_key: number
   session_name: string
   session_type: string
+  circuit_key?: number
   meeting_key: number
   date_start: string
   date_end: string
@@ -89,6 +91,17 @@ export interface RaceHub {
   race_control: RaceControlMessage[]
   weather: WeatherSample[]
   laps: Lap[]
+  chapters: Chapter[]
+}
+
+export interface Chapter {
+  kind: 'start' | 'safety_car' | 'virtual_safety_car' | 'red_flag' | 'pit_phase' | 'decisive_swing' | 'finish' | string
+  title: string
+  start_lap: number
+  end_lap: number
+  start_time?: string
+  end_time?: string
+  driver_numbers: number[]
 }
 
 export interface Stint {

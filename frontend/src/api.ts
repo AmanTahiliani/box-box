@@ -3,6 +3,8 @@ import type {
   CarDataSample,
   ChampionshipHub,
   DriverSummary,
+  EnrichedGrid,
+  EnrichedResult,
   LapsComparisonResponse,
   LiveStateResponse,
   LiveSessionMeta,
@@ -41,12 +43,42 @@ export async function fetchLocalMeetings(year: number): Promise<Meeting[]> {
 }
 
 export async function fetchSeasonMeetings(year: number): Promise<Meeting[]> {
-  const res = await fetch(`/api/v1/meetings?year=${year}&source=openf1`)
+  return fetchMeetings(year, 'openf1')
+}
+
+export async function fetchMeetings(year: number, source = 'auto'): Promise<Meeting[]> {
+  const res = await fetch(`/api/v1/meetings?year=${year}&source=${source}`)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }
   const meetings = await res.json()
   return Array.isArray(meetings) ? meetings : []
+}
+
+export async function fetchResults(sessionKey: number, source = 'auto'): Promise<EnrichedResult[]> {
+  const res = await fetch(`/api/v1/results?session_key=${sessionKey}&source=${source}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const results = await res.json()
+  return Array.isArray(results) ? results : []
+}
+
+export async function fetchStartingGrid(sessionKey: number, source = 'auto'): Promise<EnrichedGrid[]> {
+  const res = await fetch(`/api/v1/grid?session_key=${sessionKey}&source=${source}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const grid = await res.json()
+  return Array.isArray(grid) ? grid : []
+}
+
+export async function fetchTrackOutline(circuitKey: number, year: number): Promise<TrackOutline | null> {
+  const res = await fetch(`/api/v1/track-outline?circuit_key=${circuitKey}&year=${year}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  if (data?.error || !Array.isArray(data?.points) || data.points.length < 2) return null
+  return data as TrackOutline
 }
 
 export async function fetchSessions(meetingKey: number, source = 'openf1'): Promise<Session[]> {

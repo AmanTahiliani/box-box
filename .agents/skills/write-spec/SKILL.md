@@ -1,6 +1,6 @@
 ---
 name: write-spec
-description: Render a groomed design into the box-box Ready-spec template and write it into a GitHub issue body, then set Effort and Priority. Called by /groom after a grill session, or run standalone as "/write-spec <issue-number>" to (re)write an issue's spec from agreed decisions. Does not change Stage.
+description: 'Render a groomed design into the box-box Ready-spec template and write it into a GitHub issue body, then set Effort and Priority. Called by /groom after a grill session, or run standalone as "/write-spec <issue-number>" to (re)write an issue''s spec from agreed decisions. Does not change Stage.'
 argument-hint: <issue-number>
 ---
 

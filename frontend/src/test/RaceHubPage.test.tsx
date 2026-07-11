@@ -155,6 +155,7 @@ const raceHub: RaceHub = {
       is_pit_out_lap: false,
     },
   ],
+  chapters: [],
 }
 
 const weekend: Weekend = {
