@@ -2,12 +2,16 @@ import type {
   ArticleContent,
   CarDataSample,
   ChampionshipHub,
+  DriverSummary,
+  EnrichedGrid,
+  EnrichedResult,
   LapsComparisonResponse,
   LiveStateResponse,
   LiveSessionMeta,
   Meeting,
   NewsItem,
   RaceHub,
+  ReplayFramesResponse,
   Session,
   TrackOutline,
   Weekend,
@@ -40,12 +44,57 @@ export async function fetchLocalMeetings(year: number): Promise<Meeting[]> {
 }
 
 export async function fetchSeasonMeetings(year: number): Promise<Meeting[]> {
-  const res = await fetch(`/api/v1/meetings?year=${year}&source=openf1`)
+  return fetchMeetings(year, 'openf1')
+}
+
+export async function fetchMeetings(year: number, source = 'auto'): Promise<Meeting[]> {
+  const res = await fetch(`/api/v1/meetings?year=${year}&source=${source}`)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }
   const meetings = await res.json()
   return Array.isArray(meetings) ? meetings : []
+}
+
+export async function fetchResults(sessionKey: number, source = 'auto'): Promise<EnrichedResult[]> {
+  const res = await fetch(`/api/v1/results?session_key=${sessionKey}&source=${source}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const results = await res.json()
+  return Array.isArray(results) ? results : []
+}
+
+export async function fetchStartingGrid(sessionKey: number, source = 'auto'): Promise<EnrichedGrid[]> {
+  const res = await fetch(`/api/v1/grid?session_key=${sessionKey}&source=${source}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  const grid = await res.json()
+  return Array.isArray(grid) ? grid : []
+}
+
+export async function fetchTrackOutline(circuitKey: number, year: number): Promise<TrackOutline | null> {
+  const res = await fetch(`/api/v1/track-outline?circuit_key=${circuitKey}&year=${year}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  if (data?.error || !Array.isArray(data?.points) || data.points.length < 2) return null
+  return data as TrackOutline
+}
+
+export async function fetchReplayFrames(
+  sessionKey: number,
+  intervalMs = 5000,
+): Promise<ReplayFramesResponse> {
+  const params = new URLSearchParams({
+    session_key: String(sessionKey),
+    interval_ms: String(intervalMs),
+  })
+  const res = await fetch(`/api/v1/replay/frames?${params}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
 }
 
 export async function fetchSessions(meetingKey: number, source = 'openf1'): Promise<Session[]> {
@@ -70,6 +119,19 @@ export async function fetchChampionshipHub(year?: number): Promise<ChampionshipH
   if (year) params.set('year', year.toString())
   const url = `/api/v1/championship/hub?${params.toString()}`
   const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+export async function fetchDriverSummary(
+  driverNumber: number,
+  year?: number,
+): Promise<DriverSummary> {
+  const params = new URLSearchParams({ driver_number: String(driverNumber) })
+  if (year) params.set('year', String(year))
+  const res = await fetch(`/api/v1/driver/summary?${params.toString()}`)
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

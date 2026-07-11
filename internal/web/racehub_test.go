@@ -119,6 +119,66 @@ func TestHandleRaceHubWithLocalData(t *testing.T) {
 	}
 }
 
+func TestHandleRaceHubIncludesChapters(t *testing.T) {
+	st := openTestStore(t)
+	seedRaceHubStore(t, st)
+	sessionKey := 9472
+	meetingKey := 1229
+
+	for lap := 1; lap <= 12; lap++ {
+		if err := st.UpsertLap(store.Lap{
+			SessionKey:   sessionKey,
+			DriverNumber: 1,
+			MeetingKey:   meetingKey,
+			LapNumber:    lap,
+			DateStart:    time.Date(2025, 5, 25, 13, lap-1, 0, 0, time.UTC).Format(time.RFC3339),
+			LapDuration:  75,
+		}); err != nil {
+			t.Fatalf("UpsertLap(%d) error = %v", lap, err)
+		}
+	}
+	for _, sample := range []store.PositionSample{
+		{SessionKey: sessionKey, DriverNumber: 1, MeetingKey: meetingKey, Date: "2025-05-25T13:00:00Z", Position: 1},
+		{SessionKey: sessionKey, DriverNumber: 16, MeetingKey: meetingKey, Date: "2025-05-25T13:00:00Z", Position: 4},
+		{SessionKey: sessionKey, DriverNumber: 55, MeetingKey: meetingKey, Date: "2025-05-25T13:00:00Z", Position: 3},
+		{SessionKey: sessionKey, DriverNumber: 16, MeetingKey: meetingKey, Date: "2025-05-25T13:05:00Z", Position: 3},
+		{SessionKey: sessionKey, DriverNumber: 55, MeetingKey: meetingKey, Date: "2025-05-25T13:05:00Z", Position: 4},
+	} {
+		if err := st.UpsertPositionSample(sample); err != nil {
+			t.Fatalf("UpsertPositionSample() error = %v", err)
+		}
+	}
+
+	srv := testServer(t, st)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/race-hub?session_key=9472", nil)
+	rec := httptest.NewRecorder()
+	srv.handleRaceHub(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var hub query.RaceHub
+	if err := json.Unmarshal(rec.Body.Bytes(), &hub); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(hub.Chapters) == 0 {
+		t.Fatalf("chapters = %+v, want generated chapters", hub.Chapters)
+	}
+	if hub.Chapters[0].Kind != "start" {
+		t.Fatalf("first chapter = %+v, want start", hub.Chapters[0])
+	}
+	foundSwing := false
+	for _, chapter := range hub.Chapters {
+		if chapter.Kind == "decisive_swing" {
+			foundSwing = true
+		}
+	}
+	if !foundSwing {
+		t.Fatalf("chapters = %+v, want decisive_swing", hub.Chapters)
+	}
+}
+
 func TestHandleMeetingsSourceLocal(t *testing.T) {
 	st := openTestStore(t)
 	seedRaceHubStore(t, st)

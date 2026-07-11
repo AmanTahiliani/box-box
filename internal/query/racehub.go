@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/AmanTahiliani/box-box/internal/chapters"
 	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/store"
 )
@@ -52,6 +53,7 @@ type RaceHub struct {
 	RaceControl  []models.RaceControl   `json:"race_control"`
 	Weather      []models.Weather       `json:"weather"`
 	Laps         []models.Lap           `json:"laps"`
+	Chapters     []chapters.Chapter     `json:"chapters"`
 }
 
 // GetRaceHub loads ingested Race Hub datasets for a session from the local store.
@@ -80,6 +82,7 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 		RaceControl:  []models.RaceControl{},
 		Weather:      []models.Weather{},
 		Laps:         []models.Lap{},
+		Chapters:     []chapters.Chapter{},
 	}
 
 	sess, err := s.store.GetSession(sessionKey)
@@ -248,6 +251,50 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 		hub.Datasets["laps"] = availableLocal(len(hub.Laps))
 	}
 
+	hub.Chapters = chapters.Detect(hub.RaceControl, hub.Positions, hub.Laps, totalLaps(hub.Results, hub.Laps))
+	hub.Chapters = chapters.ApplyHeadlines(
+		hub.Chapters,
+		chapters.BuildDriverMap(hub.Drivers, driverIdentityInputs(hub.Results)),
+		hub.RaceControl,
+		winnerDriverNumber(hub.Results),
+	)
 	hub.Source = responseSource(hub.Datasets)
 	return hub, nil
+}
+
+func driverIdentityInputs(results []EnrichedResult) []chapters.DriverIdentityInput {
+	out := make([]chapters.DriverIdentityInput, 0, len(results))
+	for _, r := range results {
+		out = append(out, chapters.DriverIdentityInput{
+			DriverNumber: r.DriverNumber,
+			NameAcronym:  r.NameAcronym,
+			FullName:     r.FullName,
+			TeamName:     r.TeamName,
+		})
+	}
+	return out
+}
+
+func winnerDriverNumber(results []EnrichedResult) int {
+	for _, r := range results {
+		if r.Position == 1 {
+			return r.DriverNumber
+		}
+	}
+	return 0
+}
+
+func totalLaps(results []EnrichedResult, laps []models.Lap) int {
+	total := 0
+	for _, result := range results {
+		if result.NumberOfLaps > total {
+			total = result.NumberOfLaps
+		}
+	}
+	for _, lap := range laps {
+		if lap.LapNumber > total {
+			total = lap.LapNumber
+		}
+	}
+	return total
 }

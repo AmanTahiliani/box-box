@@ -12,6 +12,7 @@ export interface Meeting {
   country_name: string
   country_code: string
   country_flag: string
+  circuit_key?: number
   circuit_short_name: string
   date_start: string
   date_end: string
@@ -23,6 +24,7 @@ export interface Session {
   session_key: number
   session_name: string
   session_type: string
+  circuit_key?: number
   meeting_key: number
   date_start: string
   date_end: string
@@ -89,6 +91,18 @@ export interface RaceHub {
   race_control: RaceControlMessage[]
   weather: WeatherSample[]
   laps: Lap[]
+  chapters: Chapter[]
+}
+
+export interface Chapter {
+  kind: 'start' | 'safety_car' | 'virtual_safety_car' | 'red_flag' | 'pit_phase' | 'decisive_swing' | 'finish' | string
+  title: string
+  headline: string
+  start_lap: number
+  end_lap: number
+  start_time?: string
+  end_time?: string
+  driver_numbers: number[]
 }
 
 export interface Stint {
@@ -347,6 +361,23 @@ export interface TrackOutline {
   bounds: TrackBounds
 }
 
+export interface ReplayCarPosition {
+  x: number
+  y: number
+}
+
+export interface ReplayFrame {
+  t: number
+  cars: Record<string, ReplayCarPosition>
+}
+
+export interface ReplayFramesResponse {
+  session_key: number
+  interval_ms: number
+  start_time: string
+  frames: ReplayFrame[]
+}
+
 export interface ChampHubDriver {
   driver_number: number
   name_acronym: string
@@ -381,6 +412,39 @@ export interface ChampionshipHub {
   round_labels: string[]
   drivers: ChampHubDriver[]
   teams: ChampHubTeam[]
+}
+
+export interface DriverSummaryRound {
+  meeting_key: number
+  meeting_name: string
+  country_code: string
+  country_name: string
+  race_position: number
+  grid_position: number
+  quali_position?: number
+  points: number
+  dnf: boolean
+  dns: boolean
+  dsq: boolean
+}
+
+export interface DriverSummary {
+  season: number
+  driver_number: number
+  name_acronym: string
+  full_name: string
+  team_name: string
+  team_colour: string
+  headshot_url: string
+  points: number
+  position: number
+  wins: number
+  podiums: number
+  poles: number
+  form: number[]
+  cumulative: number[]
+  round_labels: string[]
+  rounds: DriverSummaryRound[]
 }
 
 export interface NewsItem {

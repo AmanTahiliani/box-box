@@ -1,6 +1,6 @@
 ---
 name: lens-architect
-description: Grill/analyze a box-box issue or epic from a software-architecture perspective and post the findings as a comment. Use standalone as "/lens-architect <issue-number>" for an on-the-fly architecture review, or let /groom compose it via "--lens architect". Reads the base grill + architect persona and focuses on reuse, data flow, seams, testability, and risk.
+description: 'Grill/analyze a box-box issue or epic from a software-architecture perspective and post the findings as a comment. Use standalone as "/lens-architect <issue-number>" for an on-the-fly architecture review, or let /groom compose it via "--lens architect". Reads the base grill + architect persona and focuses on reuse, data flow, seams, testability, and risk.'
 argument-hint: <issue-number>
 ---
 

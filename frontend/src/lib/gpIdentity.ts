@@ -47,7 +47,9 @@ export function countryDecal(meeting: Meeting | undefined | null): string {
   return name.slice(0, 3).toUpperCase() || '—'
 }
 
-export function countryFlag(meeting: Meeting | undefined | null): string {
+export function countryFlag(
+  meeting: Pick<Meeting, 'country_code' | 'country_flag'> | undefined | null,
+): string {
   if (meeting?.country_flag && !/^https?:\/\//i.test(meeting.country_flag)) return meeting.country_flag
   const code = meeting?.country_code?.toUpperCase()
   const iso2 = code ? CODE3_TO_2[code] : ''

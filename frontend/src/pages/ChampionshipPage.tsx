@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { fetchChampionshipHub, fetchSeasons } from '../api'
 import { teamColor } from '../utils'
 import type { ChampHubDriver, ChampionshipHub } from '../types'
@@ -245,6 +246,7 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           titleMath={titleMath}
           roundsLeft={hub.rounds_left}
           drivers={drivers}
+          season={hub.season}
         />
       )}
       {view === 'constructors' && <ConstructorsView hub={hub} />}
@@ -275,12 +277,14 @@ function DriversView({
   titleMath,
   roundsLeft,
   drivers,
+  season,
 }: {
   enriched: EnrichedDriver[]
   leaderPoints: number
   titleMath: string
   roundsLeft: number
   drivers: ChampHubDriver[]
+  season: number
 }) {
   const podium = enriched.slice(0, 3)
   const h2hPairs = useMemo(() => teammatePairs(drivers), [drivers])
@@ -390,12 +394,19 @@ function DriversView({
                   P{e.pos}
                 </td>
                 <td>
-                  <div className="champ-drv">
+                  <Link
+                    to="/drivers/$driverNumber"
+                    params={{ driverNumber: String(e.d.driver_number) }}
+                    search={{ year: season }}
+                    className="champ-drv"
+                    style={{ color: 'inherit', textDecoration: 'none' }}
+                    data-testid={`champ-driver-link-${e.d.driver_number}`}
+                  >
                     <span className="champ-drv-bar" style={{ background: e.color }} />
                     <span className="champ-drv-code mono">{e.d.name_acronym}</span>
                     <span className="champ-drv-name">{e.d.full_name}</span>
                     <span className="champ-drv-num mono">#{e.d.driver_number}</span>
-                  </div>
+                  </Link>
                 </td>
                 <td className="champ-td-team">{e.d.team_name}</td>
                 <td className="r mono champ-td-pts">{fmtPts(e.d.points)}</td>
