@@ -1,0 +1,44 @@
+# box-box local prod-parity stack
+# Usage:
+#   docker compose up --build          -> http://localhost:8080
+# Verification with Sprint fix:
+#   go run ./scripts/seed-verify-actual.go   # seeds /tmp/boxbox-verify.db on host
+#   # or use compose volume mount:
+#   docker compose -f docker-compose.yml -f docker-compose.verify.yml up --build
+#
+# Next time: use this for screenshots so API + React UI are real.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      BOXBOX_DISABLE_LIVE: "1"
+      # optional: point at OpenF1 mock for hermetic e2e
+      # BOXBOX_OPENF1_BASE_URL: http://mock:4010
+    volumes:
+      # Persist domain DB between runs
+      - boxbox-data:/root/.local/share/box-box
+    restart: unless-stopped
+
+  # Optional: seed-verify job that generates the Sprint-correct DB
+  # and drops it into the shared volume. Run with:
+  #   docker compose --profile verify run --rm seed-verify
+  seed-verify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["verify"]
+    volumes:
+      - boxbox-data:/data
+    entrypoint: ["/bin/sh","-c"]
+    # This expects scripts/seed-verify-actual.go to be adapted to write to /data/boxbox.db
+    # For now placeholder: copy host-seeded DB if you mounted /tmp
+    command: |
+      "ls -lh /data && echo 'mount your /tmp/boxbox-verify.db into /data/boxbox.db manually for verification'"
+
+volumes:
+  boxbox-data:

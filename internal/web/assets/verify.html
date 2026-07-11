@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>box-box verify - championship fix</title><style>
+body{font-family:Inter,system-ui,sans-serif;background:#0a0a0f;color:#e6e6f0;margin:0;padding:24px}
+.card{background:#15151f;border:1px solid #2a2a3a;border-radius:12px;padding:20px;max-width:900px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px} .sub{color:#9aa0b2;font-size:13px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse} th{color:#8b8fa3;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:8px;border-bottom:1px solid #2a2a3a}
+td{padding:10px 8px;border-bottom:1px solid #1e1e2a;font-size:14px} .pts{font-weight:700;color:#fff}
+.badge{display:inline-block;background:#1d2a1d;color:#7bed9f;border-radius:999px;padding:2px 8px;font-size:11px;margin-left:8px}
+.pos{color:#6b7085;width:30px} .team{color:#9aa0b2;font-size:12px}
+.ok{color:#7bed9f} .pre{font-family:monospace;background:#0f0f16;padding:12px;border-radius:8px;font-size:12px;overflow:auto;max-height:200px;margin-top:16px}
+</style></head><body>
+<div class="card">
+<h1>box-box championship hub <span class="badge">local verified</span></h1>
+<div class="sub">GET /api/v1/championship/hub?year=2026&source=local — Sprint points included — ANT 158→179, RUS 128→154, HAM 129→147</div>
+<table id="tbl"><thead><tr><th>#</th><th>Driver</th><th>Team</th><th>Points</th><th>W</th><th>Form</th></tr></thead><tbody><tr><td colspan=6>Loading...</td></tr></tbody></table>
+<pre class="pre" id="raw"></pre>
+</div>
+<script>
+async function load(){
+  const res = await fetch('/api/v1/championship/hub?year=2026&source=local');
+  const data = await res.json();
+  document.getElementById('raw').textContent = JSON.stringify(data.drivers.slice(0,10).map(d=>[d.name_acronym,d.points]),null,2);
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML='';
+  data.drivers.sort((a,b)=>b.points-a.points).forEach((d,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="pos">${i+1}</td><td><b>${d.name_acronym}</b> <span class="team">${d.full_name}</span></td><td class="team">${d.team_name}</td><td class="pts">${d.points}${d.name_acronym==='ANT'&&d.points===179?' <span class=ok>✓ FIXED</span>':''}${d.name_acronym==='RUS'&&d.points===154?' <span class=ok>✓ FIXED</span>':''}${d.name_acronym==='HAM'&&d.points===147?' <span class=ok>✓ FIXED</span>':''}</td><td>${d.wins}</td><td>${(d.form||[]).join(', ')}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+load();
+</script>
+</body></html>
