@@ -1,12 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchNews, fetchNewsArticle, markNewsRead } from '../api'
+import {
+  fetchChampionshipHub,
+  fetchNews,
+  fetchNewsArticle,
+  fetchSeasonMeetings,
+  fetchSeasons,
+  markNewsRead,
+} from '../api'
+import {
+  activeDigestWindow,
+  filterByTag,
+  groupByWindow,
+  gpWindows,
+  itemsForWindow,
+  sinceLastLabel,
+  sortWindowBucketsNewestFirst,
+  tagColour,
+  tagItems,
+  topTags,
+  type DigestTag,
+  type TaggedNewsItem,
+} from '../lib/digest'
 import { stripHtml, timeAgo } from '../utils'
 import type { ArticleContent, NewsItem } from '../types'
+import '../styles/digest.css'
 
 type Category = 'all' | 'official' | 'news' | 'video'
-
-const PAGE_SIZE = 16
 
 const CATEGORY_LABELS: Record<Category, string> = {
   all: 'All',
@@ -71,6 +91,31 @@ function CategoryTabs({
   )
 }
 
+function TagChip({
+  tag,
+  active,
+  onClick,
+  className = 'digest-tag-chip',
+}: {
+  tag: DigestTag
+  active?: boolean
+  onClick?: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      className={`${className}${active ? ' active' : ''}`}
+      style={{ '--tag-colour': tagColour(tag.colour) } as React.CSSProperties}
+      onClick={onClick}
+      aria-pressed={active}
+    >
+      <span className="digest-tag-dot" aria-hidden="true" />
+      {tag.label}
+    </button>
+  )
+}
+
 function OGImage({ url, title }: { url?: string; title: string }) {
   const [failed, setFailed] = useState(false)
   const initial = (title[0] ?? '?').toUpperCase()
@@ -98,11 +143,15 @@ function OGImage({ url, title }: { url?: string; title: string }) {
 function BriefingCard({
   item,
   isActive,
+  activeTag,
   onSelect,
+  onTagClick,
 }: {
-  item: NewsItem
+  item: TaggedNewsItem
   isActive: boolean
+  activeTag: string | null
   onSelect: (item: NewsItem) => void
+  onTagClick: (tag: DigestTag) => void
 }) {
   const isRead = !!item.read_at
   const isVideo = categoryOf(item) === 'video'
@@ -129,6 +178,25 @@ function BriefingCard({
             {stripHtml(item.og_description || item.summary || '')}
           </p>
         )}
+        {item.tags.length > 0 && (
+          <div className="bp-card-tags">
+            {item.tags.map((tag) => (
+              <button
+                key={tag.key}
+                type="button"
+                className={`bp-card-tag${activeTag === tag.key ? ' active' : ''}`}
+                style={{ '--tag-colour': tagColour(tag.colour) } as React.CSSProperties}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTagClick(tag)
+                }}
+              >
+                <span className="digest-tag-dot" aria-hidden="true" />
+                {tag.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </article>
   )
@@ -146,7 +214,6 @@ function ReaderPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -155,7 +222,6 @@ function ReaderPanel({
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Fetch article when item changes
   useEffect(() => {
     if (!item) {
       setArticle(null)
@@ -175,9 +241,14 @@ function ReaderPanel({
       .catch((err) => { setError(String(err)); setLoading(false) })
   }, [item?.url, item ? categoryOf(item) : ''])
 
-  // Scroll panel to top when item changes
   useEffect(() => {
-    panelRef.current?.scrollTo({ top: 0 })
+    const panel = panelRef.current
+    if (!panel) return
+    if (typeof panel.scrollTo === 'function') {
+      panel.scrollTo({ top: 0 })
+    } else {
+      panel.scrollTop = 0
+    }
   }, [item?.url])
 
   const isOpen = item !== null
@@ -297,7 +368,6 @@ function ReaderPanel({
               {article && !loading && article.content && (
                 <div
                   className="bp-reader-body"
-                  // readability strips scripts/iframes; sources are all known news outlets
                   // eslint-disable-next-line react/no-danger
                   dangerouslySetInnerHTML={{ __html: article.content }}
                 />
@@ -332,8 +402,9 @@ function ReaderPanel({
 export function BriefingPage() {
   const [activeCategory, setActiveCategory] = useState<Category>('all')
   const [selectedItem, setSelectedItem] = useState<NewsItem | null>(null)
-  const [page, setPage] = useState(1)
+  const [activeTag, setActiveTag] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const now = useMemo(() => new Date(), [])
 
   const { data: allNews = [], isLoading, isError } = useQuery({
     queryKey: ['news'],
@@ -341,13 +412,74 @@ export function BriefingPage() {
     staleTime: 60_000,
   })
 
-  const filtered = allNews.filter(
-    (item) => activeCategory === 'all' || categoryOf(item) === activeCategory,
+  const seasonsQuery = useQuery({
+    queryKey: ['seasons'],
+    queryFn: fetchSeasons,
+  })
+  const latestSeason = seasonsQuery.data?.[0] ?? null
+
+  const meetingsQuery = useQuery({
+    queryKey: ['season-meetings', latestSeason],
+    queryFn: () => fetchSeasonMeetings(latestSeason!),
+    enabled: latestSeason != null,
+  })
+
+  const hubQuery = useQuery({
+    queryKey: ['championship-hub', latestSeason],
+    queryFn: () => fetchChampionshipHub(latestSeason!),
+    enabled: latestSeason != null,
+  })
+
+  const meetings = meetingsQuery.data ?? []
+  const hub = hubQuery.data
+
+  const taggedNews = useMemo(
+    () => tagItems(allNews, hub?.drivers ?? [], hub?.teams ?? []),
+    [allNews, hub],
   )
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePage = Math.min(page, pageCount)
-  const pageStart = (safePage - 1) * PAGE_SIZE
-  const pagedItems = filtered.slice(pageStart, pageStart + PAGE_SIZE)
+
+  const categoryFiltered = useMemo(
+    () => taggedNews.filter(
+      (item) => activeCategory === 'all' || categoryOf(item) === activeCategory,
+    ),
+    [taggedNews, activeCategory],
+  )
+
+  const tagFiltered = useMemo(
+    () => filterByTag(categoryFiltered, activeTag),
+    [categoryFiltered, activeTag],
+  )
+
+  const windows = useMemo(() => gpWindows(meetings, now), [meetings, now])
+  const grouped = useMemo(() => groupByWindow(tagFiltered, windows), [tagFiltered, windows])
+  const windowSections = useMemo(
+    () => sortWindowBucketsNewestFirst(grouped.windows),
+    [grouped.windows],
+  )
+
+  const activeWindow = useMemo(
+    () => activeDigestWindow(windows, meetings, now),
+    [windows, meetings, now],
+  )
+
+  const sinceLastItems = useMemo(
+    () => itemsForWindow(tagFiltered, activeWindow),
+    [tagFiltered, activeWindow],
+  )
+
+  const sinceLastTags = useMemo(() => topTags(sinceLastItems), [sinceLastItems])
+  const sinceLabel = sinceLastLabel(meetings, now)
+
+  const taggedByUrl = useMemo(() => {
+    const map = new Map<string, TaggedNewsItem>()
+    for (const item of tagFiltered) map.set(item.url, item)
+    return map
+  }, [tagFiltered])
+
+  const recentTagged = useMemo(() => {
+    const urls = new Set(grouped.recent.map((item) => item.url))
+    return tagFiltered.filter((item) => urls.has(item.url))
+  }, [grouped.recent, tagFiltered])
 
   const counts: Record<Category, number> = {
     all: allNews.length,
@@ -374,22 +506,14 @@ export function BriefingPage() {
 
   const handleClose = useCallback(() => setSelectedItem(null), [])
 
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount))
-  }, [pageCount])
-
-  const handlePageChange = useCallback(
-    (nextPage: number) => {
-      setPage(Math.min(Math.max(nextPage, 1), pageCount))
-      setSelectedItem(null)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    },
-    [pageCount],
-  )
+  const handleTagClick = useCallback((tag: DigestTag) => {
+    setActiveTag((current) => (current === tag.key ? null : tag.key))
+    setSelectedItem(null)
+  }, [])
 
   const unreadCount = allNews.filter((i) => !i.read_at).length
-  const pageEnd = Math.min(pageStart + pagedItems.length, filtered.length)
-  const showPagination = filtered.length > PAGE_SIZE
+  const hasDigest = meetings.length > 0
+  const showEmpty = tagFiltered.length === 0 && grouped.recent.length === 0
 
   return (
     <div className="bp-page" data-testid="briefing-page">
@@ -408,74 +532,106 @@ export function BriefingPage() {
           <CategoryTabs
             active={activeCategory}
             counts={counts}
-            onChange={(c) => { setActiveCategory(c); setSelectedItem(null); setPage(1) }}
+            onChange={(c) => {
+              setActiveCategory(c)
+              setSelectedItem(null)
+              setActiveTag(null)
+            }}
           />
 
-          {filtered.length === 0 ? (
+          {hasDigest && (
+            <div className="digest-sticky" data-testid="digest-sticky-header">
+              <div className="digest-sticky-head">
+                <h2 className="digest-sticky-title">Since {sinceLabel}</h2>
+                <span className="digest-sticky-count">
+                  {sinceLastItems.length} item{sinceLastItems.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {(sinceLastTags.length > 0 || activeTag) && (
+                <div className="digest-sticky-tags">
+                  {sinceLastTags.map((tag) => (
+                    <TagChip
+                      key={tag.key}
+                      tag={tag}
+                      active={activeTag === tag.key}
+                      onClick={() => handleTagClick(tag)}
+                    />
+                  ))}
+                  {activeTag && (
+                    <button
+                      type="button"
+                      className="digest-filter-clear"
+                      onClick={() => setActiveTag(null)}
+                      data-testid="digest-filter-clear"
+                    >
+                      Clear filter
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showEmpty ? (
             <div className="bp-empty">
               No {activeCategory !== 'all' ? activeCategory : ''} items available.
-              Run <code>box-box --ingest-news</code> to refresh feeds.
+              {activeTag ? ' Try clearing the tag filter.' : ''}
+              {!activeTag && (
+                <>
+                  {' '}
+                  Run <code>box-box --ingest-news</code> to refresh feeds.
+                </>
+              )}
             </div>
           ) : (
             <>
-              {showPagination && (
-                <div className="bp-pagination bp-pagination-top">
-                  <span className="bp-pagination-meta mono">
-                    {pageStart + 1}-{pageEnd} of {filtered.length}
-                  </span>
-                  <div className="bp-pagination-actions">
-                    <button
-                      className="bp-page-btn"
-                      onClick={() => handlePageChange(safePage - 1)}
-                      disabled={safePage === 1}
-                    >
-                      Previous
-                    </button>
-                    <span className="bp-page-current mono">
-                      Page {safePage} / {pageCount}
-                    </span>
-                    <button
-                      className="bp-page-btn"
-                      onClick={() => handlePageChange(safePage + 1)}
-                      disabled={safePage === pageCount}
-                    >
-                      Next
-                    </button>
+              {windowSections.map(({ window, items }) => (
+                <section
+                  key={window.meeting_key}
+                  className="digest-section"
+                  data-testid={`digest-window-${window.meeting_key}`}
+                >
+                  <div className="digest-section-head">
+                    <h3 className="digest-section-title">{window.meeting_name}</h3>
+                    <span className="digest-section-count">{items.length}</span>
                   </div>
-                </div>
-              )}
+                  <div className={`bp-grid${selectedItem ? ' bp-grid-narrow' : ''}`}>
+                    {items.map((item) => {
+                      const tagged = taggedByUrl.get(item.url) ?? { ...item, tags: [] }
+                      return (
+                        <BriefingCard
+                          key={item.url}
+                          item={tagged}
+                          isActive={selectedItem?.url === item.url}
+                          activeTag={activeTag}
+                          onSelect={handleSelect}
+                          onTagClick={handleTagClick}
+                        />
+                      )
+                    })}
+                  </div>
+                </section>
+              ))}
 
-              <div className={`bp-grid${selectedItem ? ' bp-grid-narrow' : ''}`}>
-                {pagedItems.map((item) => (
-                  <BriefingCard
-                    key={item.url}
-                    item={item}
-                    isActive={selectedItem?.url === item.url}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </div>
-
-              {showPagination && (
-                <div className="bp-pagination bp-pagination-bottom">
-                  <button
-                    className="bp-page-btn"
-                    onClick={() => handlePageChange(safePage - 1)}
-                    disabled={safePage === 1}
-                  >
-                    Previous
-                  </button>
-                  <span className="bp-page-current mono">
-                    Page {safePage} / {pageCount}
-                  </span>
-                  <button
-                    className="bp-page-btn"
-                    onClick={() => handlePageChange(safePage + 1)}
-                    disabled={safePage === pageCount}
-                  >
-                    Next
-                  </button>
-                </div>
+              {recentTagged.length > 0 && (
+                <section className="digest-section digest-recent-section" data-testid="digest-recent">
+                  <div className="digest-section-head">
+                    <h3 className="digest-section-title">Recent</h3>
+                    <span className="digest-section-count">{recentTagged.length}</span>
+                  </div>
+                  <div className={`bp-grid${selectedItem ? ' bp-grid-narrow' : ''}`}>
+                    {recentTagged.map((item) => (
+                      <BriefingCard
+                        key={item.url}
+                        item={item}
+                        isActive={selectedItem?.url === item.url}
+                        activeTag={activeTag}
+                        onSelect={handleSelect}
+                        onTagClick={handleTagClick}
+                      />
+                    ))}
+                  </div>
+                </section>
               )}
             </>
           )}
