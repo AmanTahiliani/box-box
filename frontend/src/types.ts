@@ -12,6 +12,7 @@ export interface Meeting {
   country_name: string
   country_code: string
   country_flag: string
+  circuit_key?: number
   circuit_short_name: string
   date_start: string
   date_end: string
@@ -23,6 +24,7 @@ export interface Session {
   session_key: number
   session_name: string
   session_type: string
+  circuit_key?: number
   meeting_key: number
   date_start: string
   date_end: string
