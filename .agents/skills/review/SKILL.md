@@ -1,6 +1,6 @@
 ---
 name: review
-description: Locally review a box-box PR against its linked GitHub issue spec, run tests, capture visual screenshots when applicable, create a .review packet, and post a GitHub PR comment. Use when a ticket implementation is ready for independent local review before the human merge gate.
+description: 'Locally review a box-box PR against its linked GitHub issue spec, run tests, capture visual screenshots when applicable, create a .review packet, and post a GitHub PR comment. Use when a ticket implementation is ready for independent local review before the human merge gate.'
 argument-hint: <pr-number> [--harness <name>] [--publish-screenshots]
 ---
 

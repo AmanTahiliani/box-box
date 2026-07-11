@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Dispatch a Ready box-box issue to a coding harness (claude/codex/opencode/pi/cursor) in an isolated git worktree, run the build gate, and open a PR. Use when supervising implementation via "/implement <issue-number> --harness <name> [--dry-run]" or from any harness terminal with .agents/bin/dev.
+description: 'Dispatch a Ready box-box issue to a coding harness (claude/codex/opencode/pi/cursor) in an isolated git worktree, run the build gate, and open a PR. Use when supervising implementation via "/implement <issue-number> --harness <name> [--dry-run]" or from any harness terminal with .agents/bin/dev.'
 argument-hint: <issue-number> --harness <claude|codex|opencode|pi|cursor> [--dry-run]
 ---
 
