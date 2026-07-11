@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { Driver, EnrichedResult, EnrichedGrid, PositionSample, Lap, Meeting, Session } from '../types'
+import type { Driver, EnrichedResult, EnrichedGrid, PositionSample, Lap, Meeting, Session, Chapter } from '../types'
 import { fetchReplayFrames, fetchTrackOutline } from '../api'
 import { ReplayTrackMap } from './ReplayTrackMap'
+import { ChapterStrip } from './ChapterStrip'
 import { gridDelta, gridDeltaClass, formatDuration, formatGap } from '../utils'
+import { chapterEndScrub, chapterStartScrub, chapterTourDurations } from '../lib/chapters'
+
+const CHAPTER_TOUR_MS = 90_000
 
 interface Props {
   data: {
@@ -17,6 +21,7 @@ interface Props {
     session?: Session
     meeting?: Meeting
     drivers?: Driver[]
+    chapters?: Chapter[]
   }
 }
 
@@ -32,6 +37,7 @@ export function RaceStoryCanvas({ data }: Props) {
     session,
     meeting,
     drivers = [],
+    chapters = [],
   } = data
   const hasPositions = datasets['positions']?.status === 'available'
 
@@ -40,7 +46,10 @@ export function RaceStoryCanvas({ data }: Props) {
   const [mapOpen, setMapOpen] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(10)
+  const [chapterTourActive, setChapterTourActive] = useState(false)
+  const [tourChapterIndex, setTourChapterIndex] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const tourRef = useRef({ chapterIndex: 0, startedAt: 0, durationMs: 0, startScrub: 0, endScrub: 0 })
 
   // Position Evolution Chart Logic
   const allTimes = useMemo(() => [...new Set(positions.map((p) => p.date))].sort(), [positions])
@@ -86,6 +95,85 @@ export function RaceStoryCanvas({ data }: Props) {
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [chartTiming, isPlaying, playbackSpeed])
+
+  const stopChapterTour = () => {
+    setChapterTourActive(false)
+    setTourChapterIndex(null)
+  }
+
+  const jumpToChapter = (index: number, scrub: number) => {
+    setIsPlaying(false)
+    stopChapterTour()
+    setScrubTime(scrub)
+  }
+
+  const toggleChapterTour = () => {
+    if (chapterTourActive) {
+      stopChapterTour()
+      return
+    }
+    if (!chartTiming || chapters.length === 0) return
+    setIsPlaying(false)
+    setChapterTourActive(true)
+    setTourChapterIndex(0)
+    const startScrub = chapterStartScrub(chapters[0], chartTiming.tMin, chartTiming.tRange) ?? 0
+    setScrubTime(startScrub)
+    const durations = chapterTourDurations(chapters, CHAPTER_TOUR_MS)
+    tourRef.current = {
+      chapterIndex: 0,
+      startedAt: performance.now(),
+      durationMs: durations[0] ?? CHAPTER_TOUR_MS / chapters.length,
+      startScrub,
+      endScrub: chapterEndScrub(chapters[0], chartTiming.tMin, chartTiming.tRange) ?? startScrub,
+    }
+  }
+
+  useEffect(() => {
+    if (!chapterTourActive || !chartTiming || chapters.length === 0) return
+
+    let frame = 0
+    const tick = (now: number) => {
+      const state = tourRef.current
+      const elapsed = now - state.startedAt
+      const progress = Math.min(1, elapsed / Math.max(state.durationMs, 1))
+      const scrub = state.startScrub + (state.endScrub - state.startScrub) * progress
+      setScrubTime(scrub)
+      setTourChapterIndex(state.chapterIndex)
+
+      if (progress >= 1) {
+        const nextIndex = state.chapterIndex + 1
+        if (nextIndex >= chapters.length) {
+          stopChapterTour()
+          return
+        }
+        const durations = chapterTourDurations(chapters, CHAPTER_TOUR_MS)
+        const startScrub = chapterStartScrub(chapters[nextIndex], chartTiming.tMin, chartTiming.tRange) ?? 0
+        const endScrub = chapterEndScrub(chapters[nextIndex], chartTiming.tMin, chartTiming.tRange) ?? startScrub
+        tourRef.current = {
+          chapterIndex: nextIndex,
+          startedAt: now,
+          durationMs: durations[nextIndex] ?? CHAPTER_TOUR_MS / chapters.length,
+          startScrub,
+          endScrub,
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [chapterTourActive, chartTiming, chapters])
+
+  useEffect(() => {
+    if (!chapterTourActive) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        stopChapterTour()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [chapterTourActive])
 
   const replayTMs = useMemo(() => {
     const replay = replayQuery.data
@@ -210,6 +298,7 @@ export function RaceStoryCanvas({ data }: Props) {
 
     const handlePointerMove = (e: React.PointerEvent<SVGRectElement>) => {
       setIsPlaying(false)
+      stopChapterTour()
       if (!svgRef.current) return
       const rect = svgRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left
@@ -373,6 +462,7 @@ export function RaceStoryCanvas({ data }: Props) {
             className={`rs-tool-btn ${isPlaying ? 'active' : ''}`}
             onClick={() => {
               setScrubTime((current) => current ?? 0)
+              stopChapterTour()
               setIsPlaying((current) => !current)
             }}
           >
@@ -404,6 +494,18 @@ export function RaceStoryCanvas({ data }: Props) {
 
   return (
     <div className="race-story-canvas">
+      {hasChartData && chartTiming && chapters.length > 0 && (
+        <ChapterStrip
+          chapters={chapters}
+          scrubTime={scrubTime}
+          tMin={chartTiming.tMin}
+          tRange={chartTiming.tRange}
+          tourActive={chapterTourActive}
+          tourChapterIndex={tourChapterIndex}
+          onChapterClick={jumpToChapter}
+          onTourToggle={toggleChapterTour}
+        />
+      )}
       <div className="rs-replay-shell">
         <div className="rs-replay-main">
           {hasChartData ? (

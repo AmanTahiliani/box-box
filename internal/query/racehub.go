@@ -252,8 +252,36 @@ func (s *Service) GetRaceHub(sessionKey int) (RaceHub, error) {
 	}
 
 	hub.Chapters = chapters.Detect(hub.RaceControl, hub.Positions, hub.Laps, totalLaps(hub.Results, hub.Laps))
+	hub.Chapters = chapters.ApplyHeadlines(
+		hub.Chapters,
+		chapters.BuildDriverMap(hub.Drivers, driverIdentityInputs(hub.Results)),
+		hub.RaceControl,
+		winnerDriverNumber(hub.Results),
+	)
 	hub.Source = responseSource(hub.Datasets)
 	return hub, nil
+}
+
+func driverIdentityInputs(results []EnrichedResult) []chapters.DriverIdentityInput {
+	out := make([]chapters.DriverIdentityInput, 0, len(results))
+	for _, r := range results {
+		out = append(out, chapters.DriverIdentityInput{
+			DriverNumber: r.DriverNumber,
+			NameAcronym:  r.NameAcronym,
+			FullName:     r.FullName,
+			TeamName:     r.TeamName,
+		})
+	}
+	return out
+}
+
+func winnerDriverNumber(results []EnrichedResult) int {
+	for _, r := range results {
+		if r.Position == 1 {
+			return r.DriverNumber
+		}
+	}
+	return 0
 }
 
 func totalLaps(results []EnrichedResult, laps []models.Lap) int {

@@ -97,6 +97,7 @@ export interface RaceHub {
 export interface Chapter {
   kind: 'start' | 'safety_car' | 'virtual_safety_car' | 'red_flag' | 'pit_phase' | 'decisive_swing' | 'finish' | string
   title: string
+  headline: string
   start_lap: number
   end_lap: number
   start_time?: string
