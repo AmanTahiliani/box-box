@@ -32,7 +32,10 @@ export function BetweenSessionsView({
   const previous = context.previous_completed_session
   const previousName = previous?.session.session_name ?? 'Last session'
   const next = context.next_session?.session
-  const analysisKey = analysisSessionKey(context)
+  // Settling recap must open the just-finished session, not an older default.
+  const previousKey = previous?.session.session_key
+  const analysisKey =
+    settling && previousKey && previousKey > 0 ? previousKey : analysisSessionKey(context)
   const nodes = railNodes(previous, context.active_session, context.next_session)
 
   return (

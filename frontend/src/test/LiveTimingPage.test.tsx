@@ -103,7 +103,7 @@ function weekendContext(localAnalysis: string): WeekendContext {
       date_end: '2026-07-05T16:00:00Z',
       year: 2026,
     },
-    default_analysis_session: {
+    previous_completed_session: {
       session: {
         session_key: 99,
         session_name: 'Race',
@@ -125,6 +125,33 @@ function weekendContext(localAnalysis: string): WeekendContext {
     },
     championship_round: 1,
     total_championship_rounds: 1,
+  }
+}
+
+/** Just-finished archive-only Race + older already-ready Practice default. */
+function archiveOnlySettlingContext(previousAnalysis: string): WeekendContext {
+  return {
+    ...weekendContext(previousAnalysis),
+    default_analysis_session: {
+      session: {
+        session_key: 10,
+        session_name: 'Practice 1',
+        session_type: 'Practice',
+        meeting_key: 1,
+        date_start: '2026-07-04T12:00:00Z',
+        date_end: '2026-07-04T13:00:00Z',
+        gmt_offset: '',
+      },
+      availability: {
+        schedule: 'available',
+        live_transport: 'unknown',
+        live_session: 'inactive',
+        archive: 'available',
+        local_analysis: 'complete',
+        freshness: 'fresh',
+        limitations: [],
+      },
+    },
   }
 }
 
@@ -191,7 +218,7 @@ describe('LiveTimingPage', () => {
     const settling = await screen.findByTestId('live-settling')
     expect(settling).toBeInTheDocument()
     expect(screen.getByTestId('live-page')).toHaveAttribute('data-phase', 'settling')
-    // Canonical default-analysis session drives the primary action target.
+    // Just-finished previous_completed_session drives the primary action target.
     await waitFor(() =>
       expect(screen.getByTestId('live-handoff-analysis')).toHaveAttribute(
         'href',
@@ -200,6 +227,44 @@ describe('LiveTimingPage', () => {
     )
     // The timing tower is not shown while settling — it is a handoff surface.
     expect(screen.queryByText('Timing Tower')).not.toBeInTheDocument()
+  })
+
+  it('settles against archive-only previous, not an older ready default_analysis_session', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockFetchWeekendContext
+      .mockResolvedValueOnce(archiveOnlySettlingContext('pending'))
+      .mockResolvedValue(archiveOnlySettlingContext('complete'))
+
+    renderPage(
+      {
+        is_live: false,
+        data: null,
+        last_snapshot: { ...raceSnapshot, SessionStatus: 'Finished' },
+        last_snapshot_at: '2026-07-05T16:02:00Z',
+      },
+      undefined,
+      { setWeekendContext: false },
+    )
+
+    const action = await screen.findByTestId('live-handoff-analysis')
+    expect(action).toHaveAttribute('href', '/race-hub?session_key=99')
+    expect(action).toHaveAttribute('data-ready', 'false')
+    expect(action).toHaveTextContent('Open Race analysis')
+    expect(action).not.toHaveTextContent('Practice 1')
+
+    // Older default is already complete — polling must continue for previous.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WEEKEND_CONTEXT_POLL_MS + 500)
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('live-handoff-analysis')).toHaveAttribute('data-ready', 'true'),
+    )
+    expect(screen.getByTestId('live-handoff-analysis')).toHaveAttribute(
+      'href',
+      '/race-hub?session_key=99',
+    )
+    expect(mockFetchWeekendContext.mock.calls.length).toBeGreaterThan(1)
   })
 
   it('flips settling → analysis-ready when polling sees ingestion complete', async () => {
@@ -257,6 +322,11 @@ describe('LiveTimingPage', () => {
     expect(screen.getByText('Timing Tower')).toBeInTheDocument()
     expect(screen.queryByTestId('live-settling')).not.toBeInTheDocument()
     expect(screen.queryByTestId('live-archive-strip')).not.toBeInTheDocument()
+    // SSE may still be open (MockEventSource opens) — health must not say healthy.
+    await waitFor(() =>
+      expect(screen.getByTestId('live-feed-health')).toHaveTextContent(/reconnecting/i),
+    )
+    expect(screen.getByTestId('live-feed-health')).not.toHaveTextContent(/feed healthy/i)
   })
 
   it('keeps the settled snapshot behind an explicit read-only archive action', async () => {

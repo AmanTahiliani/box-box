@@ -1,6 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { LiveHandoff, analysisIsReady } from '../components/live/LiveHandoff'
+import {
+  LiveHandoff,
+  analysisIsReady,
+  handoffAnalysisSession,
+  shouldPollHandoffAnalysis,
+} from '../components/live/LiveHandoff'
 import type { LiveTimingRow } from '../lib/live'
 import type { ContextSession, WeekendContext } from '../types'
 
@@ -54,6 +59,18 @@ const baseContext: WeekendContext = {
   total_championship_rounds: 1,
 }
 
+/** Canonical contract: archive-only just-finished Race vs older ready Practice. */
+function archiveOnlySettlingContext(previousAnalysis: string): WeekendContext {
+  return {
+    ...baseContext,
+    // Older already-ingested session remains the default analysis target.
+    default_analysis_session: contextSession(10, 'Practice 1', 'complete'),
+    // Just-finished Race is archive-complete but not yet analysis-ready.
+    previous_completed_session: contextSession(99, 'Race', previousAnalysis),
+    next_session: contextSession(12, 'Qualifying', 'not_applicable'),
+  }
+}
+
 const rows: LiveTimingRow[] = [
   { RacingNumber: '1', Position: 1, Driver: { RacingNumber: '1', Position: 1 } as never, Info: { Tla: 'VER' } as never },
   { RacingNumber: '4', Position: 2, Driver: { RacingNumber: '4', Position: 2 } as never, Info: { Tla: 'NOR' } as never },
@@ -68,13 +85,51 @@ describe('analysisIsReady', () => {
   })
 })
 
+describe('handoffAnalysisSession', () => {
+  it('settling prefers previous_completed_session over an older default', () => {
+    const ctx = archiveOnlySettlingContext('pending')
+    const analysis = handoffAnalysisSession(ctx, 'settling')
+    expect(analysis?.session.session_key).toBe(99)
+    expect(analysis?.session.session_name).toBe('Race')
+    expect(analysisIsReady(analysis)).toBe(false)
+  })
+
+  it('inactive prefers default_analysis_session (shared analysisSessionKey)', () => {
+    const ctx = archiveOnlySettlingContext('pending')
+    const analysis = handoffAnalysisSession(ctx, 'inactive')
+    expect(analysis?.session.session_key).toBe(10)
+    expect(analysis?.session.session_name).toBe('Practice 1')
+  })
+
+  it('settling falls back to default when previous is absent', () => {
+    const ctx = {
+      ...baseContext,
+      default_analysis_session: contextSession(11, 'Race', 'pending'),
+    }
+    expect(handoffAnalysisSession(ctx, 'settling')?.session.session_key).toBe(11)
+  })
+})
+
+describe('shouldPollHandoffAnalysis', () => {
+  it('keeps polling when previous is pending even if default is already complete', () => {
+    expect(shouldPollHandoffAnalysis(archiveOnlySettlingContext('pending'))).toBe(true)
+  })
+
+  it('stops polling once the just-finished previous session is ready', () => {
+    expect(shouldPollHandoffAnalysis(archiveOnlySettlingContext('complete'))).toBe(false)
+  })
+})
+
 describe('LiveHandoff settling', () => {
   it('shows SESSION SETTLING with a pending analysis action while ingesting', () => {
     render(
       <LiveHandoff
         phase="settling"
         transport="connected"
-        context={{ ...baseContext, default_analysis_session: contextSession(11, 'Race', 'pending') }}
+        context={{
+          ...baseContext,
+          previous_completed_session: contextSession(11, 'Race', 'pending'),
+        }}
         rows={rows}
         capturedAt="2026-07-05T16:02:00Z"
         hasArchive
@@ -94,12 +149,37 @@ describe('LiveHandoff settling', () => {
     expect(screen.getByTestId('live-handoff-snapshot')).toHaveTextContent('VER')
   })
 
+  it('links/labels/readiness follow archive-only previous, not an older ready default', () => {
+    render(
+      <LiveHandoff
+        phase="settling"
+        transport="connected"
+        context={archiveOnlySettlingContext('pending')}
+        rows={rows}
+        capturedAt="2026-07-05T16:02:00Z"
+        hasArchive
+        onViewArchive={vi.fn()}
+      />,
+    )
+
+    const action = screen.getByTestId('live-handoff-analysis')
+    expect(action).toHaveAttribute('href', '/race-hub?session_key=99')
+    expect(action).toHaveAttribute('data-ready', 'false')
+    expect(action).toHaveTextContent('Open Race analysis')
+    expect(action).toHaveTextContent(/Settling — analysis will fill in as data ingests/i)
+    expect(action).not.toHaveTextContent('Practice 1')
+    expect(action).not.toHaveTextContent(/full timing, strategy & story ready/i)
+  })
+
   it('flips to analysis-ready once local ingestion completes', () => {
     render(
       <LiveHandoff
         phase="settling"
         transport="connected"
-        context={{ ...baseContext, default_analysis_session: contextSession(11, 'Race', 'complete') }}
+        context={{
+          ...baseContext,
+          previous_completed_session: contextSession(11, 'Race', 'complete'),
+        }}
         rows={rows}
         capturedAt="2026-07-05T16:02:00Z"
         hasArchive={false}
@@ -116,7 +196,10 @@ describe('LiveHandoff settling', () => {
       <LiveHandoff
         phase="settling"
         transport="connected"
-        context={{ ...baseContext, default_analysis_session: contextSession(11, 'Race', 'complete') }}
+        context={{
+          ...baseContext,
+          previous_completed_session: contextSession(11, 'Race', 'complete'),
+        }}
         rows={rows}
         capturedAt="2026-07-05T16:02:00Z"
         hasArchive

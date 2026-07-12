@@ -20,11 +20,12 @@ import { appendEvents, diffSnapshots, sessionSignature } from '../lib/events'
 import {
   allowsLiveInterpretations,
   deriveLivePhase,
+  effectiveFeedHealth,
   rendersSnapshot,
   terminalSessionStatus,
 } from '../lib/liveState'
 import type { TransportHealth } from '../lib/liveState'
-import { analysisIsReady } from '../components/live/LiveHandoff'
+import { shouldPollHandoffAnalysis } from '../components/live/LiveHandoff'
 import { SessionBanner } from '../components/live/SessionBanner'
 import { TrackStatusBanner } from '../components/live/TrackStatusBanner'
 import { TimingTower } from '../components/live/TimingTower'
@@ -112,11 +113,9 @@ export function LiveTimingPage() {
     enabled: !isLive,
     staleTime: WEEKEND_CONTEXT_STALE_MS,
     refetchInterval: (query) => {
-      const ctx = query.state.data
-      if (!ctx) return WEEKEND_CONTEXT_POLL_MS
-      // Once the default-analysis session is fully ingested there is nothing
-      // left to wait for; stop polling.
-      return analysisIsReady(ctx.default_analysis_session) ? false : WEEKEND_CONTEXT_POLL_MS
+      // Poll until the just-finished previous_completed_session is ready — an
+      // older already-complete default_analysis_session must not stop us.
+      return shouldPollHandoffAnalysis(query.state.data) ? WEEKEND_CONTEXT_POLL_MS : false
     },
     refetchIntervalInBackground: false,
   })
@@ -290,6 +289,9 @@ export function LiveTimingPage() {
       : 'Archived live timing snapshot'
 
   const showLiveInterpretations = allowsLiveInterpretations(phase)
+  // Upstream FIA loss can leave the browser SSE open; present one coherent
+  // feed-health truth rather than "Connection lost" + "Feed healthy".
+  const feedHealth = effectiveFeedHealth(streamStatus, phase)
 
   return (
     <div className="page live-page" data-testid="live-page" data-phase={phase}>
@@ -321,7 +323,7 @@ export function LiveTimingPage() {
       {(phase === 'settling' || phase === 'inactive') && (
         <LiveHandoff
           phase={phase}
-          transport={streamStatus}
+          transport={feedHealth}
           context={weekendContext}
           rows={settlingRows}
           capturedAt={archiveSnapshotAt}
@@ -336,7 +338,7 @@ export function LiveTimingPage() {
             phase={phase}
             snapshot={snapshot}
             rows={rows}
-            transport={streamStatus}
+            transport={feedHealth}
             now={now}
             capturedAt={phase === 'archive' ? archiveSnapshotAt : null}
           />

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   allowsLiveInterpretations,
   deriveLivePhase,
+  effectiveFeedHealth,
   isReadOnlyPhase,
   rendersSnapshot,
   terminalSessionStatus,
@@ -165,5 +166,18 @@ describe('phase capability helpers', () => {
     expect(isReadOnlyPhase('archive')).toBe(true)
     expect(isReadOnlyPhase('live')).toBe(false)
     expect(isReadOnlyPhase('disconnected')).toBe(false)
+  })
+})
+
+describe('effectiveFeedHealth', () => {
+  it('downgrades a still-open SSE to reconnecting while phase is disconnected', () => {
+    expect(effectiveFeedHealth('connected', 'disconnected')).toBe('disconnected')
+    expect(effectiveFeedHealth('connecting', 'disconnected')).toBe('disconnected')
+  })
+
+  it('preserves transport when the session phase is live or settling', () => {
+    expect(effectiveFeedHealth('connected', 'live')).toBe('connected')
+    expect(effectiveFeedHealth('connected', 'settling')).toBe('connected')
+    expect(effectiveFeedHealth('error', 'disconnected')).toBe('error')
   })
 })

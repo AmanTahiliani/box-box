@@ -256,7 +256,8 @@ const weekendContext = (localAnalysis: string) => ({
     date_end: '2026-07-05T16:00:00Z',
     year: 2026,
   },
-  default_analysis_session: {
+  // Just-finished session lives in previous_completed_session (canonical contract).
+  previous_completed_session: {
     session: {
       session_key: 9472,
       session_name: 'Race',
@@ -278,6 +279,31 @@ const weekendContext = (localAnalysis: string) => ({
   },
   championship_round: 1,
   total_championship_rounds: 1,
+})
+
+/** Archive-only just-finished Race + older already-ready Practice default. */
+const archiveOnlySettlingContext = (previousAnalysis: string) => ({
+  ...weekendContext(previousAnalysis),
+  default_analysis_session: {
+    session: {
+      session_key: 9001,
+      session_name: 'Practice 1',
+      session_type: 'Practice',
+      meeting_key: 1,
+      date_start: '2026-07-04T12:00:00Z',
+      date_end: '2026-07-04T13:00:00Z',
+      gmt_offset: '',
+    },
+    availability: {
+      schedule: 'available',
+      live_transport: 'unknown',
+      live_session: 'inactive',
+      archive: 'available',
+      local_analysis: 'complete',
+      freshness: 'fresh',
+      limitations: [],
+    },
+  },
 })
 
 const heartbeatStream = (route: import('@playwright/test').Route) =>
@@ -353,9 +379,40 @@ test.describe('Live Timing (no session)', () => {
     await expect(analysis).toContainText(/analysis will fill in as data ingests/i)
   })
 
+  test('settling targets archive-only previous_completed_session over older default', async ({ page }) => {
+    await page.route('**/api/v1/live/state', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          is_live: false,
+          data: null,
+          last_snapshot: { ...raceSnapshot.data, SessionStatus: 'Finished' },
+          last_snapshot_at: '2026-07-04T14:00:00Z',
+        }),
+      }),
+    )
+    await page.route('**/api/v1/weekend-context', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(archiveOnlySettlingContext('pending')),
+      }),
+    )
+    await page.route('**/api/v1/live/stream', heartbeatStream)
+
+    await page.goto('/live')
+    await expect(page.getByTestId('live-settling')).toBeVisible()
+    const analysis = page.getByTestId('live-handoff-analysis')
+    await expect(analysis).toHaveAttribute('href', '/race-hub?session_key=9472')
+    await expect(analysis).toHaveAttribute('data-ready', 'false')
+    await expect(analysis).toContainText('Open Race analysis')
+    await expect(analysis).not.toContainText('Practice 1')
+  })
+
   test('retains the last live snapshot with a disconnected warning on a feed drop', async ({ page }) => {
     // is_live=false but SessionStatus is still "Started": the FIA feed dropped
     // mid-session. The page must warn + retain the live tower, never settle.
+    // Keep the browser SSE open via a long-lived stream so transport stays connected
+    // while phase is disconnected — health must still say Reconnecting.
     await page.route('**/api/v1/live/state', (route) =>
       route.fulfill({
         contentType: 'application/json',
@@ -370,7 +427,21 @@ test.describe('Live Timing (no session)', () => {
     await page.route('**/api/v1/weekend-context', (route) =>
       route.fulfill({ contentType: 'application/json', body: JSON.stringify(weekendContext('pending')) }),
     )
-    await page.route('**/api/v1/live/stream', heartbeatStream)
+    await page.route('**/api/v1/live/stream', async (route) => {
+      const body = [
+        'event: heartbeat',
+        'data: {}',
+        '',
+        'event: heartbeat',
+        'data: {}',
+        '',
+      ].join('\n')
+      await route.fulfill({
+        contentType: 'text/event-stream',
+        headers: { 'Cache-Control': 'no-cache' },
+        body,
+      })
+    })
 
     await page.goto('/live')
     await expect(page.getByTestId('live-page')).toHaveAttribute('data-phase', 'disconnected')
@@ -378,5 +449,7 @@ test.describe('Live Timing (no session)', () => {
     await expect(page.getByText('Timing Tower')).toBeVisible()
     await expect(page.getByTestId('live-settling')).toHaveCount(0)
     await expect(page.getByTestId('live-archive-strip')).toHaveCount(0)
+    await expect(page.getByTestId('live-feed-health')).toContainText(/reconnecting/i)
+    await expect(page.getByTestId('live-feed-health')).not.toContainText(/feed healthy/i)
   })
 })

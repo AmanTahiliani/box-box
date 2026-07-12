@@ -138,6 +138,21 @@ export function isReadOnlyPhase(phase: LivePhase): boolean {
   return phase === 'archive'
 }
 
+/**
+ * Fan-facing feed health. Browser SSE can stay `connected` after an upstream
+ * FIA drop leaves us in `disconnected` with a retained non-terminal snapshot —
+ * present that as reconnecting, never "Feed healthy" beside "Connection lost".
+ */
+export function effectiveFeedHealth(
+  transport: TransportHealth,
+  phase: LivePhase,
+): TransportHealth {
+  if (phase === 'disconnected' && !transportDown(transport)) {
+    return 'disconnected'
+  }
+  return transport
+}
+
 /** Short, human transport-health label — always secondary to session state. */
 export function feedHealthLabel(transport: TransportHealth): string {
   switch (transport) {

@@ -27,6 +27,11 @@ function formatCapturedAt(capturedAt: string | null | undefined): string {
   return date.toLocaleString()
 }
 
+function sessionKeyOf(session: ContextSession | undefined): number | undefined {
+  const key = session?.session.session_key
+  return key && key > 0 ? key : undefined
+}
+
 /**
  * Fully ingested analysis (local_analysis === complete). Stricter than
  * hasLocalAnalysis, which also treats partial as link-worthy — Live polling
@@ -34,6 +39,51 @@ function formatCapturedAt(capturedAt: string | null | undefined): string {
  */
 export function analysisIsReady(session: ContextSession | undefined): boolean {
   return session?.availability?.local_analysis === 'complete'
+}
+
+/**
+ * Analysis target for the Live handoff surface.
+ *
+ * Settling must follow the just-finished session (`previous_completed_session`).
+ * The canonical backend can mark that session archive-complete while leaving
+ * `default_analysis_session` on an older already-ingested practice/qualifying —
+ * preferring default here would link/poll/label the wrong race.
+ *
+ * Inactive keeps the shared default-first preference via analysisSessionKey.
+ */
+export function handoffAnalysisSession(
+  context: WeekendContext | undefined,
+  phase: 'settling' | 'inactive',
+): ContextSession | undefined {
+  if (!context) return undefined
+  if (phase === 'settling') {
+    if (sessionKeyOf(context.previous_completed_session)) {
+      return context.previous_completed_session
+    }
+    return sessionKeyOf(context.default_analysis_session)
+      ? context.default_analysis_session
+      : undefined
+  }
+  const key = analysisSessionKey(context)
+  if (!key) return undefined
+  if (context.default_analysis_session?.session.session_key === key) {
+    return context.default_analysis_session
+  }
+  return context.previous_completed_session
+}
+
+/**
+ * Keep polling weekend-context while the just-finished session (or, absent
+ * that, the default analysis session) is still ingesting. An older ready
+ * default must not stop the settle→ready transition.
+ */
+export function shouldPollHandoffAnalysis(context: WeekendContext | undefined): boolean {
+  if (!context) return true
+  const previous = context.previous_completed_session
+  if (sessionKeyOf(previous) && !analysisIsReady(previous)) return true
+  const fallback = context.default_analysis_session
+  if (sessionKeyOf(fallback) && !analysisIsReady(fallback)) return true
+  return !sessionKeyOf(previous) && !sessionKeyOf(fallback)
 }
 
 export function LiveHandoff({
@@ -54,14 +104,8 @@ export function LiveHandoff({
   const title = focusName || activeName || 'Live Timing'
   const topRows = rows.slice(0, 3)
 
-  // Shared analysisSessionKey prefers default_analysis_session, then previous.
-  const analysisKey = context ? analysisSessionKey(context) : undefined
-  const analysis =
-    !context || !analysisKey
-      ? undefined
-      : context.default_analysis_session?.session.session_key === analysisKey
-        ? context.default_analysis_session
-        : context.previous_completed_session
+  const analysis = handoffAnalysisSession(context, phase)
+  const analysisKey = sessionKeyOf(analysis)
   const analysisName = analysis?.session.session_name || 'session'
   const analysisReady = analysisIsReady(analysis)
 
