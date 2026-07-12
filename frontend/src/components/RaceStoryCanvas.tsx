@@ -417,7 +417,10 @@ export function RaceStoryCanvas({ data }: Props) {
       clearChapterSelection()
       if (!svgRef.current) return
       const rect = svgRef.current.getBoundingClientRect()
-      const x = e.clientX - rect.left
+      if (rect.width <= 0) return
+      // Pointer coordinates are CSS pixels; convert them to the SVG viewBox
+      // before comparing with the fixed chart margins and plot width.
+      const x = ((e.clientX - rect.left) / rect.width) * W
       const t = Math.max(0, Math.min(1, (x - PL) / plotW))
       setScrubTime(t)
     }
@@ -595,6 +598,7 @@ export function RaceStoryCanvas({ data }: Props) {
             width={plotW}
             height={plotH}
             fill="transparent"
+            data-testid="position-chart-interaction"
             onPointerMove={handlePointerMove}
             onPointerLeave={() => {
               if (!isPlaying) {

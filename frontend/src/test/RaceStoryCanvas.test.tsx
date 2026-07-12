@@ -206,6 +206,30 @@ describe('RaceStoryCanvas replay map', () => {
     expect(document.querySelector('.rs-driver-line')).toHaveAttribute('points', '40,8 592,8 592,8')
   })
 
+  it('maps cursor positions from rendered pixels to the SVG viewBox', () => {
+    renderCanvas()
+
+    const svg = document.querySelector('.rs-position-chart-svg')!
+    vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 1280,
+      height: 360,
+      top: 0,
+      right: 1280,
+      bottom: 360,
+      left: 0,
+      toJSON: () => ({}),
+    })
+
+    const pointerMove = new Event('pointermove', { bubbles: true })
+    Object.defineProperty(pointerMove, 'clientX', { value: 640 })
+    fireEvent(screen.getByTestId('position-chart-interaction'), pointerMove)
+
+    // 640px is the middle of a 1280px rendered chart, which is x=320 in its 640-unit viewBox.
+    expect(document.querySelector('.rs-playhead')).toHaveAttribute('x1', '320')
+  })
+
   it('syncs active chapter highlight when a chapter card is clicked', async () => {
     renderCanvas()
 
