@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
-import { formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
+import { sessionTypeAbbrev } from '../lib/coverage'
+import { sessionState, sessionStateDotClass, sessionStateLabel } from '../lib/sessionState'
 import { countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 
 interface Props {
@@ -19,11 +20,24 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
     currentMeetingKey ?? null,
   )
 
+  const weekendQuery = useQuery({
+    queryKey: ['weekend', openMeetingKey],
+    queryFn: () => fetchWeekend(openMeetingKey!),
+    enabled: openMeetingKey != null,
+  })
+
+  // Default the visible season to the current weekend's year so the current
+  // meeting card is actually rendered (seasons are newest-first, which can be a
+  // future season). Fall back to the newest season only when there's no context.
   useEffect(() => {
-    if (year == null && seasonsQuery.data?.length) {
+    if (year != null) return
+    const currentYear = weekendQuery.data?.meeting?.year
+    if (currentYear) {
+      setYear(currentYear)
+    } else if (seasonsQuery.data?.length) {
       setYear(seasonsQuery.data[0])
     }
-  }, [seasonsQuery.data, year])
+  }, [seasonsQuery.data, weekendQuery.data, year])
 
   const meetingsQuery = useQuery({
     queryKey: ['meetings', year],
@@ -31,15 +45,10 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
     enabled: year != null,
   })
 
-  const weekendQuery = useQuery({
-    queryKey: ['weekend', openMeetingKey],
-    queryFn: () => fetchWeekend(openMeetingKey!),
-    enabled: openMeetingKey != null,
-  })
-
   const seasons = seasonsQuery.data ?? []
   const meetings = meetingsQuery.data ?? []
   const weekend = weekendQuery.data
+  const now = new Date()
 
   function openSession(sessionKey: number) {
     navigate({ to: '/race-hub', search: { session_key: sessionKey } })
@@ -107,8 +116,10 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
                       <div className="rh-switcher-empty">loading sessions…</div>
                     )}
                     {weekend && weekend.meeting_key === m.meeting_key &&
-                      weekend.sessions.map(({ session, source, datasets }) => {
+                      weekend.sessions.map((weekendSession) => {
+                        const { session } = weekendSession
                         const active = session.session_key === currentSessionKey
+                        const state = sessionState(weekendSession, now)
                         return (
                           <button
                             key={session.session_key}
@@ -122,8 +133,11 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
                             </span>
                             <span className="rh-switcher-sess-name">{session.session_name}</span>
                             <span className="rh-switcher-sess-cov mono">
-                              <span className={`cc-cov-dot cc-cov-${source}`} aria-hidden="true" />
-                              {formatCoverageHint(datasets)}
+                              <span
+                                className={`cc-cov-dot ${sessionStateDotClass(state)}`}
+                                aria-hidden="true"
+                              />
+                              {sessionStateLabel(state)}
                             </span>
                           </button>
                         )

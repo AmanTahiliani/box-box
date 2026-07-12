@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 
 const FULL_SESSION = 9472
 const CORE_ONLY_SESSION = 9000
+const FUTURE_SESSION = 9600
 
 test.describe('Race Hub Weekend Workspace', () => {
   test('lands on the Overview tab with workspace identity', async ({ page }) => {
@@ -91,20 +92,56 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(page.getByTestId(`rh-switcher-session-${FULL_SESSION}`)).toBeVisible()
   })
 
-  test('Data Status tab points at admin instead of inline CLI hints', async ({ page }) => {
+  test('Diagnostics is a secondary action and points at admin, not inline CLI hints', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${CORE_ONLY_SESSION}`)
-    await page.getByRole('tab', { name: 'Data Status' }).click()
+    await page.getByRole('tab', { name: 'Diagnostics' }).click()
 
     await expect(page.getByTestId('rh-data-status')).toBeVisible()
     await expect(page.getByRole('link', { name: /manage ingestion/i })).toHaveAttribute(
       'href',
       '/admin',
     )
+    // Raw coverage strip stays hidden until explicitly requested.
+    await expect(page.getByTestId('rh-dataset-strip')).toHaveCount(0)
+    await page.getByTestId('rh-diagnostics-toggle').click()
+    await expect(page.getByTestId('rh-dataset-strip')).toBeVisible()
   })
 
-  test('bare /race-hub redirects to the focus session', async ({ page }) => {
+  test('groups analysis navigation into Story, Analysis, and Data & Context', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page.getByTestId('rh-tabgroup-story')).toBeVisible()
+    await expect(page.getByTestId('rh-tabgroup-analysis')).toBeVisible()
+    await expect(page.getByTestId('rh-tabgroup-context')).toBeVisible()
+  })
+
+  test('bare /race-hub resolves to a completed session, never a future one', async ({ page }) => {
     await page.goto('/race-hub')
     await expect(page).toHaveURL(/session_key=\d+/)
     await expect(page.getByTestId('race-hub')).toBeVisible()
+    // It must not land on the future session.
+    await expect(page).not.toHaveURL(new RegExp(`session_key=${FUTURE_SESSION}`))
+  })
+
+  test('explicit completed session deep link stays stable and shows analysis', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    await expect(page.getByTestId('rh-overview')).toBeVisible()
+  })
+
+  test('explicit future session renders the pre-session view, not empty analysis', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FUTURE_SESSION}`)
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page.getByTestId('rh-presession')).toBeVisible()
+    await expect(page.getByTestId('rh-overview')).toHaveCount(0)
+  })
+
+  test('returning to Weekend from an analysis view preserves the meeting context', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await page.getByRole('tab', { name: 'Strategy' }).click()
+
+    await page.getByTestId('rh-switch-weekend').click()
+    await expect(page.getByTestId('rh-switcher')).toBeVisible()
+    // The current session remains reachable/selected from the switcher.
+    await expect(page.getByTestId(`rh-switcher-session-${FULL_SESSION}`)).toBeVisible()
   })
 })

@@ -148,7 +148,7 @@ export function OverviewView({ data }: Props) {
               ? 'Every Race Hub dataset is local for this session.'
               : `${coverage.total - coverage.available} dataset${
                   coverage.total - coverage.available === 1 ? '' : 's'
-                } not ingested yet — see Data Status tab.`}
+                } not ingested yet — see Diagnostics.`}
           </div>
         </section>
       </div>

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { TabBar } from '../components/TabBar'
 
 describe('TabBar', () => {
-  it('renders all Race Hub workspace tabs', () => {
+  it('renders all Race Hub workspace tabs grouped into a hierarchy', () => {
     render(<TabBar active="overview" onChange={() => {}} />)
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Race Story' })).toBeInTheDocument()
@@ -12,7 +12,11 @@ describe('TabBar', () => {
     expect(screen.getByRole('tab', { name: 'Lap Data' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Conditions' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Race Control' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Data Status' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toBeInTheDocument()
+
+    expect(screen.getByTestId('rh-tabgroup-story')).toBeInTheDocument()
+    expect(screen.getByTestId('rh-tabgroup-analysis')).toBeInTheDocument()
+    expect(screen.getByTestId('rh-tabgroup-context')).toBeInTheDocument()
   })
 
   it('marks the active tab with aria-selected', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
@@ -24,6 +24,9 @@ const mockFetchRaceHub = vi.mocked(fetchRaceHub)
 const mockFetchSeasons = vi.mocked(fetchSeasons)
 const mockFetchLocalMeetings = vi.mocked(fetchLocalMeetings)
 const mockFetchWeekend = vi.mocked(fetchWeekend)
+
+// Use a fixed clock so upcoming/completed states are deterministic in tests.
+const NOW = new Date('2025-06-01T00:00:00Z')
 
 const meeting: Meeting = {
   meeting_key: 1229,
@@ -56,6 +59,17 @@ const qualSession: Session = {
   meeting_key: 1229,
   date_start: '2025-05-24T14:00:00+00:00',
   date_end: '2025-05-24T15:00:00+00:00',
+  gmt_offset: '02:00:00',
+}
+
+// A session scheduled far in the future relative to NOW.
+const futureSession: Session = {
+  session_key: 9600,
+  session_name: 'Race',
+  session_type: 'Race',
+  meeting_key: 1300,
+  date_start: '2099-05-25T13:00:00+00:00',
+  date_end: '2099-05-25T15:00:00+00:00',
   gmt_offset: '02:00:00',
 }
 
@@ -163,6 +177,7 @@ const weekend: Weekend = {
   meeting_key: 1229,
   meeting,
   default_session_key: 9472,
+  default_analysis_session: 9472,
   sessions: [
     { session: qualSession, source: 'local', datasets: fullDatasets },
     { session: raceSession, source: 'local', datasets: fullDatasets },
@@ -206,10 +221,16 @@ function renderRaceHub(sessionKey: number) {
 describe('RaceHubPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW)
     mockFetchSeasons.mockResolvedValue([2025])
     mockFetchLocalMeetings.mockResolvedValue([meeting])
     mockFetchWeekend.mockResolvedValue(weekend)
     mockFetchRaceHub.mockResolvedValue(raceHub)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders the workspace identity band, session rail, and overview for a known session', async () => {
@@ -239,14 +260,44 @@ describe('RaceHubPage', () => {
     
   })
 
-  it('keeps Data Status accessible and free of inline CLI guidance', async () => {
+  it('keeps Diagnostics accessible behind a secondary action, free of inline CLI guidance', async () => {
     renderRaceHub(9472)
     await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Data Status' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Diagnostics' }))
 
     expect(screen.getByTestId('rh-data-status')).toBeInTheDocument()
     expect(screen.queryByText(/ingest-session/i)).not.toBeInTheDocument()
+
+    // Raw dataset coverage strip is hidden until explicitly requested.
+    expect(screen.queryByTestId('rh-dataset-strip')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('rh-diagnostics-toggle'))
+    expect(screen.getByTestId('rh-dataset-strip')).toBeInTheDocument()
+  })
+
+  it('does not render the raw dataset strip before fan-facing content', async () => {
+    renderRaceHub(9472)
+    await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
+
+    // Overview (fan content) is present, but the raw diagnostics strip is not.
+    expect(screen.getByTestId('rh-overview')).toBeInTheDocument()
+    expect(screen.queryByTestId('rh-dataset-strip')).not.toBeInTheDocument()
+  })
+
+  it('groups analysis navigation into Story, Analysis, and Data & Context', async () => {
+    renderRaceHub(9472)
+    await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
+
+    expect(screen.getByTestId('rh-tabgroup-story')).toBeInTheDocument()
+    expect(screen.getByTestId('rh-tabgroup-analysis')).toBeInTheDocument()
+    expect(screen.getByTestId('rh-tabgroup-context')).toBeInTheDocument()
+    // Every capability preserved
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Strategy' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Compare' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Lap Data' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Race Control' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Diagnostics' })).toBeInTheDocument()
   })
 
   it('toggles the inline weekend switcher', async () => {
@@ -255,5 +306,84 @@ describe('RaceHubPage', () => {
 
     fireEvent.click(screen.getByTestId('rh-switch-weekend'))
     expect(await screen.findByTestId('rh-switcher')).toBeInTheDocument()
+  })
+
+  it('resolves bare /race-hub through the default analysis session (never a future one)', async () => {
+    const futureMeeting: Meeting = { ...meeting, meeting_key: 1300, meeting_name: 'Future GP' }
+    mockFetchLocalMeetings.mockResolvedValue([futureMeeting])
+    mockFetchWeekend.mockResolvedValue({
+      source: 'partial',
+      meeting_key: 1300,
+      meeting: futureMeeting,
+      // Backend excludes the future session; falls back to the completed quali.
+      default_session_key: 9600,
+      default_analysis_session: 9471,
+      sessions: [
+        { session: { ...qualSession, meeting_key: 1300 }, source: 'local', datasets: fullDatasets },
+        { session: futureSession, source: 'none', datasets: {} },
+      ],
+    })
+
+    renderRaceHub(0)
+
+    await waitFor(() => expect(mockFetchRaceHub).toHaveBeenCalledWith(9471))
+    expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9600)
+  })
+
+  it('renders a pre-session view instead of empty analysis for a future session', async () => {
+    mockFetchRaceHub.mockResolvedValue({
+      ...raceHub,
+      session_key: 9600,
+      source: 'none',
+      session: futureSession,
+      meeting: { ...meeting, meeting_key: 1300 },
+      results: [],
+      starting_grid: [],
+      datasets: {},
+    })
+    mockFetchWeekend.mockResolvedValue({
+      source: 'none',
+      meeting_key: 1300,
+      meeting: { ...meeting, meeting_key: 1300 },
+      sessions: [{ session: futureSession, source: 'none', datasets: {} }],
+    })
+
+    renderRaceHub(9600)
+
+    await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
+    expect(await screen.findByTestId('rh-presession')).toBeInTheDocument()
+    // No Winner analysis card for an unrun session.
+    expect(screen.queryByTestId('rh-overview')).not.toBeInTheDocument()
+    expect(screen.queryByText('Winner')).not.toBeInTheDocument()
+  })
+
+  it('labels a completed but partial session as Partial in the active state', async () => {
+    mockFetchWeekend.mockResolvedValue({
+      ...weekend,
+      sessions: [
+        { session: qualSession, source: 'local', datasets: fullDatasets },
+        { session: raceSession, source: 'partial', datasets: { drivers: fullDatasets.drivers } },
+      ],
+    })
+
+    renderRaceHub(9472)
+
+    await waitFor(() => expect(screen.getByTestId('rh-active-state')).toBeInTheDocument())
+    expect(screen.getByTestId('rh-active-state')).toHaveTextContent('Partial')
+  })
+
+  it('offers retry and back-to-Weekend on an error', async () => {
+    mockFetchRaceHub.mockRejectedValue(new Error('boom'))
+
+    renderRaceHub(9472)
+
+    await waitFor(() => expect(screen.getByTestId('race-hub-error')).toBeInTheDocument())
+    expect(screen.getByTestId('rh-retry')).toBeInTheDocument()
+    const back = screen.getByTestId('rh-back-weekend')
+    expect(back).toHaveAttribute('href', '/race-hub')
+
+    mockFetchRaceHub.mockResolvedValue(raceHub)
+    fireEvent.click(screen.getByTestId('rh-retry'))
+    await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
   })
 })

@@ -30,6 +30,11 @@ func main() {
 	const meetingKey = 1229
 	const fullSessionKey = 9472
 	const coreOnlySessionKey = 9000
+	// A far-future session inside the same Monaco meeting so bare /race-hub never
+	// lands on it (default_analysis_session picks the completed race) yet an
+	// explicit deep link renders the dedicated pre-session view. Kept in the same
+	// meeting so the Command Center's focus selection is unaffected.
+	const futureSessionKey = 9600
 
 	if err := seedMeeting(st, meetingKey); err != nil {
 		fail(err)
@@ -56,6 +61,10 @@ func main() {
 	}
 
 	if err := seedAnalytics(st, fullSessionKey, meetingKey); err != nil {
+		fail(err)
+	}
+
+	if err := seedFutureSession(st, futureSessionKey, meetingKey); err != nil {
 		fail(err)
 	}
 
@@ -92,6 +101,20 @@ func seedSession(st *store.Store, sessionKey, meetingKey int, name string) error
 		CircuitKey:  10,
 		DateStart:   "2025-05-25T13:00:00+00:00",
 		DateEnd:     "2025-05-25T15:00:00+00:00",
+	})
+}
+
+func seedFutureSession(st *store.Store, sessionKey, meetingKey int) error {
+	// Far-future date so this session is always "upcoming" relative to the wall
+	// clock and renders the pre-session view on an explicit deep link.
+	return st.UpsertSession(store.Session{
+		SessionKey:  sessionKey,
+		MeetingKey:  meetingKey,
+		SessionName: "Future Sprint",
+		SessionType: "Race",
+		CircuitKey:  10,
+		DateStart:   "2099-05-25T13:00:00+00:00",
+		DateEnd:     "2099-05-25T15:00:00+00:00",
 	})
 }
 

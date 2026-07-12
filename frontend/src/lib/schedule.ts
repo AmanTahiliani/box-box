@@ -95,6 +95,22 @@ export function pickFocusMeeting(meetings: Meeting[], now: Date): Meeting | null
   )
 }
 
+/**
+ * Meeting a fan-facing default landing (bare `/race-hub`) should open. Unlike
+ * `pickFocusMeeting`, it prefers a completed weekend over an upcoming one so the
+ * default never lands on a future race with no analysis. Falls back to the next
+ * upcoming meeting only when nothing has happened yet.
+ */
+export function pickAnalysisFocusMeeting(meetings: Meeting[], now: Date): Meeting | null {
+  return (
+    currentMeeting(meetings, now) ??
+    mostRecentPastMeeting(meetings, now) ??
+    nextUpcomingMeeting(meetings, now) ??
+    meetings[0] ??
+    null
+  )
+}
+
 export function meetingHasStarted(meeting: Meeting, now: Date): boolean {
   const start = meetingStartTime(meeting)
   return start != null && now >= start

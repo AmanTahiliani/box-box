@@ -7,6 +7,7 @@ export const VIEWPORTS = {
 } as const
 
 export const FULL_SESSION = 9472
+export const FUTURE_SESSION = 9600
 
 /** Wait for web fonts and layout to settle before screenshots. */
 export async function waitForScreenshotReady(page: Page): Promise<void> {
@@ -30,6 +31,16 @@ export async function gotoRaceHubReady(page: Page, sessionKey = FULL_SESSION): P
   await expect(page.getByTestId('rh-identity')).toBeVisible()
   await expect(page.getByTestId(`rh-session-${sessionKey}`)).toBeVisible()
   await expect(page.getByTestId('rh-overview')).toBeVisible()
+  await waitForScreenshotReady(page)
+}
+
+export async function gotoRaceHubFutureReady(
+  page: Page,
+  sessionKey = FUTURE_SESSION,
+): Promise<void> {
+  await page.goto(`/race-hub?session_key=${sessionKey}`)
+  await expect(page.getByTestId('race-hub')).toBeVisible()
+  await expect(page.getByTestId('rh-presession')).toBeVisible()
   await waitForScreenshotReady(page)
 }
 
