@@ -44,9 +44,10 @@ const results: EnrichedResult[] = [
 ]
 
 describe('ReplayTrackMap', () => {
-  it('renders an empty state when replay frames are missing', () => {
+  it('renders an empty-state card when replay frames are missing', () => {
     render(<ReplayTrackMap outline={outline} replay={{ ...replay, frames: [] }} tMs={0} drivers={[]} results={results} />)
-    expect(screen.getByTestId('replay-track-map')).toHaveTextContent(/historical GPS unavailable/i)
+    expect(screen.getByTestId('replay-map-no-frames')).toBeInTheDocument()
+    expect(screen.getByText('Historical GPS unavailable')).toBeInTheDocument()
   })
 
   it('renders car labels from result metadata', () => {

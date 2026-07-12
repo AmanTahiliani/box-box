@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeChapterIndex,
+  chapterBandFill,
   chapterKindLabel,
   chapterLapRange,
   chapterStartScrub,
   chapterTourDurations,
+  deCollideYPositions,
+  decimatedPositionLabels,
 } from '../lib/chapters'
 import type { Chapter } from '../types'
 
@@ -59,5 +62,28 @@ describe('chapters lib', () => {
 
   it('splits 90s evenly across chapters', () => {
     expect(chapterTourDurations(sampleChapters)).toEqual([45_000, 45_000])
+  })
+
+  it('decimates position axis labels', () => {
+    expect(decimatedPositionLabels(22)).toEqual([1, 5, 10, 15, 20, 22])
+  })
+
+  it('returns chapter band fills by kind', () => {
+    expect(chapterBandFill('safety_car')).toContain('rgba')
+    expect(chapterBandFill('virtual_safety_car')).toContain('rgba')
+  })
+
+  it('de-collides overlapping label y positions', () => {
+    const adjusted = deCollideYPositions(
+      [
+        { key: 'a', y: 10 },
+        { key: 'b', y: 12 },
+        { key: 'c', y: 30 },
+      ],
+      12,
+    )
+    expect(adjusted.get('a')).toBe(10)
+    expect(adjusted.get('b')).toBe(22)
+    expect(adjusted.get('c')).toBe(34)
   })
 })

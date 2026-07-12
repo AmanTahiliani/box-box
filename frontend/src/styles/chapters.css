@@ -9,6 +9,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--s4);
+  flex-wrap: wrap;
 }
 
 .chapter-strip-title {
@@ -44,6 +45,31 @@
   color: var(--text);
 }
 
+.chapter-strip-scroll-wrap {
+  position: relative;
+}
+
+.chapter-strip-scroll-wrap::before,
+.chapter-strip-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: var(--s2);
+  width: 28px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.chapter-strip-scroll-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg), transparent);
+}
+
+.chapter-strip-scroll-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg), transparent);
+}
+
 .chapter-strip-scroll {
   display: flex;
   gap: var(--s3);
@@ -51,10 +77,26 @@
   padding-bottom: var(--s2);
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+.chapter-strip-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.chapter-strip-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chapter-strip-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 999px;
 }
 
 .chapter-card {
   flex: 0 0 min(240px, 72vw);
+  min-height: 88px;
   display: flex;
   flex-direction: column;
   gap: var(--s2);
@@ -64,7 +106,7 @@
   background: var(--surface);
   text-align: left;
   cursor: pointer;
-  scroll-snap-align: start;
+  scroll-snap-align: center;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
@@ -145,10 +187,21 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  flex: 1;
 }
 
-.chapter-strip-empty {
-  font-size: 12px;
+.chapter-strip-empty-card {
+  padding: var(--s6) var(--s5);
+  margin: 0;
+}
+
+.chapter-strip-empty-card .empty-state-icon {
+  margin: 0 auto var(--s3);
   color: var(--text-3);
-  padding: var(--s3) 0;
+}
+
+@media (max-width: 900px) {
+  .chapter-strip-header {
+    align-items: flex-start;
+  }
 }

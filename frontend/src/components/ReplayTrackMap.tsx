@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import { Loader2, MapPin, Satellite } from 'lucide-react'
 import type { Driver, EnrichedResult, ReplayFramesResponse, TrackOutline } from '../types'
 import { buildOutlinePath } from '../lib/trackmap'
 import { interpolateReplayCars, replayCarToSvg } from '../lib/replay'
+import { EmptyStateCard } from './EmptyStateCard'
 import '../styles/replay-map.css'
 
 interface Props {
@@ -60,7 +62,13 @@ export function ReplayTrackMap({
   if (loading) {
     return (
       <section className="replay-map-panel" data-testid="replay-track-map">
-        <div className="replay-map-empty">loading replay GPS...</div>
+        <EmptyStateCard
+          icon={Loader2}
+          title="Loading replay map"
+          hint="Fetching track outline and historical GPS frames."
+          testId="replay-map-loading"
+          className="replay-map-empty-card"
+        />
       </section>
     )
   }
@@ -68,7 +76,13 @@ export function ReplayTrackMap({
   if (error) {
     return (
       <section className="replay-map-panel" data-testid="replay-track-map">
-        <div className="replay-map-empty">replay GPS unavailable for this session</div>
+        <EmptyStateCard
+          icon={Satellite}
+          title="Replay GPS unavailable"
+          hint="This session does not have ingested location samples for the replay map."
+          testId="replay-map-error"
+          className="replay-map-empty-card"
+        />
       </section>
     )
   }
@@ -76,7 +90,13 @@ export function ReplayTrackMap({
   if (!outline || !outlinePath) {
     return (
       <section className="replay-map-panel" data-testid="replay-track-map">
-        <div className="replay-map-empty">track outline unavailable for this session</div>
+        <EmptyStateCard
+          icon={MapPin}
+          title="Track outline unavailable"
+          hint="Circuit GPS outline data is missing for this session."
+          testId="replay-map-no-outline"
+          className="replay-map-empty-card"
+        />
       </section>
     )
   }
@@ -84,7 +104,13 @@ export function ReplayTrackMap({
   if (!replay?.frames?.length || cars.length === 0) {
     return (
       <section className="replay-map-panel" data-testid="replay-track-map">
-        <div className="replay-map-empty">historical GPS unavailable for this session</div>
+        <EmptyStateCard
+          icon={Satellite}
+          title="Historical GPS unavailable"
+          hint="Fewer than two replay frames were returned for this session."
+          testId="replay-map-no-frames"
+          className="replay-map-empty-card"
+        />
       </section>
     )
   }

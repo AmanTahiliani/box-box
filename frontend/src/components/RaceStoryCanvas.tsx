@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { LineChart } from 'lucide-react'
 import type { Driver, EnrichedResult, EnrichedGrid, PositionSample, Lap, Meeting, Session, Chapter } from '../types'
 import { fetchReplayFrames, fetchTrackOutline } from '../api'
 import { ReplayTrackMap } from './ReplayTrackMap'
 import { ChapterStrip } from './ChapterStrip'
+import { EmptyStateCard } from './EmptyStateCard'
 import { gridDelta, gridDeltaClass, formatDuration, formatGap } from '../utils'
-import { chapterEndScrub, chapterStartScrub, chapterTourDurations } from '../lib/chapters'
+import {
+  chapterBandFill,
+  chapterEndScrub,
+  chapterStartScrub,
+  chapterTourDurations,
+  deCollideYPositions,
+  decimatedPositionLabels,
+} from '../lib/chapters'
+import { isReplayMapAvailable } from '../lib/replayMap'
+import '../styles/race-story.css'
 
 const CHAPTER_TOUR_MS = 90_000
+const CHART_W = 640
+const CHART_H = 180
+const CHART_PL = 40
+const CHART_PR = 48
+const CHART_PT = 8
+const CHART_PB = 20
 
 interface Props {
   data: {
@@ -51,7 +68,6 @@ export function RaceStoryCanvas({ data }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const tourRef = useRef({ chapterIndex: 0, startedAt: 0, durationMs: 0, startScrub: 0, endScrub: 0 })
 
-  // Position Evolution Chart Logic
   const allTimes = useMemo(() => [...new Set(positions.map((p) => p.date))].sort(), [positions])
   const hasChartData = hasPositions && allTimes.length > 0
   const chartTiming = useMemo(() => {
@@ -62,17 +78,37 @@ export function RaceStoryCanvas({ data }: Props) {
   }, [allTimes, hasChartData])
   const circuitKey = session?.circuit_key ?? meeting?.circuit_key ?? 0
   const outlineYear = meeting?.year ?? (session?.date_start ? new Date(session.date_start).getFullYear() : 0)
+  const canProbeMap = Boolean(session?.session_key) && circuitKey > 0 && outlineYear > 0
 
   const replayQuery = useQuery({
     queryKey: ['replay-frames', session?.session_key, 5000],
     queryFn: () => fetchReplayFrames(session!.session_key, 5000),
-    enabled: mapOpen && Boolean(session?.session_key),
+    enabled: canProbeMap,
   })
   const outlineQuery = useQuery({
     queryKey: ['track-outline', circuitKey, outlineYear],
     queryFn: () => fetchTrackOutline(circuitKey, outlineYear),
-    enabled: mapOpen && circuitKey > 0 && outlineYear > 0,
+    enabled: canProbeMap,
   })
+
+  const mapProbeSettled = !canProbeMap || (!replayQuery.isLoading && !outlineQuery.isLoading)
+  const mapAvailable = useMemo(
+    () =>
+      canProbeMap &&
+      isReplayMapAvailable(
+        replayQuery.data,
+        outlineQuery.data,
+        replayQuery.isError || outlineQuery.isError,
+      ),
+    [canProbeMap, outlineQuery.data, outlineQuery.isError, replayQuery.data, replayQuery.isError],
+  )
+  const showMapPanel = mapOpen && mapAvailable
+
+  useEffect(() => {
+    if (!mapAvailable && mapOpen) {
+      setMapOpen(false)
+    }
+  }, [mapAvailable, mapOpen])
 
   useEffect(() => {
     if (!isPlaying || !chartTiming) return
@@ -203,7 +239,7 @@ export function RaceStoryCanvas({ data }: Props) {
         pos: p.position,
       })
     }
-    const dnfSet = new Set(results.filter(r => r.dnf || r.dns || r.dsq).map(r => r.driver_number))
+    const dnfSet = new Set(results.filter((r) => r.dnf || r.dns || r.dsq).map((r) => r.driver_number))
     for (const [dNum, samples] of byDriver.entries()) {
       samples.sort((a, b) => a.t - b.t)
       if (samples.length > 0 && !dnfSet.has(dNum)) {
@@ -211,16 +247,16 @@ export function RaceStoryCanvas({ data }: Props) {
       }
     }
 
-    const getInterpPos = (samples: {t: number, pos: number}[], t: number) => {
+    const getInterpPos = (samples: { t: number; pos: number }[], t: number) => {
       if (!samples || samples.length === 0) return null
       if (t <= samples[0].t) return samples[0].pos
       if (t >= samples[samples.length - 1].t) return samples[samples.length - 1].pos
       for (let i = 0; i < samples.length - 1; i++) {
-        if (samples[i].t <= t && samples[i+1].t >= t) {
-          const dt = samples[i+1].t - samples[i].t
+        if (samples[i].t <= t && samples[i + 1].t >= t) {
+          const dt = samples[i + 1].t - samples[i].t
           if (dt === 0) return samples[i].pos
           const frac = (t - samples[i].t) / dt
-          return samples[i].pos + (samples[i+1].pos - samples[i].pos) * frac
+          return samples[i].pos + (samples[i + 1].pos - samples[i].pos) * frac
         }
       }
       return null
@@ -244,24 +280,25 @@ export function RaceStoryCanvas({ data }: Props) {
     const maxPos = Math.max(...positions.map((p) => p.position), results.length, 2)
     const colorByDriver = new Map(results.map((r) => [r.driver_number, r.team_colour]))
     const acronymByDriver = new Map(results.map((r) => [r.driver_number, r.name_acronym]))
+    const positionLabels = decimatedPositionLabels(maxPos)
 
-    const W = 640
-    const H = 180
-    const PL = 40
-    const PR = 48
-    const PT = 8
-    const PB = 20
+    const W = CHART_W
+    const H = CHART_H
+    const PL = CHART_PL
+    const PR = CHART_PR
+    const PT = CHART_PT
+    const PB = CHART_PB
     const plotW = W - PL - PR
     const plotH = H - PT - PB
 
     const toX = (t: number) => PL + t * plotW
     const toY = (pos: number) => PT + ((pos - 1) / Math.max(maxPos - 1, 1)) * plotH
 
-    const winner = results.find(r => r.position === 1)
-    const winnerLaps = winner ? laps.filter(l => l.driver_number === winner.driver_number) : []
-    const lapTicks: { lap: number, t: number }[] = []
+    const winner = results.find((r) => r.position === 1)
+    const winnerLaps = winner ? laps.filter((l) => l.driver_number === winner.driver_number) : []
+    const lapTicks: { lap: number; t: number }[] = []
     const lapInterval = winnerLaps.length < 30 ? 5 : 10
-    
+
     for (const lap of winnerLaps) {
       if (lap.lap_number > 0 && lap.lap_number % lapInterval === 0) {
         const t = (new Date(lap.date_start).getTime() - tMin) / tRange
@@ -271,16 +308,15 @@ export function RaceStoryCanvas({ data }: Props) {
       }
     }
 
-    // Safety Car / VSC periods
     const scPeriods: { start: number; end: number | null; type: 'SC' | 'VSC' }[] = []
     let activeSC: { start: number; type: 'SC' | 'VSC' } | null = null
     const rc = [...race_control].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    
+
     for (const msg of rc) {
       const t = new Date(msg.date).getTime()
       const m = msg.message?.toUpperCase() || ''
       const cat = msg.category?.toUpperCase() || ''
-      
+
       if (m.includes('VIRTUAL SAFETY CAR DEPLOYED') || cat === 'VIRTUALSAFETYCAR') {
         if (!activeSC) activeSC = { start: t, type: 'VSC' }
       } else if (m.includes('SAFETY CAR DEPLOYED') || cat === 'SAFETYCAR') {
@@ -296,6 +332,30 @@ export function RaceStoryCanvas({ data }: Props) {
       scPeriods.push({ start: activeSC.start, end: null, type: activeSC.type })
     }
 
+    const chapterBands = chapters
+      .map((chapter, index) => {
+        const startT = chapterStartScrub(chapter, tMin, tRange)
+        const endT = chapterEndScrub(chapter, tMin, tRange)
+        if (startT === null) return null
+        const end = endT ?? startT
+        return {
+          key: `${chapter.kind}-${index}`,
+          start: Math.min(startT, end),
+          end: Math.max(startT, end),
+          fill: chapterBandFill(chapter.kind),
+        }
+      })
+      .filter((band): band is NonNullable<typeof band> => band !== null)
+
+    const labelCandidates = Array.from(byDriver.entries())
+      .map(([dNum, samples]) => {
+        const last = samples[samples.length - 1]
+        if (!last) return null
+        return { key: dNum, y: toY(last.pos) }
+      })
+      .filter((item): item is { key: number; y: number } => item !== null)
+    const labelYByDriver = deCollideYPositions(labelCandidates, 12)
+
     const handlePointerMove = (e: React.PointerEvent<SVGRectElement>) => {
       setIsPlaying(false)
       stopChapterTour()
@@ -307,14 +367,34 @@ export function RaceStoryCanvas({ data }: Props) {
     }
 
     chartContent = (
-      <div className="rs-chart-container scroll-x" data-testid="position-chart">
+      <div
+        className={`rs-chart-container scroll-x${showMapPanel ? '' : ' rs-chart-container--full'}`}
+        data-testid="position-chart"
+      >
         <svg
           ref={svgRef}
+          className="rs-position-chart-svg"
           viewBox={`0 0 ${W} ${H}`}
-          style={{ width: '100%', minWidth: 280, maxWidth: W, display: 'block' }}
           role="img"
           aria-label="Position evolution chart"
         >
+          {chapterBands.map((band) => {
+            const x1 = toX(Math.max(0, band.start))
+            const x2 = toX(Math.min(1, band.end))
+            if (x2 <= PL || x1 >= W - PR) return null
+            return (
+              <rect
+                key={band.key}
+                x={x1}
+                y={PT}
+                width={Math.max(0, x2 - x1)}
+                height={plotH}
+                fill={band.fill}
+                data-testid="chapter-band"
+              />
+            )
+          })}
+
           {scPeriods.map((sc, i) => {
             const startT = (sc.start - tMin) / tRange
             const endT = sc.end ? (sc.end - tMin) / tRange : 1
@@ -333,33 +413,41 @@ export function RaceStoryCanvas({ data }: Props) {
             )
           })}
 
-          {Array.from({ length: maxPos }, (_, i) => i + 1).map((pos) => (
+          {positionLabels.map((pos) => (
             <g key={pos}>
               <line
                 x1={PL}
                 x2={W - PR}
                 y1={toY(pos)}
                 y2={toY(pos)}
-                stroke="var(--border)"
-                strokeWidth={0.5}
+                className="rs-chart-grid-line"
               />
               <text
                 x={PL - 4}
                 y={toY(pos) + 4}
                 textAnchor="end"
-                fill="var(--text-3)"
-                fontSize={8}
-                fontFamily="var(--f-mono)"
+                className="rs-chart-axis-label"
               >
                 P{pos}
               </text>
             </g>
           ))}
 
-          {lapTicks.map(tick => (
+          {lapTicks.map((tick) => (
             <g key={`lap-${tick.lap}`}>
-              <line x1={toX(tick.t)} x2={toX(tick.t)} y1={H - PB} y2={H - PB + 4} stroke="var(--border)" strokeWidth={1} />
-              <text x={toX(tick.t)} y={H - PB + 14} textAnchor="middle" fill="var(--text-3)" fontSize={9} fontFamily="var(--f-mono)">
+              <line
+                x1={toX(tick.t)}
+                x2={toX(tick.t)}
+                y1={H - PB}
+                y2={H - PB + 4}
+                className="rs-chart-lap-tick"
+              />
+              <text
+                x={toX(tick.t)}
+                y={H - PB + 14}
+                textAnchor="middle"
+                className="rs-chart-axis-label"
+              >
                 L{tick.lap}
               </text>
             </g>
@@ -372,11 +460,12 @@ export function RaceStoryCanvas({ data }: Props) {
             const last = samples[samples.length - 1]
             const isHovered = hoverDriver === dNum
             const isFaded = hoverDriver !== null && !isHovered
+            const labelY = last ? (labelYByDriver.get(dNum) ?? toY(last.pos)) : 0
 
-            const driverPits = pit_stops.filter(p => p.driver_number === dNum)
+            const driverPits = pit_stops.filter((p) => p.driver_number === dNum)
 
             return (
-              <g 
+              <g
                 key={dNum}
                 style={{ opacity: isFaded ? 0.2 : 1, transition: 'opacity 0.2s' }}
                 onMouseEnter={() => setHoverDriver(dNum)}
@@ -392,30 +481,30 @@ export function RaceStoryCanvas({ data }: Props) {
                   className="rs-driver-line"
                   pathLength={1}
                 />
-                
+
                 {driverPits.map((p, i) => {
                   const t = (new Date(p.date).getTime() - tMin) / tRange
                   if (t < 0 || t > 1) return null
                   const pos = getInterpPos(samples, t)
                   if (pos === null) return null
                   return (
-                    <circle 
-                      key={`pit-${i}`} 
-                      cx={toX(t)} 
-                      cy={toY(pos)} 
-                      r={3} 
-                      fill="var(--bg)" 
-                      stroke={color} 
+                    <circle
+                      key={`pit-${i}`}
+                      cx={toX(t)}
+                      cy={toY(pos)}
+                      r={3}
+                      fill="var(--bg)"
+                      stroke={color}
                       strokeWidth={2}
                       className="rs-pit-dot"
                     />
                   )
                 })}
-                
+
                 {last && (
                   <text
                     x={toX(last.t) + 6}
-                    y={toY(last.pos) + 4}
+                    y={labelY + 4}
                     fill={color}
                     fontSize={isHovered ? 11 : 9}
                     fontFamily="var(--f-mono)"
@@ -456,37 +545,45 @@ export function RaceStoryCanvas({ data }: Props) {
             style={{ cursor: 'crosshair', touchAction: 'none' }}
           />
         </svg>
-        <div className="rs-replay-tools" aria-label="Race replay controls">
+        <div className="rs-segmented-control" aria-label="Race replay controls" data-testid="replay-controls">
           <button
             type="button"
-            className={`rs-tool-btn ${isPlaying ? 'active' : ''}`}
+            className={`rs-segment ${isPlaying ? 'active' : ''}`}
             onClick={() => {
               setScrubTime((current) => current ?? 0)
               stopChapterTour()
               setIsPlaying((current) => !current)
             }}
+            aria-pressed={isPlaying}
           >
             {isPlaying ? 'Pause' : 'Play'}
           </button>
-          <div className="rs-speed-group" aria-label="Playback speed">
-            {[1, 10, 30].map((speed) => (
+          <span className="rs-segment-divider" aria-hidden />
+          {[1, 10, 30].map((speed) => (
+            <button
+              key={speed}
+              type="button"
+              className={`rs-segment ${playbackSpeed === speed ? 'active' : ''}`}
+              onClick={() => setPlaybackSpeed(speed)}
+              aria-pressed={playbackSpeed === speed}
+            >
+              {speed}x
+            </button>
+          ))}
+          {mapProbeSettled && mapAvailable && (
+            <>
+              <span className="rs-segment-divider" aria-hidden />
               <button
-                key={speed}
                 type="button"
-                className={`rs-speed-btn ${playbackSpeed === speed ? 'active' : ''}`}
-                onClick={() => setPlaybackSpeed(speed)}
+                className={`rs-segment ${mapOpen ? 'active' : ''}`}
+                onClick={() => setMapOpen((current) => !current)}
+                aria-pressed={mapOpen}
+                data-testid="replay-map-toggle"
               >
-                {speed}x
+                Map
               </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className={`rs-tool-btn ${mapOpen ? 'active' : ''}`}
-            onClick={() => setMapOpen((current) => !current)}
-          >
-            Map
-          </button>
+            </>
+          )}
         </div>
       </div>
     )
@@ -506,32 +603,36 @@ export function RaceStoryCanvas({ data }: Props) {
           onTourToggle={toggleChapterTour}
         />
       )}
-      <div className="rs-replay-shell">
+      <div className={`rs-replay-shell${showMapPanel ? ' rs-replay-shell--split' : ''}`}>
         <div className="rs-replay-main">
           {hasChartData ? (
             chartContent
           ) : (
-            <div className="analysis-notice">
-              <strong>Lap-by-lap positions not available.</strong> This session does not
-              have ingested position samples in <code>/api/v1/race-hub</code>.
-            </div>
+            <EmptyStateCard
+              icon={LineChart}
+              title="Lap-by-lap positions not available"
+              hint={
+                <>
+                  This session does not have ingested position samples in{' '}
+                  <code>/api/v1/race-hub</code>.
+                </>
+              }
+              testId="race-story-no-positions"
+              className="race-story-empty-card"
+            />
           )}
         </div>
-        {mapOpen && (
-          <div className="rs-replay-map-slot">
-            {circuitKey > 0 && outlineYear > 0 ? (
-              <ReplayTrackMap
-                outline={outlineQuery.data}
-                replay={replayQuery.data}
-                tMs={replayTMs}
-                drivers={drivers}
-                results={results}
-                loading={outlineQuery.isLoading || replayQuery.isLoading}
-                error={outlineQuery.isError || replayQuery.isError}
-              />
-            ) : (
-              <div className="rs-replay-map-placeholder">track identity unavailable for replay map</div>
-            )}
+        {showMapPanel && (
+          <div className="rs-replay-map-slot" data-testid="replay-map-slot">
+            <ReplayTrackMap
+              outline={outlineQuery.data}
+              replay={replayQuery.data}
+              tMs={replayTMs}
+              drivers={drivers}
+              results={results}
+              loading={outlineQuery.isLoading || replayQuery.isLoading}
+              error={outlineQuery.isError || replayQuery.isError}
+            />
           </div>
         )}
       </div>
@@ -542,30 +643,29 @@ export function RaceStoryCanvas({ data }: Props) {
             const gridPos = grid.find((g) => g.driver_number === r.driver_number)?.position ?? 0
             const currentPos = scrubTime !== null ? i + 1 : r.position
             const isWinner = i === 0 && r.position === 1
-            const pClass = currentPos === 1 ? 'rs-pos-p1' : currentPos === 2 ? 'rs-pos-p2' : currentPos === 3 ? 'rs-pos-p3' : ''
-            
+            const pClass =
+              currentPos === 1 ? 'rs-pos-p1' : currentPos === 2 ? 'rs-pos-p2' : currentPos === 3 ? 'rs-pos-p3' : ''
+
             let currentPoints: number | string = r.points
             if (scrubTime !== null) {
               const isSprint = data.session?.session_type?.toLowerCase().includes('sprint')
               const ptsArray = isSprint ? [8, 7, 6, 5, 4, 3, 2, 1] : [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
               currentPoints = currentPos <= ptsArray.length ? ptsArray[currentPos - 1] : 0
             }
-            
+
             return (
-              <div 
-                key={r.driver_number} 
+              <div
+                key={r.driver_number}
                 className={`rs-driver-row ${hoverDriver === r.driver_number ? 'rs-driver-row-hover' : ''}`}
                 onMouseEnter={() => setHoverDriver(r.driver_number)}
                 onMouseLeave={() => setHoverDriver(null)}
               >
                 <div className="rs-driver-left">
-                  <div className={`rs-pos-col ${pClass}`}>
-                    {currentPos}
-                  </div>
+                  <div className={`rs-pos-col ${pClass}`}>{currentPos}</div>
                   <div className="rs-driver-cell">
-                    <div 
-                      className="rs-driver-color" 
-                      style={{ background: r.team_colour ? `#${r.team_colour}` : 'var(--border)' }} 
+                    <div
+                      className="rs-driver-color"
+                      style={{ background: r.team_colour ? `#${r.team_colour}` : 'var(--border)' }}
                     />
                     <div className="rs-driver-identity">
                       <span className="rs-driver-name">{r.name_acronym || r.driver_number}</span>
@@ -583,12 +683,12 @@ export function RaceStoryCanvas({ data }: Props) {
                     </span>
                     <span className="rs-metric-label">Grid</span>
                   </div>
-                  
+
                   <div className="rs-metric" style={{ width: '80px', opacity: scrubTime !== null ? 0.3 : 1 }}>
                     <span>{isWinner ? formatDuration(r.duration) : formatGap(r.gap_to_leader)}</span>
                     <span className="rs-metric-label">{isWinner ? 'Time' : 'Gap'}</span>
                   </div>
-                  
+
                   <div className="rs-metric" style={{ width: '40px' }}>
                     <span style={{ color: Number(currentPoints) > 0 ? 'var(--text)' : 'var(--text-3)' }}>
                       {currentPoints}

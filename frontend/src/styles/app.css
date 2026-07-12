@@ -520,6 +520,17 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-3);
 }
 
+.empty-state-icon {
+  display: block;
+  margin: 0 auto var(--s3);
+  color: var(--text-3);
+}
+
+.race-story-empty-card {
+  padding: var(--s6) var(--s5);
+  margin: 0;
+}
+
 .loading-state {
   padding: var(--s7) 0;
   text-align: center;
