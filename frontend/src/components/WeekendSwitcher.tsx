@@ -2,39 +2,58 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
-import { formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
+import { sessionTypeAbbrev } from '../lib/coverage'
+import {
+  resolveSessionState,
+  sessionStateDotClass,
+  sessionStateLabel,
+} from '../lib/sessionState'
 import { countryDecal, formatGpDateRange } from '../lib/gpIdentity'
+import type { WeekendContext } from '../types'
 
 interface Props {
   currentMeetingKey?: number
   currentSessionKey?: number
+  context?: WeekendContext | null
+  now?: Date
   onClose: () => void
 }
 
-export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose }: Props) {
+export function WeekendSwitcher({
+  currentMeetingKey,
+  currentSessionKey,
+  context,
+  now: nowProp,
+  onClose,
+}: Props) {
   const navigate = useNavigate()
   const seasonsQuery = useQuery({ queryKey: ['seasons'], queryFn: fetchSeasons })
   const [year, setYear] = useState<number | null>(null)
   const [openMeetingKey, setOpenMeetingKey] = useState<number | null>(
     currentMeetingKey ?? null,
   )
-
-  useEffect(() => {
-    if (year == null && seasonsQuery.data?.length) {
-      setYear(seasonsQuery.data[0])
-    }
-  }, [seasonsQuery.data, year])
-
-  const meetingsQuery = useQuery({
-    queryKey: ['meetings', year],
-    queryFn: () => fetchLocalMeetings(year!),
-    enabled: year != null,
-  })
+  const now = nowProp ?? new Date()
 
   const weekendQuery = useQuery({
     queryKey: ['weekend', openMeetingKey],
     queryFn: () => fetchWeekend(openMeetingKey!),
     enabled: openMeetingKey != null,
+  })
+
+  useEffect(() => {
+    if (year != null) return
+    const currentYear = weekendQuery.data?.meeting?.year
+    if (currentYear) {
+      setYear(currentYear)
+    } else if (seasonsQuery.data?.length) {
+      setYear(seasonsQuery.data[0])
+    }
+  }, [seasonsQuery.data, weekendQuery.data, year])
+
+  const meetingsQuery = useQuery({
+    queryKey: ['meetings', year],
+    queryFn: () => fetchLocalMeetings(year!),
+    enabled: year != null,
   })
 
   const seasons = seasonsQuery.data ?? []
@@ -106,9 +125,16 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
                     {weekendQuery.isLoading && (
                       <div className="rh-switcher-empty">loading sessions…</div>
                     )}
-                    {weekend && weekend.meeting_key === m.meeting_key &&
-                      weekend.sessions.map(({ session, source, datasets }) => {
+                    {weekend &&
+                      weekend.meeting_key === m.meeting_key &&
+                      weekend.sessions.map((weekendSession) => {
+                        const { session } = weekendSession
                         const active = session.session_key === currentSessionKey
+                        const state = resolveSessionState({
+                          weekendSession,
+                          context,
+                          now,
+                        })
                         return (
                           <button
                             key={session.session_key}
@@ -122,8 +148,11 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
                             </span>
                             <span className="rh-switcher-sess-name">{session.session_name}</span>
                             <span className="rh-switcher-sess-cov mono">
-                              <span className={`cc-cov-dot cc-cov-${source}`} aria-hidden="true" />
-                              {formatCoverageHint(datasets)}
+                              <span
+                                className={`cc-cov-dot ${sessionStateDotClass(state)}`}
+                                aria-hidden="true"
+                              />
+                              {sessionStateLabel(state)}
                             </span>
                           </button>
                         )

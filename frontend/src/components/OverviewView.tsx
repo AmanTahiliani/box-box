@@ -1,6 +1,5 @@
 import type { RaceHub } from '../types'
 import { compareFinishPosition, formatDuration, formatGap, formatLapTime } from '../utils'
-import { countRaceHubDatasets } from '../lib/coverage'
 import { Thermometer, Map, Droplets, Wind, CloudRain } from 'lucide-react'
 
 interface Props {
@@ -17,7 +16,6 @@ export function OverviewView({ data }: Props) {
   const fastest = pickFastestLap(data)
   const latestWeather = data.weather.length > 0 ? data.weather[data.weather.length - 1] : null
   const rcHighlights = data.race_control.slice(-3).reverse()
-  const coverage = countRaceHubDatasets(data.datasets)
 
   const sessionType = (data.session?.session_type ?? '').toLowerCase()
   const isRace = sessionType.includes('race')
@@ -128,28 +126,6 @@ export function OverviewView({ data }: Props) {
               ))}
             </ul>
           )}
-        </section>
-
-        <section className="rh-panel ui-card">
-          <div className="sec-header">
-            <span className="sec-title">Local Coverage</span>
-            <span className="sec-meta mono">
-              {coverage.available}/{coverage.total}
-            </span>
-          </div>
-          <div className="rh-coverage-meter" aria-hidden="true">
-            <div
-              className="rh-coverage-fill"
-              style={{ width: `${(coverage.available / coverage.total) * 100}%` }}
-            />
-          </div>
-          <div className="rh-empty-line" style={{ marginTop: 'var(--s2)' }}>
-            {coverage.available === coverage.total
-              ? 'Every Race Hub dataset is local for this session.'
-              : `${coverage.total - coverage.available} dataset${
-                  coverage.total - coverage.available === 1 ? '' : 's'
-                } not ingested yet — see Data Status tab.`}
-          </div>
         </section>
       </div>
     </div>

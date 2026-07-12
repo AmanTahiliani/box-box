@@ -6,6 +6,36 @@
   width: 100%;
 }
 
+.wk-focus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  margin-bottom: var(--s5);
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red);
+  border-radius: 8px;
+}
+.wk-focus-copy { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.wk-focus-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.wk-focus-title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.wk-focus-session {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.wk-focus-cta { flex-shrink: 0; }
+
 .wk-eyebrow {
   display: flex;
   align-items: center;
@@ -313,6 +343,11 @@
 }
 @media (max-width: 640px) {
   .wk-page { padding: var(--s5) var(--s5) 88px; }
+  .wk-focus {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .wk-focus-cta { width: 100%; justify-content: center; }
   .wk-event-name { font-size: 20px; }
   .wk-sessions-title { font-size: 22px; }
   .wk-count-unit b { font-size: 32px; }

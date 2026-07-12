@@ -19,6 +19,8 @@ type WeekendSession struct {
 }
 
 // Weekend is the local-first read model for one race weekend.
+// Fan-facing default analysis resolution lives on /api/v1/weekend-context
+// (DefaultAnalysisSession); this payload only supplies meeting rail + coverage.
 type Weekend struct {
 	Source            string           `json:"source"`
 	MeetingKey        int              `json:"meeting_key"`

@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
+import { FUTURE_SESSION, mockFutureRaceHubSession } from '../fixtures/future-session'
 
 export const VIEWPORTS = {
   desktop: { width: 1280, height: 800 },
@@ -7,6 +8,7 @@ export const VIEWPORTS = {
 } as const
 
 export const FULL_SESSION = 9472
+export { FUTURE_SESSION }
 
 /** Wait for web fonts and layout to settle before screenshots. */
 export async function waitForScreenshotReady(page: Page): Promise<void> {
@@ -30,6 +32,17 @@ export async function gotoRaceHubReady(page: Page, sessionKey = FULL_SESSION): P
   await expect(page.getByTestId('rh-identity')).toBeVisible()
   await expect(page.getByTestId(`rh-session-${sessionKey}`)).toBeVisible()
   await expect(page.getByTestId('rh-overview')).toBeVisible()
+  await waitForScreenshotReady(page)
+}
+
+export async function gotoRaceHubFutureReady(
+  page: Page,
+  sessionKey = FUTURE_SESSION,
+): Promise<void> {
+  await mockFutureRaceHubSession(page)
+  await page.goto(`/race-hub?session_key=${sessionKey}`)
+  await expect(page.getByTestId('race-hub')).toBeVisible()
+  await expect(page.getByTestId('rh-presession')).toBeVisible()
   await waitForScreenshotReady(page)
 }
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { FUTURE_SESSION, mockFutureRaceHubSession } from './fixtures/future-session'
 
 const FULL_SESSION = 9472
 const CORE_ONLY_SESSION = 9000
@@ -15,6 +16,7 @@ test.describe('Race Hub Weekend Workspace', () => {
       'aria-selected',
       'true',
     )
+    await expect(page.getByText('Local Coverage')).toHaveCount(0)
   })
 
   test('shows final running order when switching to Race Story', async ({ page }) => {
@@ -87,24 +89,110 @@ test.describe('Race Hub Weekend Workspace', () => {
     await page.getByTestId('rh-switch-weekend').click()
 
     await expect(page.getByTestId('rh-switcher')).toBeVisible()
-    // Active session is already loaded; just confirm a session button is reachable
     await expect(page.getByTestId(`rh-switcher-session-${FULL_SESSION}`)).toBeVisible()
   })
 
-  test('Data Status tab points at admin instead of inline CLI hints', async ({ page }) => {
+  test('Diagnostics is a secondary action and points at admin, not inline CLI hints', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${CORE_ONLY_SESSION}`)
-    await page.getByRole('tab', { name: 'Data Status' }).click()
+    await page.getByRole('tab', { name: 'Diagnostics' }).click()
 
     await expect(page.getByTestId('rh-data-status')).toBeVisible()
     await expect(page.getByRole('link', { name: /manage ingestion/i })).toHaveAttribute(
       'href',
       '/admin',
     )
+    await expect(page.getByTestId('rh-dataset-strip')).toHaveCount(0)
+    await page.getByTestId('rh-diagnostics-toggle').click()
+    await expect(page.getByTestId('rh-dataset-strip')).toBeVisible()
   })
 
-  test('bare /race-hub redirects to the focus session', async ({ page }) => {
+  test('groups analysis navigation into Story, Analysis, and Data & Context', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page.getByTestId('rh-tabgroup-story')).toBeVisible()
+    await expect(page.getByTestId('rh-tabgroup-analysis')).toBeVisible()
+    await expect(page.getByTestId('rh-tabgroup-context')).toBeVisible()
+  })
+
+  test('bare /race-hub resolves to a completed session via Weekend Context', async ({ page }) => {
     await page.goto('/race-hub')
     await expect(page).toHaveURL(/session_key=\d+/)
     await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
+  })
+
+  test('explicit completed session deep link stays stable and shows analysis', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    await expect(page.getByTestId('rh-overview')).toBeVisible()
+  })
+
+  test('explicit future session renders the pre-session view, not empty analysis', async ({
+    page,
+  }) => {
+    await mockFutureRaceHubSession(page)
+    await page.goto(`/race-hub?session_key=${FUTURE_SESSION}`)
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page.getByTestId('rh-presession')).toBeVisible()
+    await expect(page.getByTestId('rh-overview')).toHaveCount(0)
+  })
+
+  test('returning to Weekend from analysis preserves meeting and session context', async ({
+    page,
+  }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
+    await page.getByRole('tab', { name: 'Strategy' }).click()
+    await expect(page.locator('[data-testid="strategy-chart"]')).toBeVisible()
+
+    // Navigate to the sibling core-only session within the same weekend.
+    await page.getByTestId(`rh-session-${CORE_ONLY_SESSION}`).click()
+    await expect(page).toHaveURL(new RegExp(`session_key=${CORE_ONLY_SESSION}`))
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
+
+    // Explicit Race Hub → Weekend return carries meeting/session in the URL.
+    const back = page.getByRole('link', { name: 'Back to Weekend' })
+    await expect(back).toBeVisible()
+    await expect(back).toHaveAttribute('href', /meeting_key=1229/)
+    await expect(back).toHaveAttribute('href', /session_key=9000/)
+    await back.click()
+
+    await expect(page).toHaveURL(/\/\?.*meeting_key=1229/)
+    await expect(page).toHaveURL(/session_key=9000/)
+    await expect(page.getByTestId('weekend-page')).toBeVisible()
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-meeting-key', '1229')
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-session-key', '9000')
+    await expect(page.getByTestId('wk-focus-context')).toBeVisible()
+    await expect(page.getByTestId('wk-focus-meeting')).toContainText('Monaco')
+    await expect(page.getByTestId('wk-focus-session')).toContainText('Core Only')
+
+    // Contextual action returns to the exact selected analysis session.
+    const continueAnalysis = page.getByRole('link', { name: /Continue analysis/i })
+    await expect(continueAnalysis).toHaveAttribute(
+      'href',
+      new RegExp(`session_key=${CORE_ONLY_SESSION}`),
+    )
+    await continueAnalysis.click()
+    await expect(page).toHaveURL(new RegExp(`session_key=${CORE_ONLY_SESSION}`))
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
+  })
+
+  test('Back to Weekend is keyboard-focusable and works at mobile width', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/race-hub?session_key=${CORE_ONLY_SESSION}`)
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+
+    const back = page.getByRole('link', { name: 'Back to Weekend' })
+    await expect(back).toBeVisible()
+    await back.focus()
+    await expect(back).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByTestId('weekend-page')).toBeVisible()
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-meeting-key', '1229')
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-session-key', '9000')
+    await expect(page.getByTestId('wk-focus-context')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Continue analysis/i })).toBeVisible()
   })
 })
