@@ -122,6 +122,7 @@ export function RaceHubPage({ sessionKey }: Props) {
               if (!contextQuery.isFetching) void contextQuery.refetch()
             }}
             retrying={contextQuery.isFetching}
+            retryTestId="rh-retry"
           >
             <div className="rh-recover-actions">
               <Link to="/" search={{}} className="rh-recover-btn" data-testid="rh-back-weekend">
@@ -212,6 +213,7 @@ export function RaceHubPage({ sessionKey }: Props) {
             if (!raceHubQuery.isFetching) void raceHubQuery.refetch()
           }}
           retrying={raceHubQuery.isFetching}
+          retryTestId="rh-retry"
         >
           <div className="rh-recover-actions">
             <Link

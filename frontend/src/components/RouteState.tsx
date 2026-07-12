@@ -39,6 +39,8 @@ interface RouteStateProps {
   onRetry?: () => void
   retrying?: boolean
   testId?: string
+  /** Optional override for the Retry button's data-testid (defaults to none). */
+  retryTestId?: string
   className?: string
   /** Optional availability strip (stale/limited/partial) above the state body. */
   availability?: DataAvailability
@@ -72,6 +74,7 @@ export function RouteState({
   onRetry,
   retrying = false,
   testId,
+  retryTestId,
   className = '',
   availability,
   children,
@@ -113,6 +116,7 @@ export function RouteState({
               onClick={onRetry}
               disabled={retrying}
               aria-busy={retrying || undefined}
+              data-testid={retryTestId}
             >
               {retrying ? 'Retrying…' : 'Retry'}
             </button>
