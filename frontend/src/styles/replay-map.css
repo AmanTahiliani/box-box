@@ -85,6 +85,7 @@
 }
 
 .replay-map-empty-card .empty-state-icon {
+  display: block;
   margin: 0 auto var(--s3);
   color: var(--text-3);
 }

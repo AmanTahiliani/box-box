@@ -187,6 +187,46 @@ describe('RaceStoryCanvas replay map', () => {
     expect(screen.getByTestId('chapter-card-0')).not.toHaveClass('active')
   })
 
+  it('highlights out-of-window chapters after click (clamped scrub + selection)', async () => {
+    // Position samples start at 13:05; start chapter ends at 13:01 — outside the window.
+    renderCanvas({
+      positions: [
+        { session_key: 99, driver_number: 1, meeting_key: 1, date: '2025-05-25T13:05:00Z', position: 1 },
+        { session_key: 99, driver_number: 1, meeting_key: 1, date: '2025-05-25T13:10:00Z', position: 1 },
+      ],
+      chapters: [
+        {
+          kind: 'start',
+          title: 'Start',
+          headline: 'Lights out before samples',
+          start_lap: 1,
+          end_lap: 1,
+          start_time: '2025-05-25T13:00:00Z',
+          end_time: '2025-05-25T13:01:00Z',
+          driver_numbers: [],
+        },
+        {
+          kind: 'finish',
+          title: 'Finish',
+          headline: 'Flag after samples',
+          start_lap: 78,
+          end_lap: 78,
+          start_time: '2025-05-25T13:20:00Z',
+          end_time: '2025-05-25T13:21:00Z',
+          driver_numbers: [],
+        },
+      ],
+    })
+
+    fireEvent.click(screen.getByTestId('chapter-card-0'))
+    await waitFor(() => expect(screen.getByTestId('chapter-card-0')).toHaveClass('active'))
+    expect(screen.getByTestId('chapter-card-1')).not.toHaveClass('active')
+
+    fireEvent.click(screen.getByTestId('chapter-card-1'))
+    await waitFor(() => expect(screen.getByTestId('chapter-card-1')).toHaveClass('active'))
+    expect(screen.getByTestId('chapter-card-0')).not.toHaveClass('active')
+  })
+
   it('renders the empty-state card when positions are unavailable', () => {
     renderCanvas({
       datasets: { positions: { status: 'missing', source: 'local', count: 0 } },

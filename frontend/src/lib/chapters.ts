@@ -53,7 +53,10 @@ export function chapterEndScrub(
   return Math.max(0, Math.min(1, (ms - tMin) / tRange))
 }
 
-/** Index of the chapter containing the current scrub position, if any. */
+/** Index of the chapter containing the current scrub position, if any.
+ * Uses the same 0–1 clamped bounds as chapterStartScrub/chapterEndScrub so
+ * chapters whose timestamps fall outside the position-sample window still
+ * activate when the scrubber is parked at the clamped edge. */
 export function activeChapterIndex(
   chapters: Chapter[],
   scrubTime: number | null,
@@ -61,15 +64,13 @@ export function activeChapterIndex(
   tRange: number,
 ): number | null {
   if (scrubTime === null || chapters.length === 0 || tRange <= 0) return null
-  const chartMs = tMin + scrubTime * tRange
   for (let i = 0; i < chapters.length; i++) {
-    const ch = chapters[i]
-    const startMs = ch.start_time ? new Date(ch.start_time).getTime() : NaN
-    const endRaw = ch.end_time ?? ch.start_time
-    const endMs = endRaw ? new Date(endRaw).getTime() : NaN
-    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && chartMs >= startMs && chartMs <= endMs) {
-      return i
-    }
+    const start = chapterStartScrub(chapters[i], tMin, tRange)
+    const end = chapterEndScrub(chapters[i], tMin, tRange)
+    if (start === null || end === null) continue
+    const lo = Math.min(start, end)
+    const hi = Math.max(start, end)
+    if (scrubTime >= lo && scrubTime <= hi) return i
   }
   return null
 }

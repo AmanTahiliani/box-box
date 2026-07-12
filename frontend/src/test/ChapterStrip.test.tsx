@@ -103,4 +103,26 @@ describe('ChapterStrip', () => {
     expect(index).toBe(1)
     expect(scrub).toBeCloseTo(0.6, 2)
   })
+
+  it('highlights an explicitly selected chapter even when scrub is outside its raw window', () => {
+    // Scrub parked at chart start; chapter 1's raw times are mid-race, but selection wins.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChapterStrip
+          chapters={chapters}
+          scrubTime={0}
+          tMin={tMin}
+          tRange={tRange}
+          tourActive={false}
+          tourChapterIndex={null}
+          selectedChapterIndex={1}
+          onChapterClick={vi.fn()}
+          onTourToggle={vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByTestId('chapter-card-1')).toHaveClass('active')
+    expect(screen.getByTestId('chapter-card-0')).not.toHaveClass('active')
+  })
 })

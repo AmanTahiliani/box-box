@@ -1,3 +1,14 @@
+.race-story-empty-card {
+  padding: var(--s6) var(--s5);
+  margin: 0;
+}
+
+.race-story-empty-card .empty-state-icon {
+  display: block;
+  margin: 0 auto var(--s3);
+  color: var(--text-3);
+}
+
 .rs-replay-shell {
   display: grid;
   grid-template-columns: 1fr;

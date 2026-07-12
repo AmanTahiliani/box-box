@@ -65,6 +65,7 @@ export function RaceStoryCanvas({ data }: Props) {
   const [playbackSpeed, setPlaybackSpeed] = useState(10)
   const [chapterTourActive, setChapterTourActive] = useState(false)
   const [tourChapterIndex, setTourChapterIndex] = useState<number | null>(null)
+  const [selectedChapterIndex, setSelectedChapterIndex] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const tourRef = useRef({ chapterIndex: 0, startedAt: 0, durationMs: 0, startScrub: 0, endScrub: 0 })
 
@@ -140,7 +141,12 @@ export function RaceStoryCanvas({ data }: Props) {
   const jumpToChapter = (index: number, scrub: number) => {
     setIsPlaying(false)
     stopChapterTour()
+    setSelectedChapterIndex(index)
     setScrubTime(scrub)
+  }
+
+  const clearChapterSelection = () => {
+    setSelectedChapterIndex(null)
   }
 
   const toggleChapterTour = () => {
@@ -150,6 +156,7 @@ export function RaceStoryCanvas({ data }: Props) {
     }
     if (!chartTiming || chapters.length === 0) return
     setIsPlaying(false)
+    setSelectedChapterIndex(null)
     setChapterTourActive(true)
     setTourChapterIndex(0)
     const startScrub = chapterStartScrub(chapters[0], chartTiming.tMin, chartTiming.tRange) ?? 0
@@ -359,6 +366,7 @@ export function RaceStoryCanvas({ data }: Props) {
     const handlePointerMove = (e: React.PointerEvent<SVGRectElement>) => {
       setIsPlaying(false)
       stopChapterTour()
+      clearChapterSelection()
       if (!svgRef.current) return
       const rect = svgRef.current.getBoundingClientRect()
       const x = e.clientX - rect.left
@@ -540,7 +548,10 @@ export function RaceStoryCanvas({ data }: Props) {
             fill="transparent"
             onPointerMove={handlePointerMove}
             onPointerLeave={() => {
-              if (!isPlaying) setScrubTime(null)
+              if (!isPlaying) {
+                clearChapterSelection()
+                setScrubTime(null)
+              }
             }}
             style={{ cursor: 'crosshair', touchAction: 'none' }}
           />
@@ -552,6 +563,7 @@ export function RaceStoryCanvas({ data }: Props) {
             onClick={() => {
               setScrubTime((current) => current ?? 0)
               stopChapterTour()
+              clearChapterSelection()
               setIsPlaying((current) => !current)
             }}
             aria-pressed={isPlaying}
@@ -599,6 +611,7 @@ export function RaceStoryCanvas({ data }: Props) {
           tRange={chartTiming.tRange}
           tourActive={chapterTourActive}
           tourChapterIndex={tourChapterIndex}
+          selectedChapterIndex={selectedChapterIndex}
           onChapterClick={jumpToChapter}
           onTourToggle={toggleChapterTour}
         />

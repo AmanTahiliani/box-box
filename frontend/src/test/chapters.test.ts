@@ -60,6 +60,41 @@ describe('chapters lib', () => {
     expect(activeChapterIndex(sampleChapters, scrub, tMin, tRange)).toBe(1)
   })
 
+  it('activates chapters whose timestamps clamp outside the position window', () => {
+    // Position samples only cover 13:05–13:10; chapters sit before/after that window.
+    const tMin = new Date('2025-05-25T13:05:00Z').getTime()
+    const tMax = new Date('2025-05-25T13:10:00Z').getTime()
+    const tRange = tMax - tMin
+    const outOfWindow: Chapter[] = [
+      {
+        kind: 'start',
+        title: 'Start',
+        headline: 'Lights out',
+        start_lap: 1,
+        end_lap: 1,
+        start_time: '2025-05-25T13:00:00Z',
+        end_time: '2025-05-25T13:01:00Z',
+        driver_numbers: [],
+      },
+      {
+        kind: 'finish',
+        title: 'Finish',
+        headline: 'Chequered flag',
+        start_lap: 78,
+        end_lap: 78,
+        start_time: '2025-05-25T13:20:00Z',
+        end_time: '2025-05-25T13:21:00Z',
+        driver_numbers: [],
+      },
+    ]
+
+    expect(chapterStartScrub(outOfWindow[0], tMin, tRange)).toBe(0)
+    expect(chapterStartScrub(outOfWindow[1], tMin, tRange)).toBe(1)
+    expect(activeChapterIndex(outOfWindow, 0, tMin, tRange)).toBe(0)
+    expect(activeChapterIndex(outOfWindow, 1, tMin, tRange)).toBe(1)
+    expect(activeChapterIndex(outOfWindow, 0.5, tMin, tRange)).toBeNull()
+  })
+
   it('splits 90s evenly across chapters', () => {
     expect(chapterTourDurations(sampleChapters)).toEqual([45_000, 45_000])
   })

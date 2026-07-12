@@ -39,7 +39,17 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(
       page.getByRole('img', { name: 'Position evolution chart' }),
     ).toBeVisible()
-    await expect(page.getByText('Lap-by-lap positions not available.')).not.toBeVisible()
+    await expect(page.getByTestId('race-story-no-positions')).not.toBeVisible()
+  })
+
+  test('Race Story highlights a chapter card when clicked', async ({ page }) => {
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await page.getByRole('tab', { name: 'Race Story' }).click()
+
+    const firstCard = page.getByTestId('chapter-card-0')
+    await expect(firstCard).toBeVisible()
+    await firstCard.click()
+    await expect(firstCard).toHaveClass(/active/)
   })
 
   test('strategy tab renders stint chart when stints are available', async ({ page }) => {
@@ -58,13 +68,15 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(page.locator('[data-testid="strategy-chart"]')).not.toBeVisible()
   })
 
-  test('Race Story shows missing notice when positions are unavailable', async ({
+  test('Race Story shows empty-state card when positions are unavailable', async ({
     page,
   }) => {
     await page.goto(`/race-hub?session_key=${CORE_ONLY_SESSION}`)
     await page.getByRole('tab', { name: 'Race Story' }).click()
 
-    await expect(page.getByText('Lap-by-lap positions not available.')).toBeVisible()
+    const empty = page.getByTestId('race-story-no-positions')
+    await expect(empty).toBeVisible()
+    await expect(empty.getByText('Lap-by-lap positions not available')).toBeVisible()
     await expect(page.locator('[data-testid="position-chart"]')).not.toBeVisible()
   })
 

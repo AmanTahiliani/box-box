@@ -17,6 +17,8 @@ interface Props {
   tRange: number
   tourActive: boolean
   tourChapterIndex: number | null
+  /** Explicit selection from a chapter click; wins over scrub-derived active. */
+  selectedChapterIndex?: number | null
   onChapterClick: (index: number, scrub: number) => void
   onTourToggle: () => void
 }
@@ -28,12 +30,15 @@ export function ChapterStrip({
   tRange,
   tourActive,
   tourChapterIndex,
+  selectedChapterIndex = null,
   onChapterClick,
   onTourToggle,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const activeIndex = activeChapterIndex(chapters, scrubTime, tMin, tRange)
-  const highlightedIndex = tourActive ? tourChapterIndex : activeIndex
+  const highlightedIndex = tourActive
+    ? tourChapterIndex
+    : (selectedChapterIndex ?? activeIndex)
 
   useEffect(() => {
     if (highlightedIndex === null || !scrollRef.current) return
@@ -81,9 +86,7 @@ export function ChapterStrip({
         >
           {chapters.map((chapter, index) => {
             const scrub = chapterStartScrub(chapter, tMin, tRange) ?? index / Math.max(chapters.length - 1, 1)
-            const isActive = tourActive
-              ? tourChapterIndex === index
-              : activeIndex === index
+            const isActive = highlightedIndex === index
             const headline = chapter.headline || chapter.title
 
             return (
