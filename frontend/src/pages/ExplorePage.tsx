@@ -23,22 +23,25 @@ function analysisKey(weekend: Weekend | undefined): number | undefined {
 export function ExplorePage() {
   const now = useMemo(() => new Date(), [])
 
-  const seasonsQuery = useQuery({ queryKey: ['seasons'], queryFn: fetchSeasons })
+  const seasonsQuery = useQuery({
+    queryKey: ['seasons'],
+    queryFn: ({ signal }) => fetchSeasons(signal),
+  })
   const season = seasonsQuery.data?.[0] ?? null
 
   const localMeetingsQuery = useQuery({
     queryKey: ['meetings', season, 'local'],
-    queryFn: () => fetchLocalMeetings(season!),
+    queryFn: ({ signal }) => fetchLocalMeetings(season!, signal),
     enabled: season != null,
   })
   const seasonMeetingsQuery = useQuery({
     queryKey: ['season-meetings', season],
-    queryFn: () => fetchSeasonMeetings(season!),
+    queryFn: ({ signal }) => fetchSeasonMeetings(season!, signal),
     enabled: season != null,
   })
   const championshipQuery = useQuery({
     queryKey: ['championship-hub', season],
-    queryFn: () => fetchChampionshipHub(season!),
+    queryFn: ({ signal }) => fetchChampionshipHub(season!, signal),
     enabled: season != null,
   })
 
@@ -48,7 +51,7 @@ export function ExplorePage() {
   const weekendQueries = useQueries({
     queries: localMeetings.map((m) => ({
       queryKey: ['weekend', m.meeting_key],
-      queryFn: () => fetchWeekend(m.meeting_key),
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchWeekend(m.meeting_key, signal),
       enabled: localMeetings.length > 0,
       staleTime: 60_000,
     })),
