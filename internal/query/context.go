@@ -136,21 +136,6 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 	champMeetings := championshipMeetings(meetings, byMeeting)
 	out.TotalChampionshipRounds = len(champMeetings)
 
-	var previous, next, defaultAnalysis *contextCandidate
-	for i := range candidates {
-		c := &candidates[i]
-		completionEligible := c.start.IsZero() || !c.start.After(now) || c.archived
-		if c.complete && completionEligible && (previous == nil || candidateTime(*c).After(candidateTime(*previous))) {
-			previous = c
-		}
-		if c.complete && hasMeaningfulAnalysis(c.counts) && (c.start.IsZero() || !c.start.After(now)) && (defaultAnalysis == nil || candidateTime(*c).After(candidateTime(*defaultAnalysis))) {
-			defaultAnalysis = c
-		}
-		if !c.start.IsZero() && !c.start.Before(now) && (next == nil || c.start.Before(next.start)) {
-			next = c
-		}
-	}
-
 	var active *contextCandidate
 	if evidence.Active {
 		for i := range candidates {
@@ -162,14 +147,21 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 		if active == nil {
 			active = syntheticLiveCandidate(evidence, now)
 		}
-		if next != nil && active.session.SessionKey != 0 && next.session.SessionKey == active.session.SessionKey {
-			next = nil
-			for i := range candidates {
-				c := &candidates[i]
-				if c.session.SessionKey != active.session.SessionKey && c.start.After(now) && (next == nil || c.start.Before(next.start)) {
-					next = c
-				}
-			}
+	}
+
+	var previous, next, defaultAnalysis *contextCandidate
+	for i := range candidates {
+		c := &candidates[i]
+		isActive := active != nil && active.session.SessionKey != 0 && c.session.SessionKey == active.session.SessionKey
+		completionEligible := c.start.IsZero() || !c.start.After(now) || c.archived
+		if !isActive && c.complete && completionEligible && (previous == nil || candidateTime(*c).After(candidateTime(*previous))) {
+			previous = c
+		}
+		if !isActive && c.complete && hasMeaningfulAnalysis(c.counts) && (c.start.IsZero() || !c.start.After(now)) && (defaultAnalysis == nil || candidateTime(*c).After(candidateTime(*defaultAnalysis))) {
+			defaultAnalysis = c
+		}
+		if !isActive && !c.start.IsZero() && !c.start.Before(now) && (next == nil || c.start.Before(next.start)) {
+			next = c
 		}
 	}
 
@@ -190,7 +182,7 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 		out.TemporalState = TemporalSessionLive
 	} else {
 		out.FocusMeeting = chooseFocusMeeting(meetings, previous, next)
-		out.TemporalState = classifyTemporalState(now, previous, next, candidates, champMeetings)
+		out.TemporalState = classifyTemporalState(now, previous, next, candidates, champMeetings, championshipScheduleUnknown(champMeetings, byMeeting))
 	}
 	if out.FocusMeeting != nil {
 		out.ChampionshipRound = championshipRound(champMeetings, int(out.FocusMeeting.MeetingKey))
@@ -347,12 +339,17 @@ func chooseFocusMeeting(meetings []store.Meeting, previous, next *contextCandida
 	return nil
 }
 
-func classifyTemporalState(now time.Time, previous, next *contextCandidate, candidates []contextCandidate, championship []store.Meeting) TemporalState {
+func classifyTemporalState(now time.Time, previous, next *contextCandidate, candidates []contextCandidate, championship []store.Meeting, scheduleUnknown bool) TemporalState {
 	var latestStarted *contextCandidate
 	for i := range candidates {
 		if !candidates[i].start.IsZero() && !candidates[i].start.After(now) && (latestStarted == nil || candidates[i].start.After(latestStarted.start)) {
 			latestStarted = &candidates[i]
 		}
+	}
+	// Once a new meeting enters its preparation window, an ingest gap from an
+	// older meeting must not keep the product stuck in settling.
+	if next != nil && next.start.Sub(now) <= preSessionWindow && (latestStarted == nil || latestStarted.meeting.MeetingKey != next.meeting.MeetingKey) {
+		return TemporalPreSession
 	}
 	if latestStarted != nil && !latestStarted.complete && !latestStarted.end.IsZero() {
 		if now.Before(latestStarted.end) {
@@ -369,10 +366,23 @@ func classifyTemporalState(now time.Time, previous, next *contextCandidate, cand
 	if next != nil && next.start.Sub(now) <= preSessionWindow {
 		return TemporalPreSession
 	}
-	if next == nil && len(championship) > 0 {
+	if next == nil && len(championship) > 0 && !scheduleUnknown {
 		return TemporalSeasonComplete
 	}
 	return TemporalBetweenWeekends
+}
+
+func championshipScheduleUnknown(meetings []store.Meeting, sessions map[int][]store.Session) bool {
+	for _, meeting := range meetings {
+		for _, session := range sessions[meeting.MeetingKey] {
+			if !session.IsCancelled && isChampionshipRace(session) {
+				if _, ok := parseContextTime(session.DateStart); !ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func meetingFinalSession(previous contextCandidate, candidates []contextCandidate) bool {
