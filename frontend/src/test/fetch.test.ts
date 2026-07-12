@@ -101,6 +101,146 @@ describe('apiFetch', () => {
     expect(ra).toEqual(rb)
   })
 
+  it('does not poison a second caller when the first aborts the same dedupe key', async () => {
+    let starts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        starts += 1
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            resolve(
+              new Response(JSON.stringify({ ok: true, starts }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }, 100)
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer)
+              reject(new DOMException('Aborted', 'AbortError'))
+            },
+            { once: true },
+          )
+        })
+      }),
+    )
+
+    const first = new AbortController()
+    const second = new AbortController()
+    const a = apiFetch<{ ok: boolean }>('/api/v1/shared', {
+      dedupeKey: 'shared-abort-safe',
+      signal: first.signal,
+      timeoutMs: 30_000,
+    })
+    const b = apiFetch<{ ok: boolean }>('/api/v1/shared', {
+      dedupeKey: 'shared-abort-safe',
+      signal: second.signal,
+      timeoutMs: 30_000,
+    })
+
+    first.abort()
+    await expect(a).rejects.toMatchObject({ kind: 'abort' })
+
+    await vi.advanceTimersByTimeAsync(100)
+    await expect(b).resolves.toEqual({ ok: true, starts: 1 })
+    expect(starts).toBe(1)
+  })
+
+  it('cancels the shared request only after the last subscriber aborts', async () => {
+    let aborted = false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              aborted = true
+              reject(new DOMException('Aborted', 'AbortError'))
+            },
+            { once: true },
+          )
+        })
+      }),
+    )
+
+    const first = new AbortController()
+    const second = new AbortController()
+    const a = apiFetch('/api/v1/shared', {
+      dedupeKey: 'shared-last-abort',
+      signal: first.signal,
+      timeoutMs: 30_000,
+    })
+    const b = apiFetch('/api/v1/shared', {
+      dedupeKey: 'shared-last-abort',
+      signal: second.signal,
+      timeoutMs: 30_000,
+    })
+
+    first.abort()
+    await expect(a).rejects.toMatchObject({ kind: 'abort' })
+    expect(aborted).toBe(false)
+
+    second.abort()
+    await expect(b).rejects.toMatchObject({ kind: 'abort' })
+    expect(aborted).toBe(true)
+  })
+
+  it('survives a Strict Mode style remount: aborted first consumer, fresh second consumer', async () => {
+    let starts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        starts += 1
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            resolve(
+              new Response(JSON.stringify({ starts }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }, 50)
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer)
+              reject(new DOMException('Aborted', 'AbortError'))
+            },
+            { once: true },
+          )
+        })
+      }),
+    )
+
+    // Mount #1
+    const first = new AbortController()
+    const pendingFirst = apiFetch<{ starts: number }>('/api/v1/seasons', {
+      dedupeKey: 'seasons',
+      signal: first.signal,
+      timeoutMs: 30_000,
+    })
+
+    // Strict Mode unmount cancels the first subscription (sole subscriber → shared abort)
+    first.abort()
+    await expect(pendingFirst).rejects.toMatchObject({ kind: 'abort' })
+
+    // Remount starts a fresh consumer — must not inherit the aborted request
+    const second = new AbortController()
+    const pendingSecond = apiFetch<{ starts: number }>('/api/v1/seasons', {
+      dedupeKey: 'seasons',
+      signal: second.signal,
+      timeoutMs: 30_000,
+    })
+
+    await vi.advanceTimersByTimeAsync(50)
+    await expect(pendingSecond).resolves.toEqual({ starts: 2 })
+    expect(starts).toBe(2)
+  })
+
   it('allows an explicit retry after the prior request settles', async () => {
     let starts = 0
     vi.stubGlobal(
