@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { fetchChampionshipHub, fetchSeasons } from '../api'
 import { teamColor } from '../utils'
 import type { ChampHubDriver, ChampionshipHub } from '../types'
 import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
+import { RivalryCompare } from '../components/RivalryCompare'
 import { Meaning } from '../components/Meaning'
+import { TeammateH2H } from '../components/TeammateH2H'
+import { teammatePairs } from '../lib/h2h'
 import { pointsGapMeaning } from '../lib/meaning'
 
-type View = 'drivers' | 'constructors' | 'progression' | 'simulator'
+type View = 'drivers' | 'constructors' | 'progression' | 'rivalry' | 'simulator'
 
 const GOLD = '#ffd700'
 const SILVER = '#c0c0c0'
@@ -215,6 +219,14 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           </button>
           <button
             type="button"
+            className={`champ-tab${view === 'rivalry' ? ' is-active' : ''}`}
+            onClick={() => setView('rivalry')}
+            data-testid="champ-tab-rivalry"
+          >
+            Rivalry
+          </button>
+          <button
+            type="button"
             className={`champ-tab${view === 'simulator' ? ' is-active' : ''}`}
             onClick={() => setView('simulator')}
             data-testid="champ-tab-simulator"
@@ -242,10 +254,13 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           leaderPoints={leader.points}
           titleMath={titleMath}
           roundsLeft={hub.rounds_left}
+          drivers={drivers}
+          season={hub.season}
         />
       )}
       {view === 'constructors' && <ConstructorsView hub={hub} />}
       {view === 'progression' && <ProgressionView hub={hub} />}
+      {view === 'rivalry' && <RivalryCompare hub={hub} />}
       {view === 'simulator' && <ChampionshipSimulator hub={hub} />}
     </div>
   )
@@ -271,13 +286,19 @@ function DriversView({
   leaderPoints,
   titleMath,
   roundsLeft,
+  drivers,
+  season,
 }: {
   enriched: EnrichedDriver[]
   leaderPoints: number
   titleMath: string
   roundsLeft: number
+  drivers: ChampHubDriver[]
+  season: number
 }) {
   const podium = enriched.slice(0, 3)
+  const h2hPairs = useMemo(() => teammatePairs(drivers), [drivers])
+
   return (
     <div data-testid="champ-view-drivers">
       <div className="champ-podium">
@@ -336,6 +357,29 @@ function DriversView({
         <span className="champ-titlemath-text">{titleMath}</span>
       </div>
 
+      {h2hPairs.length > 0 && (
+        <section className="h2h-section" data-testid="champ-teammate-battles">
+          <div className="h2h-section-head">
+            <h2 className="h2h-section-title">Teammate battles</h2>
+            <span className="h2h-section-sub">race finishes · closest first</span>
+          </div>
+          <div className="h2h-list">
+            {h2hPairs.map((pair) => (
+              <TeammateH2H
+                key={pair.teamName}
+                teamName={pair.teamName}
+                teamColour={pair.teamColour}
+                driverATla={pair.driverA.name_acronym}
+                driverBTla={pair.driverB.name_acronym}
+                winsA={pair.driverA.teammate_wins}
+                winsB={pair.driverB.teammate_wins}
+                extraNote={pair.extraCount > 0 ? `+${pair.extraCount}` : undefined}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="champ-scroll">
         <table className="champ-table champ-table-drivers">
           <thead>
@@ -360,12 +404,19 @@ function DriversView({
                   P{e.pos}
                 </td>
                 <td>
-                  <div className="champ-drv">
+                  <Link
+                    to="/drivers/$driverNumber"
+                    params={{ driverNumber: String(e.d.driver_number) }}
+                    search={{ year: season }}
+                    className="champ-drv"
+                    style={{ color: 'inherit', textDecoration: 'none' }}
+                    data-testid={`champ-driver-link-${e.d.driver_number}`}
+                  >
                     <span className="champ-drv-bar" style={{ background: e.color }} />
                     <span className="champ-drv-code mono">{e.d.name_acronym}</span>
                     <span className="champ-drv-name">{e.d.full_name}</span>
                     <span className="champ-drv-num mono">#{e.d.driver_number}</span>
-                  </div>
+                  </Link>
                 </td>
                 <td className="champ-td-team">{e.d.team_name}</td>
                 <td className="r mono champ-td-pts">{fmtPts(e.d.points)}</td>

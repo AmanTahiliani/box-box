@@ -614,8 +614,9 @@ type champHubDriver struct {
 	Wins           int       `json:"wins"`
 	Podiums        int       `json:"podiums"`
 	Poles          int       `json:"poles"`
-	Form           []float64 `json:"form"`       // last 5 races' points
-	Cumulative     []float64 `json:"cumulative"` // running total per completed round
+	Form           []float64 `json:"form"`            // last 5 races' points
+	Cumulative     []float64 `json:"cumulative"`      // running total per completed round
+	RoundPositions []int     `json:"round_positions"` // finishing position per completed round (0 = no result)
 	TeammateWins   int       `json:"teammate_wins"`
 	TeammateLosses int       `json:"teammate_losses"`
 }
@@ -797,11 +798,6 @@ func (s *Server) localChampionshipHub(year int) (champHubResponse, bool, error) 
 }
 
 func (s *Server) openF1ChampionshipHub(year int) (champHubResponse, error) {
-	meetings, err := s.client.GetMeetingsForYear(year)
-	if err != nil {
-		return champHubResponse{}, err
-	}
-
 	champ, err := s.client.GetDriverChampionshipForYear(year)
 	if err != nil {
 		return champHubResponse{}, err
@@ -816,16 +812,39 @@ func (s *Server) openF1ChampionshipHub(year int) (champHubResponse, error) {
 		driverInfo = buildDriverMapFirst(ds)
 	}
 
+	races, incomplete, err := s.fetchSeasonRaces(year)
+	if err != nil {
+		return champHubResponse{}, err
+	}
+
+	resp := aggregateChampionshipHub(year, races, champ, teams, driverInfo)
+	ttl := champHubTTL(year, time.Now())
+	if incomplete {
+		// Any per-meeting fetch failure (network, rate limit) yields an incomplete
+		// aggregate: serve it so the page still renders, but cache it only briefly
+		// so a partial view of the season doesn't stick around for the full TTL.
+		ttl = champHubIncompleteTTL
+	}
+	s.hubCache.put(year, resp, time.Now(), ttl)
+	return resp, nil
+}
+
+// fetchSeasonRaces returns a season's GP meetings in date order, each bundled
+// with its race results and starting grid fetched from OpenF1. incomplete
+// reports whether any per-meeting fetch failed, so callers can avoid caching a
+// partial view of the season for long.
+func (s *Server) fetchSeasonRaces(year int) (races []meetingRace, incomplete bool, err error) {
+	meetings, err := s.client.GetMeetingsForYear(year)
+	if err != nil {
+		return nil, false, err
+	}
 	sort.Slice(meetings, func(i, j int) bool { return meetings[i].DateStart < meetings[j].DateStart })
 
-	// Any per-meeting fetch failure (network, rate limit) yields an incomplete
-	// aggregate: serve it so the page still renders, but cache it only briefly
-	// so a partial view of the season doesn't stick around for the full TTL.
-	var incomplete atomic.Bool
-	races := fetchMeetingRaces(meetings, champHubWorkers, func(m models.Meeting) (meetingRace, bool) {
+	var failed atomic.Bool
+	races = fetchMeetingRaces(meetings, champHubWorkers, func(m models.Meeting) (meetingRace, bool) {
 		sessions, serr := s.client.GetSessionsForMeeting(int(m.MeetingKey))
 		if serr != nil {
-			incomplete.Store(true)
+			failed.Store(true)
 			return meetingRace{}, false
 		}
 		raceKey := 0
@@ -841,18 +860,11 @@ func (s *Server) openF1ChampionshipHub(year int) (champHubResponse, error) {
 		results, rerr := s.client.GetSessionResult(raceKey)
 		grid, gerr := s.client.GetStartingGrid(raceKey)
 		if rerr != nil || gerr != nil {
-			incomplete.Store(true)
+			failed.Store(true)
 		}
 		return meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}, true
 	})
-
-	resp := aggregateChampionshipHub(year, races, champ, teams, driverInfo)
-	ttl := champHubTTL(year, time.Now())
-	if incomplete.Load() {
-		ttl = champHubIncompleteTTL
-	}
-	s.hubCache.put(year, resp, time.Now(), ttl)
-	return resp, nil
+	return races, failed.Load(), nil
 }
 
 // aggregateChampionshipHub is the pure aggregation core (no network) so it can be
@@ -984,6 +996,10 @@ func aggregateChampionshipHub(
 		if len(form) > 5 {
 			form = form[len(form)-5:]
 		}
+		roundPositions := make([]int, completed)
+		for round := 1; round <= completed; round++ {
+			roundPositions[round-1] = a.finishByRound[round]
+		}
 		info := driverInfo[c.DriverNumber]
 		drivers = append(drivers, champHubDriver{
 			DriverNumber:   c.DriverNumber,
@@ -998,6 +1014,7 @@ func aggregateChampionshipHub(
 			Poles:          a.poles,
 			Form:           form,
 			Cumulative:     cumulative[c.DriverNumber],
+			RoundPositions: roundPositions,
 			TeammateWins:   twins[c.DriverNumber],
 			TeammateLosses: tloss[c.DriverNumber],
 		})

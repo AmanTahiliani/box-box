@@ -29,6 +29,7 @@ function driver(over: Partial<ChampHubDriver>): ChampHubDriver {
     poles: 4,
     form: [25, 18, 25, 15, 25],
     cumulative: [25, 43, 68, 83, 108, 200],
+    round_positions: [1, 2, 1, 3, 1, 1],
     teammate_wins: 9,
     teammate_losses: 1,
     ...over,
@@ -47,6 +48,7 @@ const drivers: ChampHubDriver[] = [
     position: 2,
     wins: 3,
     cumulative: [18, 36, 54, 80, 120, 160],
+    round_positions: [2, 1, 2, 2, 2, 2],
   }),
   driver({
     driver_number: 16,
@@ -58,6 +60,7 @@ const drivers: ChampHubDriver[] = [
     position: 3,
     wins: 1,
     cumulative: [15, 28, 40, 60, 90, 120],
+    round_positions: [3, 3, 3, 0, 3, 3],
   }),
 ]
 
@@ -129,6 +132,22 @@ describe('ChampionshipPage', () => {
     expect(screen.getByText('Cumulative points', { exact: false })).toBeInTheDocument()
   })
 
+  it('switches to the rivalry view with the top two drivers preselected', async () => {
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('champ-tab-rivalry'))
+    expect(screen.getByTestId('champ-view-rivalry')).toBeInTheDocument()
+    // Default pair is the top two in the standings: VER vs NOR.
+    expect(screen.getByTestId('rivalry-pick-a')).toHaveValue('1')
+    expect(screen.getByTestId('rivalry-pick-b')).toHaveValue('4')
+    // VER beats NOR in rounds 1, 3, 5, 6 → 4–2.
+    expect(screen.getByTestId('rivalry-h2h-num')).toHaveTextContent('4–2')
+    expect(screen.getByTestId('rivalry-points-race')).toBeInTheDocument()
+    expect(screen.getByTestId('rivalry-gap')).toBeInTheDocument()
+  })
+
   it('switches to the simulator view and projects standings', async () => {
     renderPage()
 
@@ -149,5 +168,62 @@ describe('ChampionshipPage', () => {
       expect(screen.getByTestId('championship-empty')).toBeInTheDocument()
     })
     expect(screen.getByText('No championship data')).toBeInTheDocument()
+  })
+
+  it('renders teammate battles section ordered by closest split', async () => {
+    const h2hDrivers: ChampHubDriver[] = [
+      driver({ driver_number: 1, name_acronym: 'VER', team_name: 'Red Bull', points: 200, position: 1 }),
+      driver({
+        driver_number: 4,
+        name_acronym: 'NOR',
+        full_name: 'Lando Norris',
+        team_name: 'McLaren',
+        team_colour: 'ff8000',
+        points: 160,
+        position: 2,
+        teammate_wins: 6,
+        teammate_losses: 5,
+        cumulative: [18, 36, 54, 80, 120, 160],
+      }),
+      driver({
+        driver_number: 81,
+        name_acronym: 'PIA',
+        full_name: 'Oscar Piastri',
+        team_name: 'McLaren',
+        team_colour: 'ff8000',
+        points: 140,
+        position: 3,
+        teammate_wins: 5,
+        teammate_losses: 6,
+        cumulative: [12, 28, 45, 70, 110, 140],
+      }),
+      driver({
+        driver_number: 11,
+        name_acronym: 'PER',
+        full_name: 'Sergio Perez',
+        team_name: 'Red Bull',
+        team_colour: '3671c6',
+        points: 60,
+        position: 4,
+        teammate_wins: 1,
+        teammate_losses: 9,
+        cumulative: [5, 12, 20, 35, 50, 60],
+      }),
+    ]
+    mockFetchHub.mockResolvedValue({ ...hub, drivers: h2hDrivers })
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('champ-teammate-battles')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Teammate battles')).toBeInTheDocument()
+    const rows = screen.getAllByTestId('teammate-h2h')
+    expect(rows).toHaveLength(2)
+    // McLaren 6–5 is closer than Red Bull 9–1 — McLaren row first.
+    expect(rows[0]).toHaveTextContent('McLaren')
+    expect(rows[0]).toHaveTextContent('6–5')
+    expect(rows[1]).toHaveTextContent('Red Bull')
+    expect(rows[1]).toHaveTextContent('9–1')
   })
 })

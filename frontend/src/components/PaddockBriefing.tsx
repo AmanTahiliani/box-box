@@ -1,7 +1,23 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { fetchNews } from '../api'
+import {
+  fetchChampionshipHub,
+  fetchNews,
+  fetchSeasonMeetings,
+  fetchSeasons,
+} from '../api'
+import {
+  activeDigestWindow,
+  gpWindows,
+  itemsForWindow,
+  sinceLastLabel,
+  tagColour,
+  tagItems,
+  topTags,
+} from '../lib/digest'
 import { timeAgo } from '../utils'
+import '../styles/digest.css'
 
 const SOURCE_DISPLAY: Record<string, string> = {
   'fia': 'FIA',
@@ -14,14 +30,53 @@ const SOURCE_DISPLAY: Record<string, string> = {
 }
 
 export function PaddockBriefing() {
+  const now = useMemo(() => new Date(), [])
+
   const { data: news, isLoading, isError } = useQuery({
     queryKey: ['news'],
     queryFn: () => fetchNews(100),
     staleTime: 60_000,
   })
 
+  const seasonsQuery = useQuery({
+    queryKey: ['seasons'],
+    queryFn: fetchSeasons,
+  })
+  const latestSeason = seasonsQuery.data?.[0] ?? null
+
+  const meetingsQuery = useQuery({
+    queryKey: ['season-meetings', latestSeason],
+    queryFn: () => fetchSeasonMeetings(latestSeason!),
+    enabled: latestSeason != null,
+  })
+
+  const hubQuery = useQuery({
+    queryKey: ['championship-hub', latestSeason],
+    queryFn: () => fetchChampionshipHub(latestSeason!),
+    enabled: latestSeason != null,
+  })
+
+  const meetings = meetingsQuery.data ?? []
+  const hub = hubQuery.data
+  const tagged = useMemo(
+    () => tagItems(news ?? [], hub?.drivers ?? [], hub?.teams ?? []),
+    [news, hub],
+  )
+
+  const windows = useMemo(() => gpWindows(meetings, now), [meetings, now])
+  const activeWindow = useMemo(
+    () => activeDigestWindow(windows, meetings, now),
+    [windows, meetings, now],
+  )
+  const sinceItems = useMemo(
+    () => itemsForWindow(tagged, activeWindow),
+    [tagged, activeWindow],
+  )
+  const sinceTags = useMemo(() => topTags(sinceItems, 4), [sinceItems])
+  const sinceLabel = sinceLastLabel(meetings, now)
+
   const unreadCount = news?.filter((i) => !i.read_at).length ?? 0
-  const preview = news?.slice(0, 5) ?? []
+  const preview = sinceItems.length > 0 ? sinceItems.slice(0, 5) : (tagged.slice(0, 5))
 
   return (
     <section className="cc-briefing" data-testid="paddock-briefing">
@@ -36,6 +91,27 @@ export function PaddockBriefing() {
           View all →
         </Link>
       </div>
+
+      {meetings.length > 0 && (
+        <div className="cc-brief-digest-meta" data-testid="cc-brief-digest-meta">
+          <span>Since {sinceLabel}</span>
+          <span>·</span>
+          <span>{sinceItems.length} items</span>
+          {sinceTags.length > 0 && (
+            <div className="cc-brief-digest-tags">
+              {sinceTags.map((tag) => (
+                <span
+                  key={tag.key}
+                  className="cc-brief-tag"
+                  style={{ borderColor: tagColour(tag.colour) }}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isLoading && <div className="briefing-state loading-state">loading…</div>}
       {isError && <div className="briefing-state error-box">Failed to load briefing</div>}

@@ -1,0 +1,289 @@
+/* Driver profile page (/drivers/$driverNumber) */
+
+.dp-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s6) var(--s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+}
+
+/* --- header --- */
+
+.dp-header {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s5);
+  padding: var(--s5);
+  padding-left: var(--s6);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--red);
+  border-radius: var(--r2);
+  background: var(--surface);
+}
+
+.dp-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+}
+
+.dp-code {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+  text-transform: uppercase;
+}
+
+.dp-num {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dp-name {
+  margin: var(--s2) 0;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.dp-team {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.dp-team-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.dp-season {
+  color: var(--text-3);
+}
+
+.dp-stat-rail {
+  display: flex;
+  gap: var(--s5);
+}
+
+.dp-stat {
+  min-width: 72px;
+}
+
+.dp-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.dp-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.dp-back {
+  position: absolute;
+  top: var(--s4);
+  right: var(--s5);
+  font-size: 12px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.dp-back:hover {
+  color: var(--text);
+}
+
+/* --- sections --- */
+
+.dp-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.dp-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
+}
+
+.dp-empty {
+  padding: var(--s5);
+  border: 1px dashed var(--border);
+  border-radius: var(--r2);
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* --- charts --- */
+
+.dp-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(200px, 1fr);
+  gap: var(--s5);
+  align-items: stretch;
+}
+
+@media (max-width: 760px) {
+  .dp-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dp-chart {
+  margin: 0;
+  padding: var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.dp-chart-caption {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  margin-bottom: var(--s3);
+}
+
+.dp-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.dp-chart-scroll {
+  overflow-x: auto;
+}
+
+.dp-gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.dp-zeroline {
+  stroke: var(--text-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.dp-axis {
+  fill: var(--text-3);
+  font-family: var(--f-mono);
+  font-size: 10px;
+}
+
+.dp-delta-svg {
+  display: block;
+}
+
+.dp-delta-val {
+  fill: var(--text-2);
+  font-size: 10px;
+}
+
+/* --- form strip --- */
+
+.dp-form-strip {
+  padding: var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.dp-form-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s3);
+  min-height: 110px;
+}
+
+.dp-form-bar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.dp-form-bar-fill {
+  width: 100%;
+  max-width: 34px;
+  border-radius: 2px 2px 0 0;
+  opacity: 0.9;
+}
+
+.dp-form-bar-val {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+/* --- rounds table --- */
+
+.dp-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--surface);
+}
+
+.dp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dp-table th {
+  padding: var(--s3) var(--s4);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.dp-table td {
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dp-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.dp-table th.l,
+.dp-table td.l {
+  text-align: left;
+}
+
+.dp-table th.r,
+.dp-table td.r {
+  text-align: right;
+}
+
+.dp-td-dim {
+  color: var(--text-3);
+}
+
+.dp-flag {
+  margin-right: var(--s3);
+}

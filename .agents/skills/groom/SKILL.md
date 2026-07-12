@@ -1,6 +1,6 @@
 ---
 name: groom
-description: Groom a box-box GitHub issue into a Ready spec via a seeded grill-me interrogation. Use when the user asks to groom an issue, for example "/groom <issue-number>" or "$groom <issue-number>" with optional "--lens architect". Single-issue path: asks targeted questions, writes a structured spec into the issue body, sets Effort/Priority, and leaves Stage at Research for approval.
+description: 'Groom a box-box GitHub issue into a Ready spec via a seeded grill-me interrogation. Use when the user asks to groom an issue, for example "/groom <issue-number>" or "$groom <issue-number>" with optional "--lens architect". Single-issue path: asks targeted questions, writes a structured spec into the issue body, sets Effort/Priority, and leaves Stage at Research for approval.'
 argument-hint: <issue-number> [--lens architect]
 ---
 

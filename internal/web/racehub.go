@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/AmanTahiliani/box-box/internal/chapters"
 	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/query"
 )
@@ -42,5 +43,6 @@ func emptyRaceHub(sessionKey int) query.RaceHub {
 		Drivers:      []models.Driver{},
 		Results:      []query.EnrichedResult{},
 		StartingGrid: []query.EnrichedGrid{},
+		Chapters:     []chapters.Chapter{},
 	}
 }
