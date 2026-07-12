@@ -37,11 +37,11 @@ test.describe('Production serving (Go + built React)', () => {
     await expect(page.getByTestId('dl-meeting-1229')).toBeVisible()
   })
 
-  test('serves live route with empty state when live is disabled', async ({ page }) => {
+  test('serves live route with the inactive handoff when live is disabled', async ({ page }) => {
     await page.goto('/live')
 
-    await expect(page.getByTestId('live-empty')).toBeVisible()
-    await expect(page.getByText('No live session active')).toBeVisible()
+    await expect(page.getByTestId('live-inactive')).toBeVisible()
+    await expect(page.getByText('NO LIVE SESSION')).toBeVisible()
   })
 
   test('primary nav links and Admin utility work from built SPA', async ({ page }) => {

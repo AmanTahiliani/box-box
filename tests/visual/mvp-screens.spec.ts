@@ -2,7 +2,7 @@ import { test } from '@playwright/test'
 import {
   gotoWeekendReady,
   gotoDataLibraryReady,
-  gotoLiveEmptyReady,
+  gotoLiveInactiveReady,
   gotoRaceHubFutureReady,
   gotoRaceHubReady,
   screenshotPage,
@@ -32,8 +32,8 @@ test.describe('MVP visual regression', () => {
     await screenshotPage(page, 'data-library')
   })
 
-  test('live-empty', async ({ page }) => {
-    await gotoLiveEmptyReady(page)
+  test('live-inactive', async ({ page }) => {
+    await gotoLiveInactiveReady(page)
     await screenshotPage(page, 'live')
   })
 })

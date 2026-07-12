@@ -62,10 +62,12 @@ export async function gotoDataLibraryReady(page: Page): Promise<void> {
   await waitForScreenshotReady(page)
 }
 
-export async function gotoLiveEmptyReady(page: Page): Promise<void> {
+export async function gotoLiveInactiveReady(page: Page): Promise<void> {
   await page.goto('/live')
   await expect(page.locator('.loading-state')).toHaveCount(0)
-  await expect(page.getByTestId('live-empty')).toBeVisible()
+  // With BOXBOX_DISABLE_LIVE=1 the feed is silent, so the page settles into the
+  // inactive weekend-context handoff sourced from /api/v1/weekend-context.
+  await expect(page.getByTestId('live-inactive')).toBeVisible()
   await waitForScreenshotReady(page)
 }
 

@@ -1,0 +1,414 @@
+/* ── Live → settling → analysis handoff (issue #74) ──
+ *
+ * State-transition presentation for Live: session/flag chrome that replaces
+ * the old connection-as-session conflation, the connection-loss warning, the
+ * archive read-only strip, and the settling/inactive handoff surface.
+ */
+
+/* Session flag: primary session state. Feed health is secondary. */
+.live-session-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 5px 9px;
+  border-radius: 3px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.live-session-flag-live {
+  background: rgba(225, 6, 0, 0.14);
+  border: 1px solid rgba(225, 6, 0, 0.35);
+  color: #ff6b6b;
+}
+
+.live-session-flag-live.is-stale {
+  background: rgba(255, 214, 0, 0.1);
+  border-color: rgba(255, 214, 0, 0.35);
+  color: var(--yellow);
+}
+
+.live-session-flag-archive {
+  background: rgba(70, 140, 255, 0.12);
+  border: 1px solid rgba(70, 140, 255, 0.35);
+  color: #8bb7ff;
+}
+
+.live-session-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.live-session-flag-live.is-stale .live-session-dot {
+  animation: none;
+  opacity: 0.55;
+}
+
+.live-feed-health {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 4px 7px;
+  border-radius: 2px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: 1px solid var(--border-2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.live-feed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.live-feed-connected {
+  color: var(--green);
+  border-color: rgba(57, 199, 58, 0.25);
+  background: rgba(57, 199, 58, 0.08);
+}
+
+.live-feed-connecting {
+  color: var(--yellow);
+  border-color: rgba(255, 214, 0, 0.25);
+  background: rgba(255, 214, 0, 0.08);
+}
+
+.live-feed-disconnected,
+.live-feed-error {
+  color: #ff6b6b;
+  border-color: rgba(225, 6, 0, 0.24);
+  background: rgba(225, 6, 0, 0.08);
+}
+
+.live-banner-archive {
+  border-color: rgba(70, 140, 255, 0.28);
+}
+
+.live-archive-stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.live-archive-readonly {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #8bb7ff;
+}
+
+.live-archive-captured {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.live-state-archive {
+  background: rgba(70, 140, 255, 0.12);
+  color: #8bb7ff;
+  border: 1px solid rgba(70, 140, 255, 0.28);
+}
+
+/* Disconnected warning: a live session whose feed dropped. Distinct from the
+ * blue archive strip so a dropped feed is never mistaken for a read-only
+ * archive. The retained tower stays visible beneath it. */
+.live-status-strip.live-status-warn {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.live-status-strip.live-status-warn::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yellow);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.live-status-strip.live-status-archive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+}
+
+.live-archive-exit {
+  min-height: 28px;
+  padding: 0 var(--s4);
+  border: 1px solid rgba(70, 140, 255, 0.4);
+  border-radius: 4px;
+  background: rgba(70, 140, 255, 0.12);
+  color: #8bb7ff;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.live-archive-exit:hover {
+  border-color: rgba(70, 140, 255, 0.7);
+  background: rgba(70, 140, 255, 0.2);
+}
+
+/* ── Handoff surface (settling + inactive) ── */
+.live-handoff {
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  padding: var(--s6) var(--s5);
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(255, 255, 255, 0.04), transparent 55%),
+    var(--surface);
+}
+
+.live-handoff-settling {
+  border-left: 3px solid var(--yellow);
+}
+
+.live-handoff-inactive {
+  border-left: 3px solid var(--border-2);
+}
+
+.live-handoff-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+}
+
+.live-handoff-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  align-self: flex-start;
+  padding: 4px var(--s3);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.live-handoff-settling .live-handoff-eyebrow {
+  color: var(--yellow);
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.live-handoff-inactive .live-handoff-eyebrow {
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-2);
+}
+
+.live-handoff-title {
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+.live-handoff-captured {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.live-handoff-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  max-width: 62ch;
+}
+
+.live-handoff-feed {
+  align-self: flex-start;
+  margin-top: var(--s2);
+}
+
+/* Provisional final-order snapshot chips (settling only). */
+.live-handoff-snapshot {
+  margin-bottom: var(--s5);
+  padding: var(--s4);
+  border: 1px dashed var(--border-2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.live-handoff-snapshot-label {
+  display: block;
+  margin-bottom: var(--s3);
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.live-handoff-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  list-style: none;
+}
+
+.live-handoff-order li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+
+.live-handoff-order li span:first-child {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.live-handoff-code {
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* ── Action cards ── */
+.live-handoff-actions {
+  display: grid;
+  gap: var(--s3);
+}
+
+.live-handoff-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  width: 100%;
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+button.live-handoff-action {
+  font: inherit;
+}
+
+.live-handoff-action:hover {
+  border-color: var(--border-glow);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateX(2px);
+}
+
+.live-handoff-action-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.live-handoff-action-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.live-handoff-action-meta {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* The primary "open analysis" action is the strongest affordance. */
+.live-handoff-primary {
+  border-color: rgba(230, 36, 41, 0.4);
+  background: linear-gradient(90deg, rgba(230, 36, 41, 0.14), transparent 60%);
+}
+
+.live-handoff-primary:hover {
+  border-color: rgba(230, 36, 41, 0.7);
+  background: linear-gradient(90deg, rgba(230, 36, 41, 0.22), transparent 60%);
+}
+
+/* Pending-analysis states read as "waiting", not actionable links. */
+.live-handoff-primary[data-ready='false'] {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1), transparent 60%);
+}
+
+.live-handoff-pending {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.live-handoff-pending:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border-2);
+}
+
+.live-handoff-next {
+  cursor: default;
+}
+
+.live-handoff-next:hover {
+  transform: none;
+}
+
+/* ── Responsive: keep the handoff usable at tablet / mobile widths ── */
+@media (max-width: 640px) {
+  .live-handoff {
+    padding: var(--s5) var(--s4);
+  }
+
+  .live-handoff-title {
+    font-size: 21px;
+  }
+
+  .live-handoff-action {
+    padding: var(--s4);
+  }
+
+  .live-handoff-action-label {
+    font-size: 13px;
+  }
+
+  .live-status-strip.live-status-archive {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

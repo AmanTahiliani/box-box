@@ -1,16 +1,18 @@
 import { Archive, ChevronRight, Flag, Radio } from 'lucide-react'
 import type { LiveTimingRow } from '../../lib/live'
 import { driverCode } from '../../lib/live'
-import type { LiveWeekendContext } from '../../lib/weekendContext'
 import type { TransportHealth } from '../../lib/liveState'
 import { feedHealthLabel } from '../../lib/liveState'
+import type { ContextSession, WeekendContext } from '../../types'
+import { analysisSessionKey } from '../../lib/weekendContext'
 import { formatSessionScheduleTime } from '../../lib/schedule'
 
 interface Props {
-  /** 'settling' immediately after a session; 'inactive' when nothing is retained. */
+  /** 'settling' immediately after a session; 'inactive' when nothing is live. */
   phase: 'settling' | 'inactive'
   transport: TransportHealth
-  context: LiveWeekendContext
+  /** Canonical weekend context (issue #72). May be undefined before it loads. */
+  context: WeekendContext | undefined
   /** Top rows of the final snapshot (settling only), already position-sorted. */
   rows: LiveTimingRow[]
   capturedAt?: string | null
@@ -25,6 +27,15 @@ function formatCapturedAt(capturedAt: string | null | undefined): string {
   return date.toLocaleString()
 }
 
+/**
+ * Fully ingested analysis (local_analysis === complete). Stricter than
+ * hasLocalAnalysis, which also treats partial as link-worthy — Live polling
+ * and "ready" chrome wait for the complete state.
+ */
+export function analysisIsReady(session: ContextSession | undefined): boolean {
+  return session?.availability?.local_analysis === 'complete'
+}
+
 export function LiveHandoff({
   phase,
   transport,
@@ -37,12 +48,28 @@ export function LiveHandoff({
   const isSettling = phase === 'settling'
   const testid = isSettling ? 'live-settling' : 'live-inactive'
   const capturedLabel = formatCapturedAt(capturedAt)
-  const title = context.meetingName || 'Live Timing'
+
+  const focusName = context?.focus_meeting?.meeting_name
+  const activeName = context?.active_session?.meeting?.meeting_name
+  const title = focusName || activeName || 'Live Timing'
   const topRows = rows.slice(0, 3)
 
-  const analysisKey = context.analysisSessionKey
-  const analysisName = context.analysisSessionName || 'session'
-  const analysisReady = context.analysisReady
+  // Shared analysisSessionKey prefers default_analysis_session, then previous.
+  const analysisKey = context ? analysisSessionKey(context) : undefined
+  const analysis =
+    !context || !analysisKey
+      ? undefined
+      : context.default_analysis_session?.session.session_key === analysisKey
+        ? context.default_analysis_session
+        : context.previous_completed_session
+  const analysisName = analysis?.session.session_name || 'session'
+  const analysisReady = analysisIsReady(analysis)
+
+  const next = context?.next_session
+  const previous = context?.previous_completed_session
+  // Avoid a duplicate recap card when previous == the analysis target.
+  const showRecap =
+    previous && previous.session.session_key !== analysisKey && previous.session.session_key !== 0
 
   return (
     <section className={`live-handoff live-handoff-${phase}`} data-testid={testid}>
@@ -95,6 +122,7 @@ export function LiveHandoff({
             className="live-handoff-action live-handoff-primary"
             href={`/race-hub?session_key=${analysisKey}`}
             data-testid="live-handoff-analysis"
+            data-ready={analysisReady ? 'true' : 'false'}
           >
             <span className="live-handoff-action-body">
               <span className="live-handoff-action-label">
@@ -103,13 +131,18 @@ export function LiveHandoff({
               <span className="live-handoff-action-meta mono">
                 {analysisReady
                   ? 'Full timing, strategy & story ready'
-                  : 'Settling — analysis will fill in as data ingests'}
+                  : isSettling
+                    ? 'Settling — analysis will fill in as data ingests'
+                    : 'Analysis will fill in as data ingests'}
               </span>
             </span>
             <ChevronRight size={18} />
           </a>
         ) : (
-          <div className="live-handoff-action live-handoff-pending" data-testid="live-handoff-analysis-pending">
+          <div
+            className="live-handoff-action live-handoff-pending"
+            data-testid="live-handoff-analysis-pending"
+          >
             <span className="live-handoff-action-body">
               <span className="live-handoff-action-label">Analysis not ready yet</span>
               <span className="live-handoff-action-meta mono">
@@ -119,26 +152,32 @@ export function LiveHandoff({
           </div>
         )}
 
-        {context.nextSession && (
+        {next && (
           <div className="live-handoff-action live-handoff-next" data-testid="live-handoff-next">
             <span className="live-handoff-action-body">
-              <span className="live-handoff-action-label">Up next · {context.nextSession.name}</span>
+              <span className="live-handoff-action-label">
+                Up next · {next.session.session_name}
+              </span>
               <span className="live-handoff-action-meta mono">
-                {formatSessionScheduleTime(context.nextSession.startsAt)}
+                {formatSessionScheduleTime(next.session.date_start)}
               </span>
             </span>
           </div>
         )}
 
-        {context.previousSession && context.previousSession.sessionKey !== analysisKey && (
+        {showRecap && (
           <a
             className="live-handoff-action"
-            href={`/race-hub?session_key=${context.previousSession.sessionKey}`}
+            href={`/race-hub?session_key=${previous!.session.session_key}`}
             data-testid="live-handoff-recap"
           >
             <span className="live-handoff-action-body">
-              <span className="live-handoff-action-label">Recap · {context.previousSession.name}</span>
-              <span className="live-handoff-action-meta mono">Review the last completed session</span>
+              <span className="live-handoff-action-label">
+                Recap · {previous!.session.session_name}
+              </span>
+              <span className="live-handoff-action-meta mono">
+                Review the last completed session
+              </span>
             </span>
             <ChevronRight size={18} />
           </a>
@@ -155,17 +194,19 @@ export function LiveHandoff({
               <span className="live-handoff-action-label">
                 <Archive size={14} /> View full timing (read-only)
               </span>
-              <span className="live-handoff-action-meta mono">Frozen final snapshot — no live updates</span>
+              <span className="live-handoff-action-meta mono">
+                Frozen final snapshot — no live updates
+              </span>
             </span>
             <ChevronRight size={18} />
           </button>
         )}
 
-        {!analysisKey && !context.nextSession && !context.previousSession && !hasArchive && (
+        {!analysisKey && !next && !showRecap && !hasArchive && (
           <div className="live-handoff-fallback" data-testid="live-handoff-fallback">
             <a href="/" className="live-handoff-action">
               <span className="live-handoff-action-body">
-                <span className="live-handoff-action-label">Command Center</span>
+                <span className="live-handoff-action-label">Weekend</span>
                 <span className="live-handoff-action-meta mono">Weekend schedule &amp; standings</span>
               </span>
               <ChevronRight size={18} />

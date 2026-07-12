@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLiveState, fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
+import { fetchLiveState, fetchWeekendContext } from '../api'
 import type { LivePosition, LiveStreamData } from '../types'
 import {
   loadPinnedDrivers,
@@ -21,10 +21,10 @@ import {
   allowsLiveInterpretations,
   deriveLivePhase,
   rendersSnapshot,
+  terminalSessionStatus,
 } from '../lib/liveState'
 import type { TransportHealth } from '../lib/liveState'
-import { deriveWeekendContext } from '../lib/weekendContext'
-import { pickFocusMeeting } from '../lib/schedule'
+import { analysisIsReady } from '../components/live/LiveHandoff'
 import { SessionBanner } from '../components/live/SessionBanner'
 import { TrackStatusBanner } from '../components/live/TrackStatusBanner'
 import { TimingTower } from '../components/live/TimingTower'
@@ -36,6 +36,10 @@ import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
 import { LiveHandoff } from '../components/live/LiveHandoff'
 import '../styles/live-state.css'
+
+/** How often to re-check weekend-context while analysis is still ingesting. */
+export const WEEKEND_CONTEXT_POLL_MS = 15_000
+const WEEKEND_CONTEXT_STALE_MS = 15_000
 
 export function LiveTimingPage() {
   const [activeSnapshot, setActiveSnapshot] = useState<LiveStreamData | null>(null)
@@ -55,61 +59,75 @@ export function LiveTimingPage() {
   const sessionSigRef = useRef('')
   const isLiveRef = useRef(false)
   const archiveModeRef = useRef(false)
+  // Whether we ever observed this session as live — used to reason about a
+  // dropped feed vs. a session that was never live in this page session.
+  const wasLiveRef = useRef(false)
   const hasArchive = Boolean(archiveSnapshot)
 
-  // Transport health, active-session state, and archive mode are three
-  // independent inputs; deriveLivePhase collapses them into one UI phase.
+  const {
+    data,
+    isError,
+    error,
+    isFetched: liveStateFetched,
+  } = useQuery({
+    queryKey: ['live-state'],
+    queryFn: fetchLiveState,
+    staleTime: 5_000,
+  })
+
+  // A retained snapshot is only "settled" (session genuinely finished) if it
+  // carries a terminal FIA SessionStatus. Otherwise the upstream feed dropped
+  // while the session was still active and we must stay in `disconnected`.
+  const sessionEndedCleanly = terminalSessionStatus(archiveSnapshot?.SessionStatus)
+
+  // Transport health, active-session state, and archive availability are
+  // orthogonal inputs; deriveLivePhase collapses them into one UI phase.
   const phase = deriveLivePhase({
     transport: streamStatus,
     isLive,
     hasActiveSnapshot: Boolean(activeSnapshot),
     hasArchive,
     archiveMode,
+    sessionEndedCleanly,
+    wasLive: wasLiveRef.current,
+    stateLoaded: liveStateFetched,
   })
-  const snapshot = phase === 'archive' ? archiveSnapshot : isLive ? activeSnapshot : null
+  const snapshot =
+    phase === 'archive'
+      ? archiveSnapshot
+      : isLive
+        ? activeSnapshot
+        : phase === 'disconnected'
+          ? archiveSnapshot
+          : null
 
-  const { data, isError, error } = useQuery({
-    queryKey: ['live-state'],
-    queryFn: fetchLiveState,
-    staleTime: 5_000,
+  // Canonical weekend context (issue #72) — the single source of truth for
+  // previous/next/default-analysis identity and temporal state. Only needed
+  // when no session is streaming; keep it idle during a live session. Poll
+  // while a completed session is still ingesting so `settling` can flip to
+  // analysis-ready without a manual refresh.
+  const contextQuery = useQuery({
+    queryKey: ['weekend-context'],
+    queryFn: fetchWeekendContext,
+    enabled: !isLive,
+    staleTime: WEEKEND_CONTEXT_STALE_MS,
+    refetchInterval: (query) => {
+      const ctx = query.state.data
+      if (!ctx) return WEEKEND_CONTEXT_POLL_MS
+      // Once the default-analysis session is fully ingested there is nothing
+      // left to wait for; stop polling.
+      return analysisIsReady(ctx.default_analysis_session) ? false : WEEKEND_CONTEXT_POLL_MS
+    },
+    refetchIntervalInBackground: false,
   })
-
-  // Weekend context (previous/next/analysis) is only needed when no session is
-  // streaming; keep the queries idle during a live session.
-  const notLive = !isLive
-  const nowDate = useMemo(() => new Date(now), [now])
-  const seasonsQuery = useQuery({
-    queryKey: ['seasons'],
-    queryFn: fetchSeasons,
-    enabled: notLive,
-  })
-  const latestSeason = seasonsQuery.data?.[0] ?? null
-  const meetingsQuery = useQuery({
-    queryKey: ['meetings', latestSeason],
-    queryFn: () => fetchLocalMeetings(latestSeason!),
-    enabled: notLive && latestSeason != null,
-    staleTime: 60_000,
-  })
-  const focusMeeting = useMemo(
-    () => pickFocusMeeting(meetingsQuery.data ?? [], nowDate),
-    [meetingsQuery.data, nowDate],
-  )
-  const weekendQuery = useQuery({
-    queryKey: ['weekend', focusMeeting?.meeting_key],
-    queryFn: () => fetchWeekend(focusMeeting!.meeting_key),
-    enabled: notLive && focusMeeting != null,
-    staleTime: 60_000,
-  })
-  const weekendContext = useMemo(
-    () => deriveWeekendContext(weekendQuery.data, nowDate),
-    [weekendQuery.data, nowDate],
-  )
+  const weekendContext = contextQuery.data
 
   useEffect(() => {
     if (!data) return
     const nextLive = data.is_live && Boolean(data.data)
     setIsLive(nextLive)
     isLiveRef.current = nextLive
+    if (nextLive) wasLiveRef.current = true
     if (nextLive && data.data) {
       setActiveSnapshot(data.data)
       setArchiveMode(false)
@@ -159,6 +177,7 @@ export function LiveTimingPage() {
           setPositions({})
         }
         isLiveRef.current = true
+        wasLiveRef.current = true
         setActiveSnapshot(state.data)
         setArchiveMode(false)
       } else {
