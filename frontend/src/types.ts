@@ -448,6 +448,107 @@ export interface DriverSummary {
   rounds: DriverSummaryRound[]
 }
 
+// ── Weekend Context ──
+// Canonical local-first contract for the adaptive Weekend home, served verbatim
+// by /api/v1/weekend-context (backend story #72, internal/query/context.go).
+// The frontend consumes this shape as the single source of truth; view-model
+// derivation lives in lib/weekendContext.ts.
+
+// TemporalState mirrors query.TemporalState exactly (the JSON `temporal_state`).
+export type TemporalState =
+  | 'no_season'
+  | 'between_weekends'
+  | 'pre_session'
+  | 'session_live'
+  | 'session_settling'
+  | 'between_sessions'
+  | 'post_weekend'
+  | 'season_complete'
+
+// ContextAvailability mirrors query.ContextAvailability. Every field is present
+// in a canonical payload except the optional `observed_at`.
+export interface ContextAvailability {
+  schedule: string
+  live_transport: string
+  live_session: string
+  archive: string
+  local_analysis: string
+  freshness: string
+  observed_at?: string
+  limitations: string[]
+}
+
+// ContextSession mirrors query.ContextSession: a session identity coupled with
+// its meeting and structured availability contract.
+export interface ContextSession {
+  session: Session
+  meeting?: Meeting
+  availability: ContextAvailability
+}
+
+// WeekendContext mirrors query.WeekendContext (the canonical endpoint body).
+export interface WeekendContext {
+  season?: number
+  temporal_state: TemporalState
+  previous_meeting?: Meeting
+  focus_meeting?: Meeting
+  next_meeting?: Meeting
+  previous_completed_session?: ContextSession
+  active_session?: ContextSession
+  next_session?: ContextSession
+  default_analysis_session?: ContextSession
+  championship_round: number
+  total_championship_rounds: number
+}
+
+// ── Weekend view model (client-only) ──
+// The rendered Weekend home layers a small set of non-canonical UI states
+// (loading/error) plus supplementary data (championship movers, briefing) on top
+// of the canonical context. None of these are part of the #72 contract.
+export type WeekendViewState =
+  | 'loading'
+  | 'error'
+  | 'no_season'
+  | 'between_weekends'
+  | 'pre_session'
+  | 'session_live'
+  | 'session_settling'
+  | 'between_sessions'
+  | 'post_weekend'
+  | 'season_complete'
+
+export interface WeekendChampionshipMover {
+  position: number
+  driver_number: number
+  name_acronym: string
+  team_colour: string
+  points: number
+  delta?: number
+}
+
+export interface WeekendChampionshipImpact {
+  leaders: WeekendChampionshipMover[]
+  note?: string
+}
+
+export interface WeekendBriefingItem {
+  category?: string
+  title: string
+  url: string
+  source: string
+  published_at?: string
+  image_url?: string
+}
+
+export interface WeekendPodiumEntry {
+  position: number
+  driver_number: number
+  name_acronym: string
+  team_name: string
+  team_colour: string
+  gap: string
+}
+
 export interface NewsItem {
   source: string
   title: string

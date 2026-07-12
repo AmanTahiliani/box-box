@@ -1,13 +1,13 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { Nav } from './components/Nav'
-import { CommandCenterPage } from './pages/CommandCenterPage'
+import { WeekendPage } from './pages/WeekendPage'
+import { ExplorePage } from './pages/ExplorePage'
 import { RaceHubPage } from './pages/RaceHubPage'
 import { DataLibraryPage } from './pages/DataLibraryPage'
 import { LiveTimingPage } from './pages/LiveTimingPage'
 import { BriefingPage } from './pages/BriefingPage'
 import { ChampionshipPage } from './pages/ChampionshipPage'
 import { DriverProfilePage } from './pages/DriverProfilePage'
-import { RacePreviewPage } from './pages/RacePreviewPage'
 
 type RaceHubSearch = {
   session_key?: number
@@ -26,10 +26,17 @@ const rootRoute = createRootRoute({
   ),
 })
 
-export const commandCenterRoute = createRoute({
+// Weekend is the adaptive home. `/` renders the current temporal state.
+export const weekendRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: CommandCenterPage,
+  component: WeekendPage,
+})
+
+export const exploreRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/explore',
+  component: ExplorePage,
 })
 
 export const raceHubRoute = createRoute({
@@ -90,14 +97,21 @@ export const briefingRoute = createRoute({
   component: BriefingPage,
 })
 
+// Preview folds into the Weekend home. /preview is a stable alias that renders the
+// Weekend page in its preparation surface (PreSessionView) whenever there is a next
+// event — so saved preview links and the "Prepare for …" CTA reach real preview
+// content instead of redirecting back to the same between-races screen.
 export const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/preview',
-  component: RacePreviewPage,
+  component: function PreviewRoute() {
+    return <WeekendPage preview />
+  },
 })
 
 const routeTree = rootRoute.addChildren([
-  commandCenterRoute,
+  weekendRoute,
+  exploreRoute,
   raceHubRoute,
   adminRoute,
   dataLibraryRoute,

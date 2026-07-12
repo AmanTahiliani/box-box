@@ -15,6 +15,7 @@ import type {
   Session,
   TrackOutline,
   Weekend,
+  WeekendContext,
 } from './types'
 
 export async function fetchRaceHub(sessionKey: number): Promise<RaceHub> {
@@ -108,6 +109,19 @@ export async function fetchSessions(meetingKey: number, source = 'openf1'): Prom
 
 export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
   const res = await fetch(`/api/v1/weekend?meeting_key=${meetingKey}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+// fetchWeekendContext consumes the canonical /api/v1/weekend-context endpoint
+// (backend story #72). The response is the authoritative WeekendContext shape and
+// is used verbatim as the Weekend home's source of truth. Any HTTP error throws
+// so the hook can surface an explicit error state; there is no client-side
+// re-derivation of the contract.
+export async function fetchWeekendContext(): Promise<WeekendContext> {
+  const res = await fetch('/api/v1/weekend-context')
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

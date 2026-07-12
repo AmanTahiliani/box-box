@@ -1,0 +1,94 @@
+import { useWeekendContext } from '../hooks/useWeekendContext'
+import { BetweenRacesView } from '../components/weekend/BetweenRacesView'
+import { BetweenSessionsView } from '../components/weekend/BetweenSessionsView'
+import { LiveHandoffView } from '../components/weekend/LiveHandoffView'
+import { PreSessionView } from '../components/weekend/PreSessionView'
+import { WeekendError, WeekendLimited, WeekendLoading } from '../components/weekend/StatusViews'
+import { resolveViewState } from '../lib/weekendContext'
+import type {
+  WeekendBriefingItem,
+  WeekendChampionshipImpact,
+  WeekendContext,
+  WeekendViewState,
+} from '../types'
+import '../styles/weekend.css'
+
+interface RenderArgs {
+  context: WeekendContext
+  now: Date
+  championship?: WeekendChampionshipImpact
+  briefing: WeekendBriefingItem[]
+  /** When true (the /preview alias), foreground the preparation surface. */
+  preview: boolean
+}
+
+function renderState(view: WeekendViewState, args: RenderArgs) {
+  const { context, now, championship, briefing, preview } = args
+  // The /preview alias always resolves to the preparation surface as long as
+  // there is a next event to prepare for, regardless of the temporal state. This
+  // keeps saved /preview links and the "Prepare for …" CTA meaningful instead of
+  // redirecting straight back to the same between-races screen.
+  if (preview && context.next_meeting) {
+    return <PreSessionView context={context} now={now} />
+  }
+
+  switch (view) {
+    case 'no_season':
+      return <WeekendLimited season={context.season} />
+    case 'between_weekends':
+    case 'post_weekend':
+    case 'season_complete':
+      return (
+        <BetweenRacesView
+          context={context}
+          now={now}
+          view={view}
+          championship={championship}
+          briefing={briefing}
+        />
+      )
+    case 'between_sessions':
+    case 'session_settling':
+      return <BetweenSessionsView context={context} now={now} view={view} briefing={briefing} />
+    case 'session_live':
+      return <LiveHandoffView context={context} />
+    case 'pre_session':
+      return <PreSessionView context={context} now={now} />
+    default:
+      return <WeekendLimited season={context.season} />
+  }
+}
+
+export function WeekendPage({ preview = false }: { preview?: boolean }) {
+  const { context, loadState, error, championship, briefing, now } = useWeekendContext()
+
+  if (loadState === 'loading') {
+    return (
+      <main className="wk-page" data-testid="weekend-page" data-state="loading">
+        <WeekendLoading />
+      </main>
+    )
+  }
+
+  if (loadState === 'error' || context == null) {
+    return (
+      <main className="wk-page" data-testid="weekend-page" data-state="error">
+        <WeekendError message={error?.message} />
+      </main>
+    )
+  }
+
+  const view = resolveViewState(context)
+
+  return (
+    <main
+      className="wk-page"
+      data-testid="weekend-page"
+      data-state={view}
+      data-temporal-state={context.temporal_state}
+      data-preview={preview ? 'true' : undefined}
+    >
+      {renderState(view, { context, now, championship, briefing, preview })}
+    </main>
+  )
+}
