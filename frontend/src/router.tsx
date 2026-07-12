@@ -8,10 +8,7 @@ import { LiveTimingPage } from './pages/LiveTimingPage'
 import { BriefingPage } from './pages/BriefingPage'
 import { ChampionshipPage } from './pages/ChampionshipPage'
 import { DriverProfilePage } from './pages/DriverProfilePage'
-
-type RaceHubSearch = {
-  session_key?: number
-}
+import { parseRaceHubSearch, parseWeekendSearch } from './lib/routeSearch'
 
 type DriverProfileSearch = {
   year?: number
@@ -27,10 +24,18 @@ const rootRoute = createRootRoute({
 })
 
 // Weekend is the adaptive home. `/` renders the current temporal state.
+// Optional meeting_key/session_key search restores Race Hub return context
+// (deep-linkable, reload-safe — no hidden component memory).
 export const weekendRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: WeekendPage,
+  validateSearch: (search: Record<string, unknown>) => parseWeekendSearch(search),
+  component: function WeekendRoute() {
+    const { meeting_key, session_key } = weekendRoute.useSearch()
+    return (
+      <WeekendPage focusMeetingKey={meeting_key} focusSessionKey={session_key} />
+    )
+  },
 })
 
 export const exploreRoute = createRoute({
@@ -42,10 +47,7 @@ export const exploreRoute = createRoute({
 export const raceHubRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/race-hub',
-  validateSearch: (search: Record<string, unknown>): RaceHubSearch => {
-    const sessionKey = Number(search.session_key)
-    return Number.isFinite(sessionKey) && sessionKey > 0 ? { session_key: sessionKey } : {}
-  },
+  validateSearch: (search: Record<string, unknown>) => parseRaceHubSearch(search),
   component: function RaceHubRoute() {
     const { session_key } = raceHubRoute.useSearch()
     return <RaceHubPage sessionKey={session_key ?? 0} />

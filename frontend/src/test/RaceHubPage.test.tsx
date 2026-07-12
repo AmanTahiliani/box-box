@@ -243,6 +243,19 @@ function renderRaceHub(sessionKey: number) {
       </QueryClientProvider>
     ),
   })
+  const weekendRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/',
+    validateSearch: (search: Record<string, unknown>) => {
+      const meetingKey = Number(search.meeting_key)
+      const sk = Number(search.session_key)
+      return {
+        ...(Number.isFinite(meetingKey) && meetingKey > 0 ? { meeting_key: meetingKey } : {}),
+        ...(Number.isFinite(sk) && sk > 0 ? { session_key: sk } : {}),
+      }
+    },
+    component: () => <div data-testid="weekend-stub" />,
+  })
   const raceHubRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/race-hub',
@@ -256,7 +269,7 @@ function renderRaceHub(sessionKey: number) {
     },
   })
   const router = createRouter({
-    routeTree: rootRoute.addChildren([raceHubRoute]),
+    routeTree: rootRoute.addChildren([weekendRoute, raceHubRoute]),
     history: undefined,
   })
 
@@ -541,10 +554,22 @@ describe('RaceHubPage', () => {
     await waitFor(() => expect(screen.getByTestId('race-hub-error')).toBeInTheDocument())
     expect(screen.getByTestId('rh-retry')).toBeInTheDocument()
     const back = screen.getByTestId('rh-back-weekend')
-    expect(back).toHaveAttribute('href', '/race-hub?session_key=9472')
+    expect(back).toHaveAttribute('href', expect.stringMatching(/meeting_key=1229/))
+    expect(back).toHaveAttribute('href', expect.stringMatching(/session_key=9472/))
+    expect(back.getAttribute('href')).toMatch(/^\//)
 
     mockFetchRaceHub.mockResolvedValue(raceHub)
     fireEvent.click(screen.getByTestId('rh-retry'))
     await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
+  })
+
+  it('exposes a Back to Weekend link that carries meeting and session context', async () => {
+    renderRaceHub(9472)
+
+    await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
+    const back = screen.getByRole('link', { name: 'Back to Weekend' })
+    expect(back).toHaveAttribute('data-testid', 'rh-back-weekend')
+    expect(back).toHaveAttribute('href', expect.stringMatching(/meeting_key=1229/))
+    expect(back).toHaveAttribute('href', expect.stringMatching(/session_key=9472/))
   })
 })

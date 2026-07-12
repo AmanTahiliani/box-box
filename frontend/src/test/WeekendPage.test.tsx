@@ -20,12 +20,14 @@ import type {
   TemporalState,
   WeekendContext,
 } from '../types'
+import { parseWeekendSearch } from '../lib/routeSearch'
 
 vi.mock('../api', () => ({
   fetchWeekendContext: vi.fn(),
   fetchChampionshipHub: vi.fn(),
   fetchNews: vi.fn(),
   fetchRaceHub: vi.fn(),
+  fetchWeekend: vi.fn(),
   // Consumed transitively by RacePreviewPage (folded into PreSessionView):
   fetchSeasons: vi.fn(),
   fetchMeetings: vi.fn(),
@@ -40,6 +42,7 @@ import {
   fetchChampionshipHub,
   fetchNews,
   fetchRaceHub,
+  fetchWeekend,
   fetchSeasons,
   fetchMeetings,
   fetchSessions,
@@ -52,6 +55,7 @@ const mockContext = vi.mocked(fetchWeekendContext)
 const mockHub = vi.mocked(fetchChampionshipHub)
 const mockNews = vi.mocked(fetchNews)
 const mockRaceHub = vi.mocked(fetchRaceHub)
+const mockWeekend = vi.mocked(fetchWeekend)
 const mockSeasons = vi.mocked(fetchSeasons)
 const mockMeetings = vi.mocked(fetchMeetings)
 const mockSessions = vi.mocked(fetchSessions)
@@ -152,7 +156,15 @@ function renderAt(path: string) {
       </QueryClientProvider>
     ),
   })
-  const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <WeekendPage /> })
+  const homeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/',
+    validateSearch: (s: Record<string, unknown>) => parseWeekendSearch(s),
+    component: function HomeRoute() {
+      const { meeting_key, session_key } = homeRoute.useSearch()
+      return <WeekendPage focusMeetingKey={meeting_key} focusSessionKey={session_key} />
+    },
+  })
   const previewRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/preview',
@@ -192,6 +204,19 @@ describe('WeekendPage canonical contract rendering', () => {
     mockHub.mockResolvedValue(hub)
     mockNews.mockResolvedValue([])
     mockRaceHub.mockResolvedValue(raceHub)
+    mockWeekend.mockResolvedValue({
+      source: 'local',
+      meeting_key: 1,
+      meeting: meeting(),
+      sessions: [
+        {
+          session: session({ session_key: 11, session_name: 'Race' }),
+          source: 'local',
+          datasets: {},
+        },
+      ],
+      default_session_key: 11,
+    })
     mockSeasons.mockResolvedValue([2026])
     mockMeetings.mockResolvedValue([meeting()])
     mockSessions.mockResolvedValue([session()])
@@ -305,5 +330,28 @@ describe('WeekendPage canonical contract rendering', () => {
     expect(screen.getByTestId('weekend-page')).toHaveAttribute('data-preview', 'true')
     // The between-races surface must NOT be what /preview renders.
     expect(screen.queryByTestId('weekend-between-races')).not.toBeInTheDocument()
+  })
+
+  it('restores Race Hub meeting/session focus from the Weekend URL search contract', async () => {
+    mockContext.mockResolvedValue(
+      context({
+        temporal_state: 'season_complete',
+        previous_completed_session: ctxSession({ session: session({ session_key: 11, session_name: 'Race' }) }),
+        default_analysis_session: ctxSession({ session: session({ session_key: 11 }) }),
+      }),
+    )
+    renderAt('/?meeting_key=1&session_key=11')
+    await waitFor(() => expect(screen.getByTestId('wk-focus-context')).toBeInTheDocument())
+    expect(screen.getByTestId('weekend-page')).toHaveAttribute('data-meeting-key', '1')
+    expect(screen.getByTestId('weekend-page')).toHaveAttribute('data-session-key', '11')
+    await waitFor(() =>
+      expect(screen.getByTestId('wk-focus-meeting')).toHaveTextContent('British Grand Prix'),
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('wk-focus-session')).toHaveTextContent('Race'),
+    )
+    const continueAnalysis = screen.getByRole('link', { name: /Continue analysis/i })
+    expect(continueAnalysis).toHaveAttribute('href', expect.stringContaining('session_key=11'))
+    expect(mockWeekend).toHaveBeenCalledWith(1)
   })
 })

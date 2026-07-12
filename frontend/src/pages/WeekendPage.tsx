@@ -4,6 +4,7 @@ import { BetweenSessionsView } from '../components/weekend/BetweenSessionsView'
 import { LiveHandoffView } from '../components/weekend/LiveHandoffView'
 import { PreSessionView } from '../components/weekend/PreSessionView'
 import { WeekendError, WeekendLimited, WeekendLoading } from '../components/weekend/StatusViews'
+import { WeekendFocusBanner } from '../components/weekend/WeekendFocusBanner'
 import { resolveViewState } from '../lib/weekendContext'
 import type {
   WeekendBriefingItem,
@@ -59,8 +60,21 @@ function renderState(view: WeekendViewState, args: RenderArgs) {
   }
 }
 
-export function WeekendPage({ preview = false }: { preview?: boolean }) {
+export function WeekendPage({
+  preview = false,
+  focusMeetingKey,
+  focusSessionKey,
+}: {
+  preview?: boolean
+  /** Restored from `/?meeting_key=` when returning from Race Hub analysis. */
+  focusMeetingKey?: number
+  /** Restored from `/?session_key=` when returning from Race Hub analysis. */
+  focusSessionKey?: number
+}) {
   const { context, loadState, error, championship, briefing, now } = useWeekendContext()
+  const hasFocus =
+    (focusMeetingKey != null && focusMeetingKey > 0) ||
+    (focusSessionKey != null && focusSessionKey > 0)
 
   if (loadState === 'loading') {
     return (
@@ -87,7 +101,12 @@ export function WeekendPage({ preview = false }: { preview?: boolean }) {
       data-state={view}
       data-temporal-state={context.temporal_state}
       data-preview={preview ? 'true' : undefined}
+      data-meeting-key={focusMeetingKey ?? undefined}
+      data-session-key={focusSessionKey ?? undefined}
     >
+      {hasFocus && (
+        <WeekendFocusBanner meetingKey={focusMeetingKey} sessionKey={focusSessionKey} />
+      )}
       {renderState(view, { context, now, championship, briefing, preview })}
     </main>
   )

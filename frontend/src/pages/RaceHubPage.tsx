@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { fetchRaceHub, fetchWeekend, fetchWeekendContext } from '../api'
+import { weekendFocusSearch } from '../lib/routeSearch'
 import { DatasetStrip } from '../components/DatasetStrip'
 import { RaceStoryCanvas } from '../components/RaceStoryCanvas'
 import { TabBar, type Tab } from '../components/TabBar'
@@ -123,9 +124,9 @@ export function RaceHubPage({ sessionKey }: Props) {
               >
                 Retry
               </button>
-              <a href="/" className="rh-recover-btn">
-                Back to Command Center
-              </a>
+              <Link to="/" search={{}} className="rh-recover-btn" data-testid="rh-back-weekend">
+                Back to Weekend
+              </Link>
             </div>
           </div>
         </div>
@@ -150,9 +151,9 @@ export function RaceHubPage({ sessionKey }: Props) {
               >
                 Browse Weekends
               </button>
-              <a href="/" className="rh-empty-action">
-                Back to Command Center
-              </a>
+              <Link to="/" search={{}} className="rh-empty-action" data-testid="rh-back-weekend">
+                Back to Weekend
+              </Link>
             </div>
           </div>
           {switcherOpen && (
@@ -183,14 +184,10 @@ export function RaceHubPage({ sessionKey }: Props) {
     )
   }
   if (raceHubQuery.isError || !data) {
-    const backMeeting = context?.focus_meeting?.meeting_key
-    const backSession =
-      defaultAnalysisSessionKey(context) ??
-      context?.previous_completed_session?.session.session_key
-    const backHref =
-      backSession && backSession > 0
-        ? `/race-hub?session_key=${backSession}`
-        : '/race-hub'
+    const backMeeting =
+      context?.focus_meeting?.meeting_key ??
+      context?.previous_completed_session?.meeting?.meeting_key
+    const backSearch = weekendFocusSearch(backMeeting, sessionKey)
 
     return (
       <div className="rh-page" data-testid="race-hub-error" style={accentStyle}>
@@ -209,14 +206,16 @@ export function RaceHubPage({ sessionKey }: Props) {
             >
               Retry
             </button>
-            <a
-              href={backHref}
+            <Link
+              to="/"
+              search={backSearch}
               className="rh-recover-btn"
               data-testid="rh-back-weekend"
               data-meeting-key={backMeeting ?? undefined}
+              data-session-key={sessionKey}
             >
               Back to Weekend
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -242,6 +241,16 @@ export function RaceHubPage({ sessionKey }: Props) {
   return (
     <div className="rh-page" data-testid="race-hub" style={accentStyle}>
       <div className="rh-topbar">
+        <Link
+          to="/"
+          search={weekendFocusSearch(meetingKey, sessionKey)}
+          className="rh-back-weekend"
+          data-testid="rh-back-weekend"
+          data-meeting-key={meetingKey ?? undefined}
+          data-session-key={sessionKey}
+        >
+          Back to Weekend
+        </Link>
         <span className="rh-topbar-label mono">
           box-box · race hub
           {data.meeting?.year ? ` · ${data.meeting.year}` : ''}

@@ -150,11 +150,49 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(page).toHaveURL(new RegExp(`session_key=${CORE_ONLY_SESSION}`))
     await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
 
-    // Back to Weekend via bare /race-hub — Weekend Context should restore the
-    // same meeting's default analysis session.
-    await page.goto('/race-hub')
-    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    // Explicit Race Hub → Weekend return carries meeting/session in the URL.
+    const back = page.getByRole('link', { name: 'Back to Weekend' })
+    await expect(back).toBeVisible()
+    await expect(back).toHaveAttribute('href', /meeting_key=1229/)
+    await expect(back).toHaveAttribute('href', /session_key=9000/)
+    await back.click()
+
+    await expect(page).toHaveURL(/\/\?.*meeting_key=1229/)
+    await expect(page).toHaveURL(/session_key=9000/)
+    await expect(page.getByTestId('weekend-page')).toBeVisible()
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-meeting-key', '1229')
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-session-key', '9000')
+    await expect(page.getByTestId('wk-focus-context')).toBeVisible()
+    await expect(page.getByTestId('wk-focus-meeting')).toContainText('Monaco')
+    await expect(page.getByTestId('wk-focus-session')).toContainText('Core Only')
+
+    // Contextual action returns to the exact selected analysis session.
+    const continueAnalysis = page.getByRole('link', { name: /Continue analysis/i })
+    await expect(continueAnalysis).toHaveAttribute(
+      'href',
+      new RegExp(`session_key=${CORE_ONLY_SESSION}`),
+    )
+    await continueAnalysis.click()
+    await expect(page).toHaveURL(new RegExp(`session_key=${CORE_ONLY_SESSION}`))
+    await expect(page.getByTestId('race-hub')).toBeVisible()
     await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
-    await expect(page.getByTestId('rh-overview')).toBeVisible()
+  })
+
+  test('Back to Weekend is keyboard-focusable and works at mobile width', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/race-hub?session_key=${CORE_ONLY_SESSION}`)
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+
+    const back = page.getByRole('link', { name: 'Back to Weekend' })
+    await expect(back).toBeVisible()
+    await back.focus()
+    await expect(back).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByTestId('weekend-page')).toBeVisible()
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-meeting-key', '1229')
+    await expect(page.getByTestId('weekend-page')).toHaveAttribute('data-session-key', '9000')
+    await expect(page.getByTestId('wk-focus-context')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Continue analysis/i })).toBeVisible()
   })
 })
