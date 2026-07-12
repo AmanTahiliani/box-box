@@ -3,6 +3,7 @@ package query
 import (
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/chapters"
 	"github.com/AmanTahiliani/box-box/internal/models"
@@ -12,11 +13,20 @@ import (
 // Service assembles store-backed read models.
 type Service struct {
 	store *store.Store
+	now   func() time.Time
 }
 
 // NewService creates a query service over a domain store.
 func NewService(st *store.Store) *Service {
-	return &Service{store: st}
+	return NewServiceWithClock(st, time.Now)
+}
+
+// NewServiceWithClock creates a query service with an injected clock.
+func NewServiceWithClock(st *store.Store, now func() time.Time) *Service {
+	if now == nil {
+		now = time.Now
+	}
+	return &Service{store: st, now: now}
 }
 
 // EnrichedResult is a session result with driver identity fields.

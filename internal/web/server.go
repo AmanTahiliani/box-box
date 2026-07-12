@@ -62,6 +62,7 @@ func (s *Server) routes() (http.Handler, error) {
 
 	// REST API — /api/v1/laps/comparison must be registered before /api/v1/laps
 	// because Go's ServeMux uses longest-prefix matching.
+	mux.HandleFunc("/api/v1/weekend-context", s.handleWeekendContext)
 	mux.HandleFunc("/api/v1/race-hub", s.handleRaceHub)
 	mux.HandleFunc("/api/v1/seasons", s.handleSeasons)
 	mux.HandleFunc("/api/v1/weekend", s.handleWeekend)
