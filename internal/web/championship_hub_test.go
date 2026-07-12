@@ -17,20 +17,22 @@ func TestAggregateChampionshipHub(t *testing.T) {
 		1: {DriverNumber: 1, NameAcronym: "VER", FullName: "Max Verstappen", TeamName: "Red Bull", TeamColour: "3671c6"},
 		2: {DriverNumber: 2, NameAcronym: "PER", FullName: "Sergio Perez", TeamName: "Red Bull", TeamColour: "3671c6"},
 		3: {DriverNumber: 3, NameAcronym: "HAM", FullName: "Lewis Hamilton", TeamName: "Mercedes", TeamColour: "27f4d2"},
+		4: {DriverNumber: 4, NameAcronym: "NOR", FullName: "Lando Norris", TeamName: "McLaren", TeamColour: "ff8000"},
 	}
 
 	champ := []models.ChampionshipDriver{
 		{DriverNumber: 1, PointsCurrent: 50, PositionCurrent: 1, SessionKey: 99},
 		{DriverNumber: 3, PointsCurrent: 33, PositionCurrent: 2, SessionKey: 99},
 		{DriverNumber: 2, PointsCurrent: 30, PositionCurrent: 3, SessionKey: 99},
+		{DriverNumber: 4, PointsCurrent: 12, PositionCurrent: 4, SessionKey: 99},
 	}
 	teams := []models.ChampionshipTeam{
 		{TeamName: "Red Bull", PointsCurrent: 80, PositionCurrent: 1},
 		{TeamName: "Mercedes", PointsCurrent: 33, PositionCurrent: 2},
 	}
 
-	// Round 1: VER P1(25), HAM P2(18), PER P3(15). Pole: VER.
-	// Round 2: VER P1(25), PER P2(18), HAM P3(15). Pole: HAM.
+	// Round 1: VER P1(25), HAM P2(18), PER P3(15). Pole: VER. NOR absent.
+	// Round 2: VER P1(25), PER P2(18), HAM P3(15), NOR P4(12). Pole: HAM.
 	races := []meetingRace{
 		{
 			Meeting: models.Meeting{MeetingName: "Bahrain GP"},
@@ -39,7 +41,7 @@ func TestAggregateChampionshipHub(t *testing.T) {
 		},
 		{
 			Meeting: models.Meeting{MeetingName: "Saudi GP"},
-			Results: []models.SessionResult{raceResult(1, 1, 25), raceResult(2, 2, 18), raceResult(3, 3, 15)},
+			Results: []models.SessionResult{raceResult(1, 1, 25), raceResult(2, 2, 18), raceResult(3, 3, 15), raceResult(4, 4, 12)},
 			Grid:    []models.StartingGrid{{DriverNumber: 3, Position: 1}},
 		},
 		// Round 3: not yet run (no results) — should not count as completed.
@@ -67,9 +69,9 @@ func TestAggregateChampionshipHub(t *testing.T) {
 		t.Errorf("round labels = %v, want [R1 R2]", resp.RoundLabels)
 	}
 
-	// Drivers are sorted by official position: VER, HAM, PER.
-	if len(resp.Drivers) != 3 {
-		t.Fatalf("drivers = %d, want 3", len(resp.Drivers))
+	// Drivers are sorted by official position: VER, HAM, PER, NOR.
+	if len(resp.Drivers) != 4 {
+		t.Fatalf("drivers = %d, want 4", len(resp.Drivers))
 	}
 	ver := resp.Drivers[0]
 	if ver.NameAcronym != "VER" || ver.Position != 1 {
@@ -91,6 +93,9 @@ func TestAggregateChampionshipHub(t *testing.T) {
 	if len(ver.Cumulative) != 2 || ver.Cumulative[0] != 25 || ver.Cumulative[1] != 50 {
 		t.Errorf("VER cumulative = %v, want [25 50]", ver.Cumulative)
 	}
+	if len(ver.RoundPositions) != 2 || ver.RoundPositions[0] != 1 || ver.RoundPositions[1] != 1 {
+		t.Errorf("VER round positions = %v, want [1 1]", ver.RoundPositions)
+	}
 	// VER beat teammate PER in both rounds.
 	if ver.TeammateWins != 2 || ver.TeammateLosses != 0 {
 		t.Errorf("VER h2h = %d-%d, want 2-0", ver.TeammateWins, ver.TeammateLosses)
@@ -109,6 +114,9 @@ func TestAggregateChampionshipHub(t *testing.T) {
 	if per.Poles != 0 {
 		t.Errorf("PER poles = %d, want 0", per.Poles)
 	}
+	if len(per.RoundPositions) != 2 || per.RoundPositions[0] != 3 || per.RoundPositions[1] != 2 {
+		t.Errorf("PER round positions = %v, want [3 2]", per.RoundPositions)
+	}
 
 	// HAM has no teammate in the data — no h2h recorded.
 	var ham champHubDriver
@@ -122,6 +130,17 @@ func TestAggregateChampionshipHub(t *testing.T) {
 	}
 	if ham.Poles != 1 {
 		t.Errorf("HAM poles = %d, want 1", ham.Poles)
+	}
+
+	// NOR missed round 1 — position 0 marks the absent round.
+	var nor champHubDriver
+	for _, d := range resp.Drivers {
+		if d.NameAcronym == "NOR" {
+			nor = d
+		}
+	}
+	if len(nor.RoundPositions) != 2 || nor.RoundPositions[0] != 0 || nor.RoundPositions[1] != 4 {
+		t.Errorf("NOR round positions = %v, want [0 4]", nor.RoundPositions)
 	}
 
 	// Teams sorted by position; Red Bull wins = VER(2) + PER(0) = 2.

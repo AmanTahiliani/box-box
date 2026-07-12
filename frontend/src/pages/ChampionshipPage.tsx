@@ -5,12 +5,13 @@ import { fetchChampionshipHub, fetchSeasons } from '../api'
 import { teamColor } from '../utils'
 import type { ChampHubDriver, ChampionshipHub } from '../types'
 import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
+import { RivalryCompare } from '../components/RivalryCompare'
 import { Meaning } from '../components/Meaning'
 import { TeammateH2H } from '../components/TeammateH2H'
 import { teammatePairs } from '../lib/h2h'
 import { pointsGapMeaning } from '../lib/meaning'
 
-type View = 'drivers' | 'constructors' | 'progression' | 'simulator'
+type View = 'drivers' | 'constructors' | 'progression' | 'rivalry' | 'simulator'
 
 const GOLD = '#ffd700'
 const SILVER = '#c0c0c0'
@@ -218,6 +219,14 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           </button>
           <button
             type="button"
+            className={`champ-tab${view === 'rivalry' ? ' is-active' : ''}`}
+            onClick={() => setView('rivalry')}
+            data-testid="champ-tab-rivalry"
+          >
+            Rivalry
+          </button>
+          <button
+            type="button"
             className={`champ-tab${view === 'simulator' ? ' is-active' : ''}`}
             onClick={() => setView('simulator')}
             data-testid="champ-tab-simulator"
@@ -251,6 +260,7 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
       )}
       {view === 'constructors' && <ConstructorsView hub={hub} />}
       {view === 'progression' && <ProgressionView hub={hub} />}
+      {view === 'rivalry' && <RivalryCompare hub={hub} />}
       {view === 'simulator' && <ChampionshipSimulator hub={hub} />}
     </div>
   )

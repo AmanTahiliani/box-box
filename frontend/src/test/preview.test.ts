@@ -54,6 +54,7 @@ const hubDriver = (over: Partial<ChampHubDriver>): ChampHubDriver => ({
   poles: 4,
   form: [25],
   cumulative: [200],
+  round_positions: [1],
   teammate_wins: 9,
   teammate_losses: 1,
   ...over,

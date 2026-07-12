@@ -614,8 +614,9 @@ type champHubDriver struct {
 	Wins           int       `json:"wins"`
 	Podiums        int       `json:"podiums"`
 	Poles          int       `json:"poles"`
-	Form           []float64 `json:"form"`       // last 5 races' points
-	Cumulative     []float64 `json:"cumulative"` // running total per completed round
+	Form           []float64 `json:"form"`            // last 5 races' points
+	Cumulative     []float64 `json:"cumulative"`      // running total per completed round
+	RoundPositions []int     `json:"round_positions"` // finishing position per completed round (0 = no result)
 	TeammateWins   int       `json:"teammate_wins"`
 	TeammateLosses int       `json:"teammate_losses"`
 }
@@ -995,6 +996,10 @@ func aggregateChampionshipHub(
 		if len(form) > 5 {
 			form = form[len(form)-5:]
 		}
+		roundPositions := make([]int, completed)
+		for round := 1; round <= completed; round++ {
+			roundPositions[round-1] = a.finishByRound[round]
+		}
 		info := driverInfo[c.DriverNumber]
 		drivers = append(drivers, champHubDriver{
 			DriverNumber:   c.DriverNumber,
@@ -1009,6 +1014,7 @@ func aggregateChampionshipHub(
 			Poles:          a.poles,
 			Form:           form,
 			Cumulative:     cumulative[c.DriverNumber],
+			RoundPositions: roundPositions,
 			TeammateWins:   twins[c.DriverNumber],
 			TeammateLosses: tloss[c.DriverNumber],
 		})
