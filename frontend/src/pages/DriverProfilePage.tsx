@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { fetchDriverSummary, fetchSeasons } from '../api'
+import { DataNotice, RouteState } from '../components/RouteState'
 import { teamColor } from '../utils'
 import { countryFlag } from '../lib/gpIdentity'
 import {
@@ -26,7 +27,7 @@ export function DriverProfilePage({ driverNumber, year }: Props) {
   // seasons list is empty/unavailable the backend falls back to the current year.
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryFn: ({ signal }) => fetchSeasons(signal),
     enabled: year == null,
   })
   const resolvedYear = year ?? seasonsQuery.data?.[0]
@@ -34,39 +35,86 @@ export function DriverProfilePage({ driverNumber, year }: Props) {
 
   const summaryQuery = useQuery({
     queryKey: ['driver-summary', driverNumber, resolvedYear ?? 'latest'],
-    queryFn: () => fetchDriverSummary(driverNumber, resolvedYear),
+    queryFn: ({ signal }) => fetchDriverSummary(driverNumber, resolvedYear, signal),
     enabled: seasonsSettled && driverNumber > 0,
     staleTime: 5 * 60_000,
   })
 
   if (driverNumber <= 0) {
-    return <div className="page error-box">Invalid driver number</div>
+    return (
+      <div className="page">
+        <RouteState kind="empty" title="Invalid driver number" message="Pick a driver from the championship standings." />
+      </div>
+    )
   }
   if (!seasonsSettled || summaryQuery.isLoading) {
-    return <div className="page loading-state">loading driver profile…</div>
+    return (
+      <div className="page">
+        <RouteState kind="loading" title="loading driver profile…" testId="driver-profile-loading" />
+      </div>
+    )
   }
   if (summaryQuery.isError) {
     return (
-      <div className="page error-box">
-        {summaryQuery.error instanceof Error
-          ? summaryQuery.error.message
-          : 'Failed to load driver profile'}
+      <div className="page">
+        <RouteState
+          kind="error"
+          title="Driver profile unavailable"
+          error={summaryQuery.error}
+          onRetry={() => {
+            if (!summaryQuery.isFetching) void summaryQuery.refetch()
+          }}
+          retrying={summaryQuery.isFetching}
+          testId="driver-profile-error"
+        />
       </div>
     )
   }
   const summary = summaryQuery.data
   if (!summary) {
-    return <div className="page error-box">No driver data</div>
+    return (
+      <div className="page">
+        <RouteState
+          kind="empty"
+          title="No driver data"
+          message="This driver is not in the local season standings yet."
+        />
+      </div>
+    )
   }
-  return <DriverProfileBody summary={summary} />
+  return (
+    <DriverProfileBody
+      summary={summary}
+      onRetry={() => {
+        if (!summaryQuery.isFetching) void summaryQuery.refetch()
+      }}
+    />
+  )
 }
 
-function DriverProfileBody({ summary }: { summary: DriverSummary }) {
+function DriverProfileBody({
+  summary,
+  onRetry,
+}: {
+  summary: DriverSummary
+  onRetry?: () => void
+}) {
   const color = teamColor(summary.team_colour)
   const deltas = gridFinishDeltas(summary.rounds)
 
   return (
     <div className="dp-page" data-testid="driver-profile">
+      {summary.enrichment === 'limited' && (
+        <DataNotice
+          availability="limited"
+          message="Optional remote details are unavailable. Showing local season identity and results."
+          onRetry={onRetry}
+          testId="driver-profile-limited"
+        />
+      )}
+      {summary.source === 'local' && summary.enrichment !== 'limited' && (
+        <DataNotice availability="local" message="Loaded from local season data." testId="driver-profile-local" />
+      )}
       <header className="dp-header" data-testid="dp-header" style={{ borderLeftColor: color }}>
         <div className="dp-identity">
           <div className="dp-title-row">

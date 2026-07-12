@@ -71,7 +71,8 @@ export function WeekendPage({
   /** Restored from `/?session_key=` when returning from Race Hub analysis. */
   focusSessionKey?: number
 }) {
-  const { context, loadState, error, championship, briefing, now } = useWeekendContext()
+  const { context, loadState, error, championship, briefing, now, refetch, isFetching } =
+    useWeekendContext()
   const hasFocus =
     (focusMeetingKey != null && focusMeetingKey > 0) ||
     (focusSessionKey != null && focusSessionKey > 0)
@@ -87,7 +88,7 @@ export function WeekendPage({
   if (loadState === 'error' || context == null) {
     return (
       <main className="wk-page" data-testid="weekend-page" data-state="error">
-        <WeekendError message={error?.message} />
+        <WeekendError error={error} onRetry={refetch} retrying={isFetching} />
       </main>
     )
   }

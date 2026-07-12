@@ -7,6 +7,7 @@ import type { ChampHubDriver, ChampionshipHub } from '../types'
 import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
 import { RivalryCompare } from '../components/RivalryCompare'
 import { Meaning } from '../components/Meaning'
+import { RouteState } from '../components/RouteState'
 import { TeammateH2H } from '../components/TeammateH2H'
 import { teammatePairs } from '../lib/h2h'
 import { pointsGapMeaning } from '../lib/meaning'
@@ -81,23 +82,55 @@ function teamSplit(teamName: string, drivers: ChampHubDriver[]): TeamSplit {
 export function ChampionshipPage() {
   const [view, setView] = useState<View>('drivers')
 
-  const seasonsQuery = useQuery({ queryKey: ['seasons'], queryFn: fetchSeasons })
+  const seasonsQuery = useQuery({
+    queryKey: ['seasons'],
+    queryFn: ({ signal }) => fetchSeasons(signal),
+  })
   const latestSeason = seasonsQuery.data?.[0] ?? null
 
   const hubQuery = useQuery({
     queryKey: ['championship-hub', latestSeason],
-    queryFn: () => fetchChampionshipHub(latestSeason ?? undefined),
+    queryFn: ({ signal }) => fetchChampionshipHub(latestSeason ?? undefined, signal),
     enabled: latestSeason != null,
     staleTime: 5 * 60_000,
   })
 
   if (seasonsQuery.isLoading || hubQuery.isLoading) {
-    return <div className="page loading-state">loading championship…</div>
+    return (
+      <div className="page">
+        <RouteState kind="loading" title="loading championship…" testId="championship-loading" />
+      </div>
+    )
+  }
+  if (seasonsQuery.isError) {
+    return (
+      <div className="page">
+        <RouteState
+          kind="error"
+          title="Championship unavailable"
+          error={seasonsQuery.error}
+          onRetry={() => {
+            if (!seasonsQuery.isFetching) void seasonsQuery.refetch()
+          }}
+          retrying={seasonsQuery.isFetching}
+          testId="championship-error"
+        />
+      </div>
+    )
   }
   if (hubQuery.isError) {
     return (
-      <div className="page error-box">
-        {hubQuery.error instanceof Error ? hubQuery.error.message : 'Failed to load championship'}
+      <div className="page">
+        <RouteState
+          kind="error"
+          title="Championship unavailable"
+          error={hubQuery.error}
+          onRetry={() => {
+            if (!hubQuery.isFetching) void hubQuery.refetch()
+          }}
+          retrying={hubQuery.isFetching}
+          testId="championship-error"
+        />
       </div>
     )
   }

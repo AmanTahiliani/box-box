@@ -9,7 +9,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: 1,
+      // Explicit Retry on RouteState — avoid automatic retry storms.
+      retry: false,
     },
   },
 })

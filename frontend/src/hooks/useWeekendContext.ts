@@ -20,6 +20,10 @@ export interface UseWeekendContextResult {
   /** Supplementary briefing items (not part of the #72 contract). */
   briefing: WeekendBriefingItem[]
   now: Date
+  /** Refetch the canonical weekend-context read. */
+  refetch: () => void
+  /** True while a canonical refetch is in flight. */
+  isFetching: boolean
 }
 
 /**
@@ -44,7 +48,7 @@ export function useWeekendContext(): UseWeekendContextResult {
 
   const contextQuery = useQuery({
     queryKey: ['weekend-context'],
-    queryFn: fetchWeekendContext,
+    queryFn: ({ signal }) => fetchWeekendContext(signal),
     staleTime: 30_000,
   })
 
@@ -56,14 +60,14 @@ export function useWeekendContext(): UseWeekendContextResult {
   // so a pending/failed canonical read never triggers a request fan-out.
   const championshipQuery = useQuery({
     queryKey: ['championship-hub', season ?? 'current'],
-    queryFn: () => fetchChampionshipHub(season),
+    queryFn: ({ signal }) => fetchChampionshipHub(season, signal),
     enabled: canonicalReady,
     staleTime: 60_000,
   })
 
   const newsQuery = useQuery({
     queryKey: ['news', 6],
-    queryFn: () => fetchNews(6),
+    queryFn: ({ signal }) => fetchNews(6, undefined, signal),
     enabled: canonicalReady,
     staleTime: 60_000,
   })
@@ -85,5 +89,9 @@ export function useWeekendContext(): UseWeekendContextResult {
     championship,
     briefing,
     now: nowDate,
+    refetch: () => {
+      if (!contextQuery.isFetching) void contextQuery.refetch()
+    },
+    isFetching: contextQuery.isFetching,
   }
 }

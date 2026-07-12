@@ -1,11 +1,15 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/AmanTahiliani/box-box/internal/api"
 	"github.com/AmanTahiliani/box-box/internal/models"
+	"github.com/AmanTahiliani/box-box/internal/store"
 )
 
 func driverSummaryFixtures() ([]meetingRace, []models.ChampionshipDriver, map[int]models.Driver) {
@@ -132,5 +136,181 @@ func TestHandleDriverSummaryBadRequest(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", url, rec.Code)
 		}
+	}
+}
+
+func seedDriverSummaryStore(t *testing.T, st *store.Store) {
+	t.Helper()
+	meetingKey := 1201
+	sessionKey := 9901
+
+	if err := st.UpsertMeeting(store.Meeting{
+		MeetingKey:  meetingKey,
+		MeetingName: "Bahrain GP",
+		CountryCode: "BHR",
+		CountryName: "Bahrain",
+		Year:        2025,
+		DateStart:   "2025-03-02",
+	}); err != nil {
+		t.Fatalf("UpsertMeeting: %v", err)
+	}
+	if err := st.UpsertSession(store.Session{
+		SessionKey:  sessionKey,
+		MeetingKey:  meetingKey,
+		SessionName: "Race",
+		SessionType: "Race",
+		DateStart:   "2025-03-02T15:00:00Z",
+	}); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+	if err := st.UpsertDriver(store.Driver{
+		DriverNumber: 1,
+		FullName:     "Max Verstappen",
+		NameAcronym:  "VER",
+		TeamName:     "Red Bull",
+		TeamColour:   "3671c6",
+	}); err != nil {
+		t.Fatalf("UpsertDriver: %v", err)
+	}
+	if err := st.UpsertSessionDriver(store.SessionDriver{
+		SessionKey:   sessionKey,
+		DriverNumber: 1,
+		MeetingKey:   meetingKey,
+		FullName:     "Max Verstappen",
+		NameAcronym:  "VER",
+		TeamName:     "Red Bull",
+		TeamColour:   "3671c6",
+	}); err != nil {
+		t.Fatalf("UpsertSessionDriver: %v", err)
+	}
+	if err := st.UpsertSessionResult(store.SessionResult{
+		SessionKey:   sessionKey,
+		DriverNumber: 1,
+		MeetingKey:   meetingKey,
+		Position:     1,
+		Points:       25,
+	}); err != nil {
+		t.Fatalf("UpsertSessionResult: %v", err)
+	}
+	if err := st.UpsertStartingGridEntry(store.StartingGridEntry{
+		SessionKey:   sessionKey,
+		DriverNumber: 1,
+		MeetingKey:   meetingKey,
+		Position:     1,
+	}); err != nil {
+		t.Fatalf("UpsertStartingGridEntry: %v", err)
+	}
+}
+
+func TestHandleDriverSummaryLocalFirstIgnoresHangingEnrichment(t *testing.T) {
+	prev := driverEnrichmentTimeout
+	driverEnrichmentTimeout = 40 * time.Millisecond
+	t.Cleanup(func() { driverEnrichmentTimeout = prev })
+
+	st := openTestStore(t)
+	seedDriverSummaryStore(t, st)
+
+	// Enrichment seam: OpenF1 hangs until released. Local summary must still return.
+	release := make(chan struct{})
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() {
+		close(release)
+		hang.Close()
+	})
+
+	client := api.NewOpenF1Client(hang.URL, 15*time.Second)
+	t.Cleanup(func() { _ = client.Close() })
+	srv := NewServer(client, 8080, st)
+
+	start := time.Now()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/driver/summary?year=2025&driver_number=1", nil)
+	rec := httptest.NewRecorder()
+	srv.handleDriverSummary(rec, req)
+	elapsed := time.Since(start)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("handler blocked on enrichment for %v", elapsed)
+	}
+
+	var resp driverSummaryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Source != "local" {
+		t.Errorf("source = %q, want local", resp.Source)
+	}
+	if resp.Enrichment != "limited" {
+		t.Errorf("enrichment = %q, want limited", resp.Enrichment)
+	}
+	if resp.DriverNumber != 1 || resp.NameAcronym != "VER" || resp.Points != 25 {
+		t.Errorf("local identity/results missing: %+v", resp)
+	}
+}
+
+func TestHandleDriverSummaryLocalFirstWithFailingEnrichment(t *testing.T) {
+	prev := driverEnrichmentTimeout
+	driverEnrichmentTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { driverEnrichmentTimeout = prev })
+
+	st := openTestStore(t)
+	seedDriverSummaryStore(t, st)
+
+	fail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusBadGateway)
+	}))
+	t.Cleanup(fail.Close)
+
+	client := api.NewOpenF1Client(fail.URL, 2*time.Second)
+	t.Cleanup(func() { _ = client.Close() })
+	srv := NewServer(client, 8080, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/driver/summary?year=2025&driver_number=1&source=auto", nil)
+	rec := httptest.NewRecorder()
+	srv.handleDriverSummary(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp driverSummaryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Source != "local" {
+		t.Errorf("source = %q, want local", resp.Source)
+	}
+	if resp.Enrichment != "limited" {
+		t.Errorf("enrichment = %q, want limited", resp.Enrichment)
+	}
+	if resp.FullName != "Max Verstappen" {
+		t.Errorf("full_name = %q, want local identity", resp.FullName)
+	}
+}
+
+func TestHandleDriverSummarySourceLocalOnly(t *testing.T) {
+	st := openTestStore(t)
+	seedDriverSummaryStore(t, st)
+
+	// Even with a broken OpenF1 client, source=local must succeed from the DB.
+	fail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	t.Cleanup(fail.Close)
+	client := api.NewOpenF1Client(fail.URL, time.Second)
+	t.Cleanup(func() { _ = client.Close() })
+	srv := NewServer(client, 8080, st)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/driver/summary?year=2025&driver_number=1&source=local", nil)
+	rec := httptest.NewRecorder()
+	srv.handleDriverSummary(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
