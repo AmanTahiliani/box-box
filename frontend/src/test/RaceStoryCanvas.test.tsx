@@ -179,6 +179,33 @@ describe('RaceStoryCanvas replay map', () => {
     expect(document.querySelector('.rs-replay-shell--split')).not.toBeInTheDocument()
   })
 
+  it('uses lap timing rather than pre-race position samples for the chart scale', () => {
+    const laps = Array.from({ length: 20 }, (_, index) => ({
+      session_key: 99,
+      driver_number: 1,
+      meeting_key: 1,
+      lap_number: index + 1,
+      date_start: `2025-05-25T13:${String(index).padStart(2, '0')}:00Z`,
+      lap_duration: 60,
+      is_pit_out_lap: false,
+    }))
+
+    renderCanvas({
+      results: [{ ...raceHub.results[0], number_of_laps: 20 }],
+      laps,
+      positions: [
+        { session_key: 99, driver_number: 1, meeting_key: 1, date: '2025-05-25T12:00:00Z', position: 1 },
+        { session_key: 99, driver_number: 1, meeting_key: 1, date: '2025-05-25T13:20:00Z', position: 1 },
+      ],
+    })
+
+    // L10 is the end of the tenth 60s lap, exactly halfway through the race.
+    const lapTenLabel = screen.getByText('L10')
+    expect(lapTenLabel.previousElementSibling).toHaveAttribute('x1', '316')
+    // The pre-race position is retained as the starting grid at the left edge.
+    expect(document.querySelector('.rs-driver-line')).toHaveAttribute('points', '40,8 592,8 592,8')
+  })
+
   it('syncs active chapter highlight when a chapter card is clicked', async () => {
     renderCanvas()
 

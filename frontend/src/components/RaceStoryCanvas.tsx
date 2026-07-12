@@ -26,6 +26,12 @@ const CHART_PR = 48
 const CHART_PT = 8
 const CHART_PB = 20
 
+interface ChartTiming {
+  tMin: number
+  tMax: number
+  tRange: number
+}
+
 interface Props {
   data: {
     results: EnrichedResult[]
@@ -40,6 +46,48 @@ interface Props {
     drivers?: Driver[]
     chapters?: Chapter[]
   }
+}
+
+/**
+ * Position samples are recorded for the entire session, including the pre-race
+ * grid period.  Use the winning driver's laps to define the race window so
+ * that the x-axis starts at lights-out rather than at the earliest sample.
+ */
+function raceChartTiming(
+  positions: PositionSample[],
+  laps: Lap[],
+  results: EnrichedResult[],
+): ChartTiming | null {
+  const positionTimes = positions
+    .map((position) => new Date(position.date).getTime())
+    .filter(Number.isFinite)
+  if (positionTimes.length === 0) return null
+
+  const fallbackMin = Math.min(...positionTimes)
+  const fallbackMax = Math.max(...positionTimes)
+  const fallback = {
+    tMin: fallbackMin,
+    tMax: fallbackMax,
+    tRange: Math.max(fallbackMax - fallbackMin, 1),
+  }
+
+  const winner = results.find((result) => result.position === 1)
+  if (!winner) return fallback
+
+  const winnerLaps = laps
+    .filter((lap) => lap.driver_number === winner.driver_number && lap.lap_number > 0)
+    .map((lap) => ({ ...lap, start: new Date(lap.date_start).getTime() }))
+    .filter((lap) => Number.isFinite(lap.start))
+    .sort((a, b) => a.lap_number - b.lap_number)
+  if (winnerLaps.length === 0) return fallback
+
+  const firstLap = winnerLaps[0]
+  const lastLap = winnerLaps[winnerLaps.length - 1]
+  const finalLapDuration = lastLap.lap_duration ?? 0
+  const tMax = lastLap.start + (finalLapDuration > 0 ? finalLapDuration * 1000 : 0)
+  if (tMax <= firstLap.start) return fallback
+
+  return { tMin: firstLap.start, tMax, tRange: tMax - firstLap.start }
 }
 
 export function RaceStoryCanvas({ data }: Props) {
@@ -69,14 +117,8 @@ export function RaceStoryCanvas({ data }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const tourRef = useRef({ chapterIndex: 0, startedAt: 0, durationMs: 0, startScrub: 0, endScrub: 0 })
 
-  const allTimes = useMemo(() => [...new Set(positions.map((p) => p.date))].sort(), [positions])
-  const hasChartData = hasPositions && allTimes.length > 0
-  const chartTiming = useMemo(() => {
-    if (!hasChartData) return null
-    const tMin = new Date(allTimes[0]).getTime()
-    const tMax = new Date(allTimes[allTimes.length - 1]).getTime()
-    return { tMin, tMax, tRange: Math.max(tMax - tMin, 1) }
-  }, [allTimes, hasChartData])
+  const chartTiming = useMemo(() => raceChartTiming(positions, laps, results), [laps, positions, results])
+  const hasChartData = hasPositions && chartTiming !== null
   const circuitKey = session?.circuit_key ?? meeting?.circuit_key ?? 0
   const outlineYear = meeting?.year ?? (session?.date_start ? new Date(session.date_start).getFullYear() : 0)
   const canProbeMap = Boolean(session?.session_key) && circuitKey > 0 && outlineYear > 0
@@ -237,12 +279,15 @@ export function RaceStoryCanvas({ data }: Props) {
 
   if (hasChartData && chartTiming) {
     const { tMin, tRange } = chartTiming
+    const normaliseTime = (time: number) => Math.max(0, Math.min(1, (time - tMin) / tRange))
 
     const byDriver = new Map<number, Array<{ t: number; pos: number }>>()
     for (const p of positions) {
+      const time = new Date(p.date).getTime()
+      if (!Number.isFinite(time)) continue
       if (!byDriver.has(p.driver_number)) byDriver.set(p.driver_number, [])
       byDriver.get(p.driver_number)!.push({
-        t: (new Date(p.date).getTime() - tMin) / tRange,
+        t: normaliseTime(time),
         pos: p.position,
       })
     }
@@ -306,12 +351,15 @@ export function RaceStoryCanvas({ data }: Props) {
     const lapTicks: { lap: number; t: number }[] = []
     const lapInterval = winnerLaps.length < 30 ? 5 : 10
 
-    for (const lap of winnerLaps) {
+    for (let i = 0; i < winnerLaps.length; i++) {
+      const lap = winnerLaps[i]
       if (lap.lap_number > 0 && lap.lap_number % lapInterval === 0) {
-        const t = (new Date(lap.date_start).getTime() - tMin) / tRange
-        if (t >= 0 && t <= 1) {
-          lapTicks.push({ lap: lap.lap_number, t })
-        }
+        const lapStart = new Date(lap.date_start).getTime()
+        const nextLapStart = winnerLaps[i + 1] ? new Date(winnerLaps[i + 1].date_start).getTime() : NaN
+        const lapEnd = lap.lap_duration && lap.lap_duration > 0
+          ? lapStart + lap.lap_duration * 1000
+          : nextLapStart
+        if (Number.isFinite(lapEnd)) lapTicks.push({ lap: lap.lap_number, t: normaliseTime(lapEnd) })
       }
     }
 
@@ -491,8 +539,9 @@ export function RaceStoryCanvas({ data }: Props) {
                 />
 
                 {driverPits.map((p, i) => {
-                  const t = (new Date(p.date).getTime() - tMin) / tRange
-                  if (t < 0 || t > 1) return null
+                  const time = new Date(p.date).getTime()
+                  if (!Number.isFinite(time) || time < tMin || time > tMin + tRange) return null
+                  const t = normaliseTime(time)
                   const pos = getInterpPos(samples, t)
                   if (pos === null) return null
                   return (
