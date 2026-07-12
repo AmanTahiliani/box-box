@@ -6,12 +6,10 @@ import { parseScheduleTime } from '../../lib/schedule'
 import { podiumFromResults } from '../../lib/weekendContext'
 import { teamColor } from '../../utils'
 import type {
+  ContextSession,
   WeekendChampionshipImpact,
-  WeekendCompletedEvent,
   WeekendBriefingItem,
   WeekendPodiumEntry,
-  WeekendSeasonRound,
-  WeekendTimelineSession,
 } from '../../types'
 
 export function Flag({ code, flag }: { code?: string; flag?: string }) {
@@ -53,7 +51,13 @@ export function CountdownDisplay({
   compact?: boolean
 }) {
   const parts = countdownParts(target, now)
-  if (!parts) return null
+  if (!parts) {
+    return (
+      <span className="wk-countdown-tbc mono" data-testid="wk-countdown">
+        Schedule TBC
+      </span>
+    )
+  }
   if (parts.reached) {
     return <span className="wk-countdown-live" data-testid="wk-countdown">Starting now</span>
   }
@@ -74,17 +78,29 @@ export function CountdownDisplay({
   )
 }
 
-export function EventPodium({ event }: { event: WeekendCompletedEvent }) {
-  const needsFetch = event.podium.length === 0 && event.analysis_session_key > 0
+/**
+ * EventPodium fetches and renders the podium for a completed analysis session.
+ * When no analysable session key is available (e.g. an archived result with no
+ * local analysis), it renders an explicit empty state rather than fetching.
+ */
+export function EventPodium({ sessionKey }: { sessionKey?: number }) {
+  const enabled = typeof sessionKey === 'number' && sessionKey > 0
   const query = useQuery({
-    queryKey: ['race-hub', event.analysis_session_key, 'podium'],
-    queryFn: () => fetchRaceHub(event.analysis_session_key),
-    enabled: needsFetch,
+    queryKey: ['race-hub', sessionKey, 'podium'],
+    queryFn: () => fetchRaceHub(sessionKey as number),
+    enabled,
     staleTime: 60_000,
   })
 
-  const podium: WeekendPodiumEntry[] =
-    event.podium.length > 0 ? event.podium : podiumFromResults(query.data?.results ?? [])
+  const podium: WeekendPodiumEntry[] = podiumFromResults(query.data?.results ?? [])
+
+  if (!enabled) {
+    return (
+      <div className="wk-podium-empty" data-testid="wk-podium-empty">
+        Result not available yet.
+      </div>
+    )
+  }
 
   if (podium.length === 0) {
     return (
@@ -156,62 +172,85 @@ export function BriefingStrip({ items }: { items: WeekendBriefingItem[] }) {
   )
 }
 
-export function SeasonNavStrip({ rounds }: { rounds: WeekendSeasonRound[] }) {
-  if (rounds.length === 0) return null
+/**
+ * ChampionshipRoundStrip is a compact, progressively-disclosed round indicator.
+ * The canonical contract exposes only the current round and total, so the strip
+ * shows "Round N of M" and links out to Explore for the full calendar rather than
+ * reintroducing the whole calendar on the Weekend home.
+ */
+export function ChampionshipRoundStrip({ round, total }: { round: number; total: number }) {
+  if (round <= 0 || total <= 0) return null
+  const pct = Math.min(100, Math.round((round / total) * 100))
   return (
-    <section className="wk-season-nav" data-testid="wk-season-nav" aria-label="Season calendar">
-      <ol className="wk-season-strip" role="list">
-        {rounds.map((round) => {
-          const inner = (
-            <>
-              <span className="wk-round-num mono">R{String(round.round).padStart(2, '0')}</span>
-              <span className="wk-round-flag">{countryFlag({ country_code: round.country_code, country_flag: round.country_flag }) || round.country_code}</span>
-              <span className={`wk-round-dot wk-round-${round.status}`} aria-hidden="true" />
-            </>
-          )
-          const className = `wk-round wk-round-status-${round.status}`
-          return (
-            <li key={round.meeting_key} className="wk-round-item" role="listitem">
-              {round.analysis_session_key ? (
-                <Link
-                  to="/race-hub"
-                  search={{ session_key: round.analysis_session_key }}
-                  className={className}
-                  aria-label={`Round ${round.round} ${round.country_code} — ${round.status}`}
-                >
-                  {inner}
-                </Link>
-              ) : (
-                <span className={className} aria-label={`Round ${round.round} ${round.country_code} — ${round.status}`}>
-                  {inner}
-                </span>
-              )}
-            </li>
-          )
-        })}
-      </ol>
-      <div className="wk-season-legend mono" aria-hidden="true">
-        <span><i className="wk-round-dot wk-round-completed" /> Completed</span>
-        <span><i className="wk-round-dot wk-round-next" /> Next</span>
-        <span><i className="wk-round-dot wk-round-upcoming" /> Upcoming</span>
+    <section className="wk-season-nav" data-testid="wk-season-nav" aria-label="Season progress">
+      <div className="wk-season-progress">
+        <div className="wk-season-progress-head">
+          <span className="wk-card-title">Season progress</span>
+          <Link to="/explore" className="wk-card-link" data-testid="wk-season-explore">
+            Full calendar →
+          </Link>
+        </div>
+        <div
+          className="wk-season-bar"
+          role="progressbar"
+          aria-valuenow={round}
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-label={`Round ${round} of ${total}`}
+        >
+          <span className="wk-season-bar-fill" style={{ width: `${pct}%` }} aria-hidden="true" />
+        </div>
+        <p className="wk-season-progress-label mono">
+          Round {round} of {total}
+        </p>
       </div>
     </section>
   )
 }
 
-export function SessionTimeline({ sessions }: { sessions: WeekendTimelineSession[] }) {
-  if (sessions.length === 0) return null
+interface TimelineNode {
+  key: string
+  session_name: string
+  status: 'done' | 'live' | 'next'
+}
+
+/**
+ * SessionRail renders the previous/active/next sessions the canonical context
+ * exposes as a compact three-node rail. It is intentionally derived only from the
+ * canonical refs — the contract does not enumerate a full weekend session list.
+ */
+export function SessionRail({ nodes }: { nodes: TimelineNode[] }) {
+  if (nodes.length === 0) return null
   return (
     <ol className="wk-timeline" data-testid="wk-timeline" role="list">
-      {sessions.map((s) => (
-        <li key={s.session_key} className={`wk-timeline-node wk-timeline-${s.status}`} role="listitem">
+      {nodes.map((n) => (
+        <li key={n.key} className={`wk-timeline-node wk-timeline-${n.status}`} role="listitem">
           <span className="wk-timeline-dot" aria-hidden="true" />
-          <span className="wk-timeline-name">{shortSessionName(s.session_name)}</span>
-          <span className="wk-timeline-state mono">{stateLabel(s.status)}</span>
+          <span className="wk-timeline-name">{shortSessionName(n.session_name)}</span>
+          <span className="wk-timeline-state mono">{stateLabel(n.status)}</span>
         </li>
       ))}
     </ol>
   )
+}
+
+/** Build the compact session rail from the canonical previous/active/next refs. */
+export function railNodes(
+  previous: ContextSession | undefined,
+  active: ContextSession | undefined,
+  next: ContextSession | undefined,
+): TimelineNode[] {
+  const nodes: TimelineNode[] = []
+  if (previous?.session.session_name) {
+    nodes.push({ key: `prev-${previous.session.session_key}`, session_name: previous.session.session_name, status: 'done' })
+  }
+  if (active?.session.session_name) {
+    nodes.push({ key: `live-${active.session.session_key}`, session_name: active.session.session_name, status: 'live' })
+  }
+  if (next?.session.session_name) {
+    nodes.push({ key: `next-${next.session.session_key}`, session_name: next.session.session_name, status: 'next' })
+  }
+  return nodes
 }
 
 function shortSessionName(name: string): string {
@@ -226,15 +265,13 @@ function shortSessionName(name: string): string {
   return map[name] ?? name
 }
 
-function stateLabel(status: WeekendTimelineSession['status']): string {
+function stateLabel(status: TimelineNode['status']): string {
   switch (status) {
     case 'done':
       return 'Complete'
     case 'live':
       return 'Live'
-    case 'next':
-      return 'Next'
     default:
-      return 'Upcoming'
+      return 'Next'
   }
 }

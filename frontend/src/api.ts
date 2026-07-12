@@ -116,17 +116,12 @@ export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
 }
 
 // fetchWeekendContext consumes the canonical /api/v1/weekend-context endpoint
-// (sibling backend story #72). It resolves to null when the endpoint is not yet
-// available (404 / server without the handler) so the Weekend page can fall back
-// to client-side derivation from existing endpoints. Any other HTTP error throws.
-export async function fetchWeekendContext(): Promise<WeekendContext | null> {
-  let res: Response
-  try {
-    res = await fetch('/api/v1/weekend-context')
-  } catch {
-    return null
-  }
-  if (res.status === 404) return null
+// (backend story #72). The response is the authoritative WeekendContext shape and
+// is used verbatim as the Weekend home's source of truth. Any HTTP error throws
+// so the hook can surface an explicit error state; there is no client-side
+// re-derivation of the contract.
+export async function fetchWeekendContext(): Promise<WeekendContext> {
+  const res = await fetch('/api/v1/weekend-context')
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

@@ -1,32 +1,38 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
-import {
-  fetchChampionshipHub,
-  fetchLiveState,
-  fetchLocalMeetings,
-  fetchNews,
-  fetchSeasonMeetings,
-  fetchSeasons,
-  fetchSessions,
-  fetchWeekend,
-  fetchWeekendContext,
-} from '../api'
-import { pickFocusMeeting } from '../lib/schedule'
-import { deriveWeekendContext } from '../lib/weekendContext'
-import type { NewsItem, Weekend, WeekendContext } from '../types'
+import { useQuery } from '@tanstack/react-query'
+import { fetchChampionshipHub, fetchNews, fetchWeekendContext } from '../api'
+import { championshipImpact, briefingItems } from '../lib/weekendContext'
+import type {
+  WeekendChampionshipImpact,
+  WeekendBriefingItem,
+  WeekendContext,
+} from '../types'
+
+export type WeekendLoadState = 'loading' | 'error' | 'ready'
 
 export interface UseWeekendContextResult {
-  context: WeekendContext
-  /** True when the payload came from the canonical /api/v1/weekend-context endpoint. */
-  fromEndpoint: boolean
+  /** Canonical context, present only when loadState === 'ready'. */
+  context: WeekendContext | null
+  loadState: WeekendLoadState
+  error?: Error
+  /** Supplementary championship movers (not part of the #72 contract). */
+  championship?: WeekendChampionshipImpact
+  /** Supplementary briefing items (not part of the #72 contract). */
+  briefing: WeekendBriefingItem[]
   now: Date
 }
 
 /**
- * useWeekendContext prefers the canonical /api/v1/weekend-context endpoint and
- * falls back to deriving the same contract client-side from existing endpoints
- * so the Weekend home works even when the backend handler (sibling story #72) is
- * not yet deployed.
+ * useWeekendContext reads the canonical /api/v1/weekend-context endpoint as the
+ * single source of truth for the Weekend home. When the canonical read succeeds
+ * it layers on two pieces of supplementary data that the contract intentionally
+ * omits — championship movers and the paddock briefing — and nothing else.
+ *
+ * It deliberately does NOT fan out to season / meetings / per-weekend / OpenF1
+ * session / live-state queries: those would defeat the local-first canonical read
+ * model and can hit the rate-limited OpenF1 REST surface during active sessions.
+ * Supplementary queries are gated on a successful canonical read so a failing or
+ * pending endpoint issues no extra requests.
  */
 export function useWeekendContext(): UseWeekendContextResult {
   const [now, setNow] = useState(() => Date.now())
@@ -42,107 +48,42 @@ export function useWeekendContext(): UseWeekendContextResult {
     staleTime: 30_000,
   })
 
-  const seasonsQuery = useQuery({ queryKey: ['seasons'], queryFn: fetchSeasons })
-  const season = seasonsQuery.data?.[0] ?? null
+  const canonical = contextQuery.data ?? null
+  const canonicalReady = canonical != null
+  const season = canonical?.season
 
-  const localMeetingsQuery = useQuery({
-    queryKey: ['meetings', season, 'local'],
-    queryFn: () => fetchLocalMeetings(season!),
-    enabled: season != null,
-  })
-
-  const seasonMeetingsQuery = useQuery({
-    queryKey: ['season-meetings', season],
-    queryFn: () => fetchSeasonMeetings(season!),
-    enabled: season != null,
-  })
-
+  // Supplementary data — only fetched once the canonical context has resolved,
+  // so a pending/failed canonical read never triggers a request fan-out.
   const championshipQuery = useQuery({
-    queryKey: ['championship-hub', season],
-    queryFn: () => fetchChampionshipHub(season!),
-    enabled: season != null,
-  })
-
-  const liveQuery = useQuery({ queryKey: ['live-state'], queryFn: fetchLiveState, staleTime: 5_000 })
-
-  const newsQuery = useQuery({ queryKey: ['news', 6], queryFn: () => fetchNews(6) })
-
-  const localMeetings = useMemo(() => localMeetingsQuery.data ?? [], [localMeetingsQuery.data])
-  const seasonMeetings = seasonMeetingsQuery.data?.length ? seasonMeetingsQuery.data : localMeetings
-
-  const weekendQueries = useQueries({
-    queries: localMeetings.map((meeting) => ({
-      queryKey: ['weekend', meeting.meeting_key],
-      queryFn: () => fetchWeekend(meeting.meeting_key),
-      enabled: localMeetings.length > 0,
-      staleTime: 60_000,
-    })),
-  })
-
-  const weekendsByKey = useMemo(() => {
-    const map = new Map<number, Weekend>()
-    localMeetings.forEach((meeting, i) => {
-      const data = weekendQueries[i]?.data
-      if (data) map.set(meeting.meeting_key, data)
-    })
-    return map
-  }, [localMeetings, weekendQueries])
-
-  const focusMeeting = useMemo(() => pickFocusMeeting(seasonMeetings, nowDate), [seasonMeetings, nowDate])
-  const focusHasLocal = focusMeeting ? weekendsByKey.has(focusMeeting.meeting_key) : false
-
-  const focusSessionsQuery = useQuery({
-    queryKey: ['sessions', focusMeeting?.meeting_key, 'openf1'],
-    queryFn: () => fetchSessions(focusMeeting!.meeting_key, 'openf1'),
-    enabled: focusMeeting != null && !focusHasLocal,
+    queryKey: ['championship-hub', season ?? 'current'],
+    queryFn: () => fetchChampionshipHub(season),
+    enabled: canonicalReady,
     staleTime: 60_000,
   })
 
-  const news: NewsItem[] = newsQuery.data ?? []
+  const newsQuery = useQuery({
+    queryKey: ['news', 6],
+    queryFn: () => fetchNews(6),
+    enabled: canonicalReady,
+    staleTime: 60_000,
+  })
 
-  const derived = useMemo(
-    () =>
-      deriveWeekendContext({
-        season,
-        meetings: seasonMeetings,
-        weekendsByKey,
-        championship: championshipQuery.data,
-        liveActive: liveQuery.data?.is_live === true,
-        news,
-        focusSessions: focusSessionsQuery.data,
-        now: nowDate,
-      }),
-    [
-      season,
-      seasonMeetings,
-      weekendsByKey,
-      championshipQuery.data,
-      liveQuery.data,
-      news,
-      focusSessionsQuery.data,
-      nowDate,
-    ],
+  const championship = useMemo(
+    () => championshipImpact(championshipQuery.data),
+    [championshipQuery.data],
   )
+  const briefing = useMemo(() => briefingItems(newsQuery.data ?? []), [newsQuery.data])
 
-  if (contextQuery.data) {
-    return { context: contextQuery.data, fromEndpoint: true, now: nowDate }
+  let loadState: WeekendLoadState = 'loading'
+  if (contextQuery.isError) loadState = 'error'
+  else if (canonicalReady) loadState = 'ready'
+
+  return {
+    context: canonical,
+    loadState,
+    error: contextQuery.error instanceof Error ? contextQuery.error : undefined,
+    championship,
+    briefing,
+    now: nowDate,
   }
-
-  if (seasonsQuery.isLoading || (season != null && seasonMeetingsQuery.isLoading && localMeetingsQuery.isLoading)) {
-    return { context: { state: 'loading', season: season ?? 0 }, fromEndpoint: false, now: nowDate }
-  }
-
-  if (seasonsQuery.isError) {
-    return {
-      context: {
-        state: 'error',
-        season: 0,
-        message: seasonsQuery.error instanceof Error ? seasonsQuery.error.message : 'Failed to load Weekend',
-      },
-      fromEndpoint: false,
-      now: nowDate,
-    }
-  }
-
-  return { context: derived, fromEndpoint: false, now: nowDate }
 }

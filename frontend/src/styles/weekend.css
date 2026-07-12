@@ -189,45 +189,24 @@
 .wk-champ-gap { color: var(--text-3); font-size: 11px; min-width: 34px; text-align: right; }
 .wk-champ-note { margin-top: var(--s4); font-size: 11px; color: var(--text-3); }
 
-/* ── Season nav strip ── */
-.wk-season-strip {
-  list-style: none;
-  display: flex;
-  gap: var(--s3);
-  overflow-x: auto;
-  padding-bottom: var(--s3);
-  scrollbar-width: thin;
+/* ── Season progress strip ── */
+.wk-countdown-tbc { font-size: 14px; color: var(--text-3); }
+.wk-season-progress { display: flex; flex-direction: column; gap: var(--s3); }
+.wk-season-progress-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.wk-season-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
 }
-.wk-season-strip::-webkit-scrollbar { height: 4px; }
-.wk-round-item { flex: 0 0 auto; }
-.wk-round {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s2);
-  width: 54px;
-  padding: var(--s3) 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-2);
+.wk-season-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--red);
+  border-radius: 999px;
 }
-.wk-round-status-next { border-color: var(--red); color: var(--text); }
-.wk-round-status-completed { border-color: var(--border-2); }
-.wk-round-num { font-size: 10px; font-weight: 700; }
-.wk-round-flag { font-size: 16px; }
-.wk-round-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.wk-round-completed { background: var(--green); }
-.wk-round-next { background: var(--red); }
-.wk-round-upcoming { background: var(--surface-3); border: 1px solid var(--border-2); }
-.wk-season-legend {
-  display: flex;
-  gap: var(--s5);
-  margin-top: var(--s4);
-  font-size: 10px;
-  color: var(--text-3);
-}
-.wk-season-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.wk-season-legend i { width: 7px; height: 7px; }
+.wk-season-progress-label { font-size: 11px; color: var(--text-3); }
 
 /* ── Briefing ── */
 .wk-briefing-list { list-style: none; display: flex; flex-direction: column; }

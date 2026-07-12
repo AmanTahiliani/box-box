@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { Nav } from './components/Nav'
 import { WeekendPage } from './pages/WeekendPage'
 import { ExplorePage } from './pages/ExplorePage'
@@ -97,13 +97,15 @@ export const briefingRoute = createRoute({
   component: BriefingPage,
 })
 
-// Preview folds into the Weekend home. Keep /preview as a stable redirect so saved
-// links resolve into the appropriate Weekend state.
+// Preview folds into the Weekend home. /preview is a stable alias that renders the
+// Weekend page in its preparation surface (PreSessionView) whenever there is a next
+// event — so saved preview links and the "Prepare for …" CTA reach real preview
+// content instead of redirecting back to the same between-races screen.
 export const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/preview',
-  beforeLoad: () => {
-    throw redirect({ to: '/' })
+  component: function PreviewRoute() {
+    return <WeekendPage preview />
   },
 })
 

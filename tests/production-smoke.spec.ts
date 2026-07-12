@@ -3,11 +3,11 @@ import { test, expect } from '@playwright/test'
 const FULL_SESSION = 9472
 
 test.describe('Production serving (Go + built React)', () => {
-  test('serves command center as default route', async ({ page }) => {
+  test('serves the Weekend home as default route', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByTestId('command-center')).toBeVisible()
-    await expect(page.getByTestId('cc-session-9472')).toBeVisible()
+    await expect(page.getByTestId('weekend-page')).toBeVisible()
+    await expect(page.getByTestId('weekend-between-races')).toBeVisible()
   })
 
   test('serves race hub workspace from built assets', async ({ page }) => {
@@ -44,16 +44,21 @@ test.describe('Production serving (Go + built React)', () => {
     await expect(page.getByText('No live session active')).toBeVisible()
   })
 
-  test('nav links work from built SPA', async ({ page }) => {
+  test('primary nav links and Admin utility work from built SPA', async ({ page }) => {
     await page.goto('/')
-    await page.locator('.app-nav').getByRole('link', { name: 'Race Hub' }).click()
-    await expect(page).toHaveURL(/\/race-hub/)
+    const primary = page.getByRole('navigation', { name: 'Primary' }).first()
 
-    await page.locator('.app-nav').getByRole('link', { name: 'Admin', exact: true }).click()
+    await primary.getByRole('link', { name: 'Championship', exact: true }).click()
+    await expect(page).toHaveURL(/\/championship/)
+
+    await primary.getByRole('link', { name: 'Explore', exact: true }).click()
+    await expect(page).toHaveURL(/\/explore/)
+
+    await primary.getByRole('link', { name: 'Weekend', exact: true }).click()
+    await expect(page).toHaveURL('/')
+
+    // Admin is an operator utility outside the Primary landmark.
+    await page.getByRole('toolbar', { name: 'Operator utilities' }).getByRole('link', { name: 'Admin' }).click()
     await expect(page).toHaveURL(/\/admin/)
-
-    await page.getByRole('link', { name: 'Live', exact: true }).click()
-    await expect(page).toHaveURL(/\/live/)
-    await expect(page.getByTestId('live-empty')).toBeVisible()
   })
 })

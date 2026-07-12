@@ -19,7 +19,7 @@ export function WeekendError({ message }: { message?: string }) {
   )
 }
 
-export function WeekendLimited({ message, season }: { message?: string; season: number }) {
+export function WeekendLimited({ message, season }: { message?: string; season?: number }) {
   return (
     <div className="wk-status wk-status-limited" data-testid="weekend-limited">
       <span className="wk-status-eyebrow mono">box-box · weekend</span>
