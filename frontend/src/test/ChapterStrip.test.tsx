@@ -68,6 +68,25 @@ describe('ChapterStrip', () => {
     expect(screen.getByText('L12–L15')).toBeInTheDocument()
   })
 
+  it('renders an empty-state card when there are no chapters', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChapterStrip
+          chapters={[]}
+          scrubTime={null}
+          tMin={tMin}
+          tRange={tRange}
+          tourActive={false}
+          tourChapterIndex={null}
+          onChapterClick={vi.fn()}
+          onTourToggle={vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByTestId('chapter-strip-empty')).toBeInTheDocument()
+  })
+
   it('highlights the active chapter from scrub time', () => {
     const scrub = (new Date('2025-05-25T13:13:00Z').getTime() - tMin) / tRange
     renderStrip({ scrubTime: scrub })
@@ -83,5 +102,27 @@ describe('ChapterStrip', () => {
     const [index, scrub] = onChapterClick.mock.calls[0]
     expect(index).toBe(1)
     expect(scrub).toBeCloseTo(0.6, 2)
+  })
+
+  it('highlights an explicitly selected chapter even when scrub is outside its raw window', () => {
+    // Scrub parked at chart start; chapter 1's raw times are mid-race, but selection wins.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChapterStrip
+          chapters={chapters}
+          scrubTime={0}
+          tMin={tMin}
+          tRange={tRange}
+          tourActive={false}
+          tourChapterIndex={null}
+          selectedChapterIndex={1}
+          onChapterClick={vi.fn()}
+          onTourToggle={vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByTestId('chapter-card-1')).toHaveClass('active')
+    expect(screen.getByTestId('chapter-card-0')).not.toHaveClass('active')
   })
 })

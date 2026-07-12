@@ -36,6 +36,14 @@ export async function gotoRaceHubReady(page: Page, sessionKey = FULL_SESSION): P
   await waitForScreenshotReady(page)
 }
 
+export async function gotoRaceStoryReady(page: Page, sessionKey = FULL_SESSION): Promise<void> {
+  await page.goto(`/race-hub?session_key=${sessionKey}`)
+  await expect(page.getByTestId('race-hub')).toBeVisible()
+  await page.getByRole('tab', { name: 'Race Story' }).click()
+  await expect(page.getByTestId('position-chart')).toBeVisible()
+  await waitForScreenshotReady(page)
+}
+
 export async function gotoDataLibraryReady(page: Page): Promise<void> {
   await page.goto('/admin')
   await expect(page.getByTestId('data-library')).toBeVisible()

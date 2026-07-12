@@ -53,7 +53,10 @@ export function chapterEndScrub(
   return Math.max(0, Math.min(1, (ms - tMin) / tRange))
 }
 
-/** Index of the chapter containing the current scrub position, if any. */
+/** Index of the chapter containing the current scrub position, if any.
+ * Uses the same 0–1 clamped bounds as chapterStartScrub/chapterEndScrub so
+ * chapters whose timestamps fall outside the position-sample window still
+ * activate when the scrubber is parked at the clamped edge. */
 export function activeChapterIndex(
   chapters: Chapter[],
   scrubTime: number | null,
@@ -61,15 +64,13 @@ export function activeChapterIndex(
   tRange: number,
 ): number | null {
   if (scrubTime === null || chapters.length === 0 || tRange <= 0) return null
-  const chartMs = tMin + scrubTime * tRange
   for (let i = 0; i < chapters.length; i++) {
-    const ch = chapters[i]
-    const startMs = ch.start_time ? new Date(ch.start_time).getTime() : NaN
-    const endRaw = ch.end_time ?? ch.start_time
-    const endMs = endRaw ? new Date(endRaw).getTime() : NaN
-    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && chartMs >= startMs && chartMs <= endMs) {
-      return i
-    }
+    const start = chapterStartScrub(chapters[i], tMin, tRange)
+    const end = chapterEndScrub(chapters[i], tMin, tRange)
+    if (start === null || end === null) continue
+    const lo = Math.min(start, end)
+    const hi = Math.max(start, end)
+    if (scrubTime >= lo && scrubTime <= hi) return i
   }
   return null
 }
@@ -79,4 +80,53 @@ export function chapterTourDurations(chapters: Chapter[], totalMs = 90_000): num
   if (chapters.length === 0) return []
   const perChapter = totalMs / chapters.length
   return chapters.map(() => perChapter)
+}
+
+/** Decimated position axis labels, e.g. P1, P5, P10, P15, P20. */
+export function decimatedPositionLabels(maxPos: number): number[] {
+  if (maxPos <= 1) return [1]
+  const labels = new Set<number>([1])
+  for (let pos = 5; pos < maxPos; pos += 5) {
+    labels.add(pos)
+  }
+  labels.add(maxPos)
+  return [...labels].sort((a, b) => a - b)
+}
+
+/** Subtle background fill for chapter time-bands on the position graph. */
+export function chapterBandFill(kind: string): string {
+  switch (kind) {
+    case 'safety_car':
+      return 'rgba(255, 153, 0, 0.14)'
+    case 'virtual_safety_car':
+      return 'rgba(255, 204, 0, 0.12)'
+    case 'red_flag':
+      return 'rgba(230, 36, 41, 0.12)'
+    case 'pit_phase':
+      return 'rgba(96, 165, 250, 0.08)'
+    case 'decisive_swing':
+      return 'rgba(34, 197, 94, 0.08)'
+    case 'finish':
+      return 'rgba(255, 204, 0, 0.06)'
+    default:
+      return 'rgba(255, 255, 255, 0.03)'
+  }
+}
+
+/** Minimum vertical spacing between colliding labels (SVG units). */
+export function deCollideYPositions(
+  items: ReadonlyArray<{ key: string | number; y: number }>,
+  minGap = 12,
+): Map<string | number, number> {
+  if (items.length === 0) return new Map()
+  const sorted = [...items].sort((a, b) => a.y - b.y)
+  const adjusted = sorted.map((item) => ({ ...item }))
+  for (let i = 1; i < adjusted.length; i++) {
+    const prev = adjusted[i - 1]
+    const curr = adjusted[i]
+    if (curr.y - prev.y < minGap) {
+      curr.y = prev.y + minGap
+    }
+  }
+  return new Map(adjusted.map((item) => [item.key, item.y]))
 }

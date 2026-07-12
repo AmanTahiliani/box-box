@@ -1,76 +1,9 @@
-.rs-replay-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
-  gap: var(--s5);
-  align-items: stretch;
-}
-
-.rs-replay-main {
-  min-width: 0;
-}
-
-.rs-replay-tools {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s3);
-  margin-top: var(--s3);
-}
-
-.rs-tool-btn,
-.rs-speed-btn {
-  height: 28px;
-  padding: 0 var(--s4);
-  font-family: var(--f-mono);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-2);
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-.rs-tool-btn:hover,
-.rs-speed-btn:hover {
-  color: var(--text);
-  border-color: var(--text-3);
-}
-
-.rs-tool-btn.active,
-.rs-speed-btn.active {
-  color: var(--text);
-  border-color: var(--red);
-  background: rgba(230, 36, 41, 0.12);
-}
-
-.rs-speed-group {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.rs-replay-map-slot {
-  min-width: 0;
-}
-
-.rs-replay-map-placeholder {
-  min-height: 244px;
-  display: grid;
-  place-items: center;
-  padding: var(--s5);
-  color: var(--text-3);
-  font-family: var(--f-mono);
-  font-size: 11px;
-  text-align: center;
-  border: 1px dashed var(--border-2);
-  background: var(--surface);
-}
-
 .replay-map-panel {
   min-height: 244px;
   height: 100%;
   border: 1px solid var(--border);
   background: var(--surface);
+  border-radius: var(--s2);
 }
 
 .replay-map-stage {
@@ -143,19 +76,16 @@
   stroke-width: 1.2;
 }
 
-.replay-map-empty {
+.replay-map-empty-card {
   min-height: 244px;
   display: grid;
-  place-items: center;
-  padding: var(--s5);
-  color: var(--text-3);
-  font-family: var(--f-mono);
-  font-size: 11px;
-  text-align: center;
+  place-content: center;
+  padding: var(--s6);
+  margin: 0;
 }
 
-@media (max-width: 860px) {
-  .rs-replay-shell {
-    grid-template-columns: 1fr;
-  }
+.replay-map-empty-card .empty-state-icon {
+  display: block;
+  margin: 0 auto var(--s3);
+  color: var(--text-3);
 }
