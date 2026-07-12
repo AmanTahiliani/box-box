@@ -142,6 +142,46 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface-2);
 }
 
+/* ── Mobile bottom nav ── */
+.app-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: 60px;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  background: rgba(18, 18, 18, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.bottom-nav-link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.bottom-nav-link.active { color: var(--red); }
+.bottom-nav-link:hover { color: var(--text-2); }
+
+@media (max-width: 640px) {
+  .app-bottom-nav { display: flex; }
+}
+
+/* ── Focus visibility (accessibility) ── */
+:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 /* ── Page ── */
 .page {
   max-width: 1040px;

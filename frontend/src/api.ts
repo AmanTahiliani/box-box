@@ -15,6 +15,7 @@ import type {
   Session,
   TrackOutline,
   Weekend,
+  WeekendContext,
 } from './types'
 
 export async function fetchRaceHub(sessionKey: number): Promise<RaceHub> {
@@ -108,6 +109,24 @@ export async function fetchSessions(meetingKey: number, source = 'openf1'): Prom
 
 export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
   const res = await fetch(`/api/v1/weekend?meeting_key=${meetingKey}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+// fetchWeekendContext consumes the canonical /api/v1/weekend-context endpoint
+// (sibling backend story #72). It resolves to null when the endpoint is not yet
+// available (404 / server without the handler) so the Weekend page can fall back
+// to client-side derivation from existing endpoints. Any other HTTP error throws.
+export async function fetchWeekendContext(): Promise<WeekendContext | null> {
+  let res: Response
+  try {
+    res = await fetch('/api/v1/weekend-context')
+  } catch {
+    return null
+  }
+  if (res.status === 404) return null
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

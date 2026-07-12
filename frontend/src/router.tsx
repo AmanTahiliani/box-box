@@ -1,13 +1,13 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@tanstack/react-router'
 import { Nav } from './components/Nav'
-import { CommandCenterPage } from './pages/CommandCenterPage'
+import { WeekendPage } from './pages/WeekendPage'
+import { ExplorePage } from './pages/ExplorePage'
 import { RaceHubPage } from './pages/RaceHubPage'
 import { DataLibraryPage } from './pages/DataLibraryPage'
 import { LiveTimingPage } from './pages/LiveTimingPage'
 import { BriefingPage } from './pages/BriefingPage'
 import { ChampionshipPage } from './pages/ChampionshipPage'
 import { DriverProfilePage } from './pages/DriverProfilePage'
-import { RacePreviewPage } from './pages/RacePreviewPage'
 
 type RaceHubSearch = {
   session_key?: number
@@ -26,10 +26,17 @@ const rootRoute = createRootRoute({
   ),
 })
 
-export const commandCenterRoute = createRoute({
+// Weekend is the adaptive home. `/` renders the current temporal state.
+export const weekendRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: CommandCenterPage,
+  component: WeekendPage,
+})
+
+export const exploreRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/explore',
+  component: ExplorePage,
 })
 
 export const raceHubRoute = createRoute({
@@ -90,14 +97,19 @@ export const briefingRoute = createRoute({
   component: BriefingPage,
 })
 
+// Preview folds into the Weekend home. Keep /preview as a stable redirect so saved
+// links resolve into the appropriate Weekend state.
 export const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/preview',
-  component: RacePreviewPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/' })
+  },
 })
 
 const routeTree = rootRoute.addChildren([
-  commandCenterRoute,
+  weekendRoute,
+  exploreRoute,
   raceHubRoute,
   adminRoute,
   dataLibraryRoute,
