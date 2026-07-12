@@ -48,7 +48,7 @@ test.describe('Weekend home (seeded canonical context)', () => {
     await expect(page.getByTestId('data-library')).toBeVisible()
 
     await page.goto('/live')
-    await expect(page.getByTestId('live-empty')).toBeVisible()
+    await expect(page.getByTestId('live-inactive')).toBeVisible()
 
     await page.goto('/explore')
     await expect(page.getByTestId('explore-page')).toBeVisible()

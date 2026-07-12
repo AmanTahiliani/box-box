@@ -1,30 +1,60 @@
 import type { LiveStreamData } from '../../types'
 import type { LiveTimingRow } from '../../lib/live'
 import { extrapolateClock, liveSessionDisplay } from '../../lib/live'
+import type { LivePhase, TransportHealth } from '../../lib/liveState'
+import { feedHealthLabel } from '../../lib/liveState'
 import { WeatherStrip } from './WeatherStrip'
 
 interface Props {
-  isLive: boolean
-  isArchive?: boolean
+  /** Which of the live phases we are rendering: 'live' | 'disconnected' | 'archive'. */
+  phase: LivePhase
   snapshot: LiveStreamData
   rows: LiveTimingRow[]
-  connection: 'connected' | 'connecting' | 'disconnected' | 'error'
+  transport: TransportHealth
   now: number
+  /** ISO capture time — required for archive, shown as the timestamp of record. */
+  capturedAt?: string | null
 }
 
-export function SessionBanner({ isLive, isArchive = false, snapshot, rows, connection, now }: Props) {
+function formatCapturedAt(capturedAt: string | null | undefined): string {
+  if (!capturedAt) return ''
+  const date = new Date(capturedAt)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString()
+}
+
+export function SessionBanner({ phase, snapshot, rows, transport, now, capturedAt }: Props) {
   const session = snapshot.Session
-  const clock = extrapolateClock(snapshot.Clock, snapshot.ClockRefTime, snapshot.ClockExtrapolating, now)
+  const isArchive = phase === 'archive'
+  const isLiveSession = phase === 'live' || phase === 'disconnected'
+  // Archive is a frozen single frame: never extrapolate a running clock for it.
+  const clock = isArchive
+    ? ''
+    : extrapolateClock(snapshot.Clock, snapshot.ClockRefTime, snapshot.ClockExtrapolating, now)
   const display = liveSessionDisplay(session, rows)
   const atRiskLabel =
     display.atRiskStart && display.atRiskEnd ? `P${display.atRiskStart}-P${display.atRiskEnd} at risk` : ''
-  const stateLabel = isLive ? 'live' : isArchive ? 'archive' : 'stale'
+  const capturedLabel = formatCapturedAt(capturedAt)
 
   return (
-    <section className="live-banner">
+    <section className={`live-banner${isArchive ? ' live-banner-archive' : ''}`} data-testid="live-banner">
       <div className="live-banner-row">
         <div className="live-banner-main">
-          <span className={`live-conn live-conn-${connection}`}>{connection}</span>
+          {isArchive ? (
+            <span className="live-session-flag live-session-flag-archive" data-testid="live-archive-flag">
+              ARCHIVE
+            </span>
+          ) : (
+            <span
+              className={`live-session-flag live-session-flag-live${
+                phase === 'disconnected' ? ' is-stale' : ''
+              }`}
+              data-testid="live-session-flag"
+            >
+              <span className="live-session-dot" aria-hidden="true" />
+              LIVE SESSION
+            </span>
+          )}
           <div>
             <h1>{session?.MeetingName || 'Live Timing'}</h1>
             <p>
@@ -33,15 +63,40 @@ export function SessionBanner({ isLive, isArchive = false, snapshot, rows, conne
           </div>
         </div>
         <div className="live-session-board">
-          {display.phaseLabel && <span className="live-phase-pill mono">{display.phaseLabel}</span>}
-          <div className="live-clock mono" data-testid="live-clock">{clock || '--:--:--'}</div>
+          {/* Feed health is strictly secondary and only present for a live session. */}
+          {isLiveSession && (
+            <span
+              className={`live-feed-health live-feed-${transport}`}
+              data-testid="live-feed-health"
+              title="Transport health — independent of session state"
+            >
+              <span className="live-feed-dot" aria-hidden="true" />
+              {feedHealthLabel(transport)}
+            </span>
+          )}
+          {isArchive ? (
+            <div className="live-archive-stamp" data-testid="live-archive-stamp">
+              <span className="live-archive-readonly mono">READ-ONLY</span>
+              {capturedLabel && <span className="live-archive-captured mono">captured {capturedLabel}</span>}
+            </div>
+          ) : (
+            <>
+              {display.phaseLabel && <span className="live-phase-pill mono">{display.phaseLabel}</span>}
+              <div className="live-clock mono" data-testid="live-clock">{clock || '--:--:--'}</div>
+            </>
+          )}
           <div className="live-banner-meta">
-            {display.advanceCount && <span>{display.advanceCount} advance</span>}
-            {atRiskLabel && <span>{atRiskLabel}</span>}
+            {!isArchive && display.advanceCount && <span>{display.advanceCount} advance</span>}
+            {!isArchive && atRiskLabel && <span>{atRiskLabel}</span>}
             <span>
               L<strong>{snapshot.CurrentLap || '-'}</strong>/<strong>{snapshot.TotalLaps || '-'}</strong>
             </span>
-            <span className={isLive ? 'live-state live-state-on' : 'live-state'}>{stateLabel}</span>
+            {!isArchive && (
+              <span className={phase === 'live' ? 'live-state live-state-on' : 'live-state'}>
+                {phase === 'live' ? 'live' : 'stale'}
+              </span>
+            )}
+            {isArchive && <span className="live-state live-state-archive">archive</span>}
           </div>
         </div>
       </div>
