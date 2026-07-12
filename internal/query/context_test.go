@@ -256,3 +256,66 @@ func TestResolveWeekendContextPartialFutureSchedule(t *testing.T) {
 		t.Fatalf("partial display range = %+v", got.FocusMeeting)
 	}
 }
+
+func TestResolveWeekendContextActiveSessionIsNotCompletedOrDefault(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2026-07-05T15:00:00Z")
+	svc := contextService(t, now)
+	addContextMeeting(t, svc, 1, "British Grand Prix", "2026-07-03T09:00:00Z", "2026-07-05T16:00:00Z", false)
+	addContextSession(t, svc, 10, 1, "Qualifying", "2026-07-04T14:00:00Z", "2026-07-04T15:00:00Z", false)
+	completeContextSession(t, svc, 10, 1)
+	addContextSession(t, svc, 11, 1, "Race", "2026-07-05T14:00:00Z", "2026-07-05T16:00:00Z", false)
+	completeContextSession(t, svc, 11, 1)
+
+	got, err := svc.ResolveWeekendContext(LiveEvidence{Active: true, MeetingName: "British Grand Prix", CircuitName: "British Grand Prix", SessionName: "Race", SessionType: "Race", ObservedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ActiveSession == nil || got.ActiveSession.Session.SessionKey != 11 {
+		t.Fatalf("active = %+v", got.ActiveSession)
+	}
+	if got.PreviousCompletedSession == nil || got.PreviousCompletedSession.Session.SessionKey != 10 {
+		t.Fatalf("previous = %+v, want earlier completed session", got.PreviousCompletedSession)
+	}
+	if got.DefaultAnalysisSession == nil || got.DefaultAnalysisSession.Session.SessionKey != 10 {
+		t.Fatalf("default = %+v, want earlier completed session", got.DefaultAnalysisSession)
+	}
+}
+
+func TestResolveWeekendContextOldIncompleteSessionDoesNotSuppressNextWeekend(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2026-07-16T12:00:00Z")
+	svc := contextService(t, now)
+	addContextMeeting(t, svc, 1, "British Grand Prix", "2026-07-03T09:00:00Z", "2026-07-05T16:00:00Z", false)
+	addContextSession(t, svc, 11, 1, "Race", "2026-07-05T14:00:00Z", "2026-07-05T16:00:00Z", false)
+	addContextMeeting(t, svc, 2, "Belgian Grand Prix", "2026-07-17T09:00:00Z", "2026-07-19T16:00:00Z", false)
+	addContextSession(t, svc, 21, 2, "Practice 1", "2026-07-17T09:00:00Z", "2026-07-17T10:00:00Z", false)
+	addContextSession(t, svc, 22, 2, "Race", "2026-07-19T14:00:00Z", "2026-07-19T16:00:00Z", false)
+
+	got, err := svc.ResolveWeekendContext(LiveEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TemporalState != TemporalPreSession {
+		t.Fatalf("state = %s, want %s; context=%+v", got.TemporalState, TemporalPreSession, got)
+	}
+	if got.FocusMeeting == nil || got.FocusMeeting.MeetingKey != 2 {
+		t.Fatalf("focus = %+v, want Belgian weekend", got.FocusMeeting)
+	}
+}
+
+func TestResolveWeekendContextMissingScheduleDoesNotClaimSeasonComplete(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2026-07-01T12:00:00Z")
+	svc := contextService(t, now)
+	addContextMeeting(t, svc, 1, "British Grand Prix", "", "", false)
+	addContextSession(t, svc, 11, 1, "Race", "", "", false)
+
+	got, err := svc.ResolveWeekendContext(LiveEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TemporalState != TemporalBetweenWeekends {
+		t.Fatalf("state = %s, want limited %s context", got.TemporalState, TemporalBetweenWeekends)
+	}
+	if got.TotalChampionshipRounds != 1 {
+		t.Fatalf("total rounds = %d, want scheduled round retained", got.TotalChampionshipRounds)
+	}
+}
