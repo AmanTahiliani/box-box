@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
+import { FUTURE_SESSION, mockFutureRaceHubSession } from './fixtures/future-session'
 
 const FULL_SESSION = 9472
 const CORE_ONLY_SESSION = 9000
-const FUTURE_SESSION = 9600
 
 test.describe('Race Hub Weekend Workspace', () => {
   test('lands on the Overview tab with workspace identity', async ({ page }) => {
@@ -16,6 +16,7 @@ test.describe('Race Hub Weekend Workspace', () => {
       'aria-selected',
       'true',
     )
+    await expect(page.getByText('Local Coverage')).toHaveCount(0)
   })
 
   test('shows final running order when switching to Race Story', async ({ page }) => {
@@ -88,7 +89,6 @@ test.describe('Race Hub Weekend Workspace', () => {
     await page.getByTestId('rh-switch-weekend').click()
 
     await expect(page.getByTestId('rh-switcher')).toBeVisible()
-    // Active session is already loaded; just confirm a session button is reachable
     await expect(page.getByTestId(`rh-switcher-session-${FULL_SESSION}`)).toBeVisible()
   })
 
@@ -101,7 +101,6 @@ test.describe('Race Hub Weekend Workspace', () => {
       'href',
       '/admin',
     )
-    // Raw coverage strip stays hidden until explicitly requested.
     await expect(page.getByTestId('rh-dataset-strip')).toHaveCount(0)
     await page.getByTestId('rh-diagnostics-toggle').click()
     await expect(page.getByTestId('rh-dataset-strip')).toBeVisible()
@@ -114,12 +113,12 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(page.getByTestId('rh-tabgroup-context')).toBeVisible()
   })
 
-  test('bare /race-hub resolves to a completed session, never a future one', async ({ page }) => {
+  test('bare /race-hub resolves to a completed session via Weekend Context', async ({ page }) => {
     await page.goto('/race-hub')
     await expect(page).toHaveURL(/session_key=\d+/)
     await expect(page.getByTestId('race-hub')).toBeVisible()
-    // It must not land on the future session.
-    await expect(page).not.toHaveURL(new RegExp(`session_key=${FUTURE_SESSION}`))
+    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
   })
 
   test('explicit completed session deep link stays stable and shows analysis', async ({ page }) => {
@@ -128,20 +127,34 @@ test.describe('Race Hub Weekend Workspace', () => {
     await expect(page.getByTestId('rh-overview')).toBeVisible()
   })
 
-  test('explicit future session renders the pre-session view, not empty analysis', async ({ page }) => {
+  test('explicit future session renders the pre-session view, not empty analysis', async ({
+    page,
+  }) => {
+    await mockFutureRaceHubSession(page)
     await page.goto(`/race-hub?session_key=${FUTURE_SESSION}`)
     await expect(page.getByTestId('race-hub')).toBeVisible()
     await expect(page.getByTestId('rh-presession')).toBeVisible()
     await expect(page.getByTestId('rh-overview')).toHaveCount(0)
   })
 
-  test('returning to Weekend from an analysis view preserves the meeting context', async ({ page }) => {
+  test('returning to Weekend from analysis preserves meeting and session context', async ({
+    page,
+  }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
     await page.getByRole('tab', { name: 'Strategy' }).click()
+    await expect(page.locator('[data-testid="strategy-chart"]')).toBeVisible()
 
-    await page.getByTestId('rh-switch-weekend').click()
-    await expect(page.getByTestId('rh-switcher')).toBeVisible()
-    // The current session remains reachable/selected from the switcher.
-    await expect(page.getByTestId(`rh-switcher-session-${FULL_SESSION}`)).toBeVisible()
+    // Navigate to the sibling core-only session within the same weekend.
+    await page.getByTestId(`rh-session-${CORE_ONLY_SESSION}`).click()
+    await expect(page).toHaveURL(new RegExp(`session_key=${CORE_ONLY_SESSION}`))
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
+
+    // Back to Weekend via bare /race-hub — Weekend Context should restore the
+    // same meeting's default analysis session.
+    await page.goto('/race-hub')
+    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    await expect(page.getByTestId('rh-identity')).toContainText('Monaco')
+    await expect(page.getByTestId('rh-overview')).toBeVisible()
   })
 })

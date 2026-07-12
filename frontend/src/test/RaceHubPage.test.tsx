@@ -9,23 +9,37 @@ import {
   createRoute,
 } from '@tanstack/react-router'
 import { RaceHubPage } from '../pages/RaceHubPage'
-import type { DatasetInfo, Meeting, RaceHub, Session, Weekend } from '../types'
+import type {
+  DatasetInfo,
+  Meeting,
+  RaceHub,
+  Session,
+  Weekend,
+  WeekendContext,
+} from '../types'
 
 vi.mock('../api', () => ({
   fetchRaceHub: vi.fn(),
   fetchSeasons: vi.fn(),
   fetchLocalMeetings: vi.fn(),
   fetchWeekend: vi.fn(),
+  fetchWeekendContext: vi.fn(),
 }))
 
-import { fetchRaceHub, fetchSeasons, fetchLocalMeetings, fetchWeekend } from '../api'
+import {
+  fetchRaceHub,
+  fetchSeasons,
+  fetchLocalMeetings,
+  fetchWeekend,
+  fetchWeekendContext,
+} from '../api'
 
 const mockFetchRaceHub = vi.mocked(fetchRaceHub)
 const mockFetchSeasons = vi.mocked(fetchSeasons)
 const mockFetchLocalMeetings = vi.mocked(fetchLocalMeetings)
 const mockFetchWeekend = vi.mocked(fetchWeekend)
+const mockFetchWeekendContext = vi.mocked(fetchWeekendContext)
 
-// Use a fixed clock so upcoming/completed states are deterministic in tests.
 const NOW = new Date('2025-06-01T00:00:00Z')
 
 const meeting: Meeting = {
@@ -62,7 +76,6 @@ const qualSession: Session = {
   gmt_offset: '02:00:00',
 }
 
-// A session scheduled far in the future relative to NOW.
 const futureSession: Session = {
   session_key: 9600,
   session_name: 'Race',
@@ -177,11 +190,45 @@ const weekend: Weekend = {
   meeting_key: 1229,
   meeting,
   default_session_key: 9472,
-  default_analysis_session: 9472,
   sessions: [
     { session: qualSession, source: 'local', datasets: fullDatasets },
     { session: raceSession, source: 'local', datasets: fullDatasets },
   ],
+}
+
+const weekendContext: WeekendContext = {
+  season: 2025,
+  temporal_state: 'post_weekend',
+  focus_meeting: meeting,
+  previous_meeting: meeting,
+  default_analysis_session: {
+    session: raceSession,
+    meeting,
+    availability: {
+      schedule: 'available',
+      live_transport: 'unknown',
+      live_session: 'inactive',
+      archive: 'unavailable',
+      local_analysis: 'complete',
+      freshness: 'fresh',
+      limitations: [],
+    },
+  },
+  previous_completed_session: {
+    session: raceSession,
+    meeting,
+    availability: {
+      schedule: 'available',
+      live_transport: 'unknown',
+      live_session: 'inactive',
+      archive: 'unavailable',
+      local_analysis: 'complete',
+      freshness: 'fresh',
+      limitations: [],
+    },
+  },
+  championship_round: 8,
+  total_championship_rounds: 24,
 }
 
 function renderRaceHub(sessionKey: number) {
@@ -213,7 +260,6 @@ function renderRaceHub(sessionKey: number) {
     history: undefined,
   })
 
-  // Navigate to the URL before mounting
   router.navigate({ to: '/race-hub', search: sessionKey ? { session_key: sessionKey } : {} })
   return render(<RouterProvider router={router} />)
 }
@@ -227,6 +273,7 @@ describe('RaceHubPage', () => {
     mockFetchLocalMeetings.mockResolvedValue([meeting])
     mockFetchWeekend.mockResolvedValue(weekend)
     mockFetchRaceHub.mockResolvedValue(raceHub)
+    mockFetchWeekendContext.mockResolvedValue(weekendContext)
   })
 
   afterEach(() => {
@@ -245,9 +292,9 @@ describe('RaceHubPage', () => {
     )
     expect(screen.getByTestId('rh-session-9471')).toBeInTheDocument()
 
-    // Overview is default
     expect(screen.getByTestId('rh-overview')).toBeInTheDocument()
     expect(screen.getByText('Winner')).toBeInTheDocument()
+    expect(screen.queryByText('Local Coverage')).not.toBeInTheDocument()
   })
 
   it('exposes Race Story sub-controls for classification, grid, and positions', async () => {
@@ -257,7 +304,6 @@ describe('RaceHubPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Race Story' }))
 
     expect(screen.getByText('VER')).toBeInTheDocument()
-    
   })
 
   it('keeps Diagnostics accessible behind a secondary action, free of inline CLI guidance', async () => {
@@ -269,7 +315,6 @@ describe('RaceHubPage', () => {
     expect(screen.getByTestId('rh-data-status')).toBeInTheDocument()
     expect(screen.queryByText(/ingest-session/i)).not.toBeInTheDocument()
 
-    // Raw dataset coverage strip is hidden until explicitly requested.
     expect(screen.queryByTestId('rh-dataset-strip')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('rh-diagnostics-toggle'))
     expect(screen.getByTestId('rh-dataset-strip')).toBeInTheDocument()
@@ -279,7 +324,6 @@ describe('RaceHubPage', () => {
     renderRaceHub(9472)
     await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
 
-    // Overview (fan content) is present, but the raw diagnostics strip is not.
     expect(screen.getByTestId('rh-overview')).toBeInTheDocument()
     expect(screen.queryByTestId('rh-dataset-strip')).not.toBeInTheDocument()
   })
@@ -291,7 +335,6 @@ describe('RaceHubPage', () => {
     expect(screen.getByTestId('rh-tabgroup-story')).toBeInTheDocument()
     expect(screen.getByTestId('rh-tabgroup-analysis')).toBeInTheDocument()
     expect(screen.getByTestId('rh-tabgroup-context')).toBeInTheDocument()
-    // Every capability preserved
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Strategy' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Compare' })).toBeInTheDocument()
@@ -308,26 +351,41 @@ describe('RaceHubPage', () => {
     expect(await screen.findByTestId('rh-switcher')).toBeInTheDocument()
   })
 
-  it('resolves bare /race-hub through the default analysis session (never a future one)', async () => {
-    const futureMeeting: Meeting = { ...meeting, meeting_key: 1300, meeting_name: 'Future GP' }
-    mockFetchLocalMeetings.mockResolvedValue([futureMeeting])
-    mockFetchWeekend.mockResolvedValue({
-      source: 'partial',
-      meeting_key: 1300,
-      meeting: futureMeeting,
-      // Backend excludes the future session; falls back to the completed quali.
-      default_session_key: 9600,
-      default_analysis_session: 9471,
-      sessions: [
-        { session: { ...qualSession, meeting_key: 1300 }, source: 'local', datasets: fullDatasets },
-        { session: futureSession, source: 'none', datasets: {} },
-      ],
+  it('resolves bare /race-hub through canonical Weekend Context default analysis', async () => {
+    mockFetchWeekendContext.mockResolvedValue({
+      ...weekendContext,
+      default_analysis_session: {
+        session: qualSession,
+        meeting,
+        availability: {
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'unavailable',
+          local_analysis: 'complete',
+          freshness: 'fresh',
+          limitations: [],
+        },
+      },
     })
 
     renderRaceHub(0)
 
     await waitFor(() => expect(mockFetchRaceHub).toHaveBeenCalledWith(9471))
     expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9600)
+  })
+
+  it('shows no-analysis fallback when Weekend Context has no default analysis', async () => {
+    mockFetchWeekendContext.mockResolvedValue({
+      ...weekendContext,
+      default_analysis_session: undefined,
+      previous_completed_session: undefined,
+    })
+
+    renderRaceHub(0)
+
+    await waitFor(() => expect(screen.getByTestId('race-hub-no-analysis')).toBeInTheDocument())
+    expect(mockFetchRaceHub).not.toHaveBeenCalled()
   })
 
   it('renders a pre-session view instead of empty analysis for a future session', async () => {
@@ -352,12 +410,97 @@ describe('RaceHubPage', () => {
 
     await waitFor(() => expect(screen.getByTestId('race-hub')).toBeInTheDocument())
     expect(await screen.findByTestId('rh-presession')).toBeInTheDocument()
-    // No Winner analysis card for an unrun session.
     expect(screen.queryByTestId('rh-overview')).not.toBeInTheDocument()
     expect(screen.queryByText('Winner')).not.toBeInTheDocument()
   })
 
-  it('labels a completed but partial session as Partial in the active state', async () => {
+  it('renders a preparing view for a settling session with no local analysis', async () => {
+    mockFetchWeekend.mockResolvedValue({
+      ...weekend,
+      sessions: [
+        { session: raceSession, source: 'none', datasets: {} },
+      ],
+    })
+    mockFetchWeekendContext.mockResolvedValue({
+      ...weekendContext,
+      temporal_state: 'session_settling',
+      default_analysis_session: undefined,
+      previous_completed_session: {
+        session: raceSession,
+        meeting,
+        availability: {
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'unavailable',
+          local_analysis: 'pending',
+          freshness: 'fresh',
+          limitations: [],
+        },
+      },
+    })
+    mockFetchRaceHub.mockResolvedValue({
+      ...raceHub,
+      source: 'none',
+      results: [],
+      starting_grid: [],
+      datasets: {},
+    })
+
+    renderRaceHub(9472)
+
+    await waitFor(() => expect(screen.getByTestId('rh-preparing')).toBeInTheDocument())
+    expect(screen.queryByTestId('rh-overview')).not.toBeInTheDocument()
+  })
+
+  it('renders unavailable distinctly from request errors', async () => {
+    mockFetchWeekend.mockResolvedValue({
+      ...weekend,
+      sessions: [{ session: raceSession, source: 'none', datasets: {} }],
+    })
+    mockFetchWeekendContext.mockResolvedValue({
+      ...weekendContext,
+      previous_completed_session: {
+        session: raceSession,
+        meeting,
+        availability: {
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'unavailable',
+          local_analysis: 'unavailable',
+          freshness: 'stale',
+          limitations: ['analysis_blocked'],
+        },
+      },
+      default_analysis_session: {
+        session: raceSession,
+        meeting,
+        availability: {
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'unavailable',
+          local_analysis: 'unavailable',
+          freshness: 'stale',
+          limitations: ['analysis_blocked'],
+        },
+      },
+    })
+    mockFetchRaceHub.mockResolvedValue({
+      ...raceHub,
+      source: 'none',
+      results: [],
+      datasets: {},
+    })
+
+    renderRaceHub(9472)
+
+    await waitFor(() => expect(screen.getByTestId('rh-unavailable')).toBeInTheDocument())
+    expect(screen.queryByTestId('race-hub-error')).not.toBeInTheDocument()
+  })
+
+  it('labels a completed but partial session as Partial and keeps analysis', async () => {
     mockFetchWeekend.mockResolvedValue({
       ...weekend,
       sessions: [
@@ -365,11 +508,29 @@ describe('RaceHubPage', () => {
         { session: raceSession, source: 'partial', datasets: { drivers: fullDatasets.drivers } },
       ],
     })
+    mockFetchWeekendContext.mockResolvedValue({
+      ...weekendContext,
+      default_analysis_session: {
+        session: raceSession,
+        meeting,
+        availability: {
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'unavailable',
+          local_analysis: 'partial',
+          freshness: 'fresh',
+          limitations: [],
+        },
+      },
+    })
 
     renderRaceHub(9472)
 
     await waitFor(() => expect(screen.getByTestId('rh-active-state')).toBeInTheDocument())
     expect(screen.getByTestId('rh-active-state')).toHaveTextContent('Partial')
+    expect(screen.getByTestId('rh-partial-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('rh-overview')).toBeInTheDocument()
   })
 
   it('offers retry and back-to-Weekend on an error', async () => {
@@ -380,7 +541,7 @@ describe('RaceHubPage', () => {
     await waitFor(() => expect(screen.getByTestId('race-hub-error')).toBeInTheDocument())
     expect(screen.getByTestId('rh-retry')).toBeInTheDocument()
     const back = screen.getByTestId('rh-back-weekend')
-    expect(back).toHaveAttribute('href', '/race-hub')
+    expect(back).toHaveAttribute('href', '/race-hub?session_key=9472')
 
     mockFetchRaceHub.mockResolvedValue(raceHub)
     fireEvent.click(screen.getByTestId('rh-retry'))

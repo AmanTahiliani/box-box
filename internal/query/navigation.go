@@ -3,15 +3,10 @@ package query
 import (
 	"database/sql"
 	"errors"
-	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/store"
 )
-
-// weekendNow is the clock used to decide whether a session has started. It is a
-// package var so tests can pin it deterministically.
-var weekendNow = time.Now
 
 // ErrMeetingNotFound is returned when a meeting is not in the local store.
 var ErrMeetingNotFound = errors.New("meeting not found")
@@ -24,16 +19,14 @@ type WeekendSession struct {
 }
 
 // Weekend is the local-first read model for one race weekend.
+// Fan-facing default analysis resolution lives on /api/v1/weekend-context
+// (DefaultAnalysisSession); this payload only supplies meeting rail + coverage.
 type Weekend struct {
 	Source            string           `json:"source"`
 	MeetingKey        int              `json:"meeting_key"`
 	Meeting           models.Meeting   `json:"meeting"`
 	Sessions          []WeekendSession `json:"sessions"`
 	DefaultSessionKey int              `json:"default_session_key,omitempty"`
-	// DefaultAnalysisSession is the session a fan-facing default landing should
-	// open. Unlike DefaultSessionKey it never resolves to a future session, so
-	// bare /race-hub never renders empty post-session analysis.
-	DefaultAnalysisSession int `json:"default_analysis_session,omitempty"`
 }
 
 // ListSeasons returns years with ingested meetings, newest first.
@@ -94,7 +87,6 @@ func (s *Service) GetWeekend(meetingKey int) (Weekend, error) {
 		out.Source = weekendSource(out.Sessions)
 	}
 	out.DefaultSessionKey = pickDefaultSession(out.Sessions)
-	out.DefaultAnalysisSession = pickDefaultAnalysisSession(out.Sessions, weekendNow())
 	return out, nil
 }
 
@@ -149,51 +141,6 @@ func pickDefaultSession(sessions []WeekendSession) int {
 		}
 	}
 	return sessions[bestIdx].Session.SessionKey
-}
-
-// pickDefaultAnalysisSession chooses the session a fan should land on by default.
-// It never returns a future session: among sessions that have already started
-// (or whose start time is unknown) it prefers the one with the richest local
-// dataset coverage, breaking ties toward the later session. When every session
-// is still upcoming it returns 0 so callers render a pre-session view instead of
-// empty analysis.
-func pickDefaultAnalysisSession(sessions []WeekendSession, now time.Time) int {
-	bestKey := 0
-	bestScore := -1
-	var bestStart time.Time
-	for _, sess := range sessions {
-		start, ok := parseSessionStart(sess.Session.DateStart)
-		// Skip sessions that are clearly in the future; unknown start times are
-		// treated as eligible so historical data without timestamps still works.
-		if ok && start.After(now) {
-			continue
-		}
-		score := datasetScore(sess.Datasets)
-		if score > bestScore || (score == bestScore && ok && start.After(bestStart)) {
-			bestScore = score
-			bestKey = sess.Session.SessionKey
-			if ok {
-				bestStart = start
-			}
-		}
-	}
-	return bestKey
-}
-
-func parseSessionStart(value string) (time.Time, bool) {
-	if value == "" {
-		return time.Time{}, false
-	}
-	if t, err := time.Parse(time.RFC3339, value); err == nil {
-		return t, true
-	}
-	if t, err := time.Parse("2006-01-02T15:04:05", value); err == nil {
-		return t, true
-	}
-	if t, err := time.Parse("2006-01-02", value[:min(len(value), 10)]); err == nil {
-		return t, true
-	}
-	return time.Time{}, false
 }
 
 func datasetScore(datasets map[string]DatasetInfo) int {

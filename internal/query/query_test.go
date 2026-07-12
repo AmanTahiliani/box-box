@@ -5,7 +5,6 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/store"
@@ -375,88 +374,6 @@ func TestGetWeekendWithSessions(t *testing.T) {
 	if weekend.Sessions[0].Datasets["drivers"].Status != DatasetStatusAvailable {
 		t.Fatalf("first session drivers = %+v, want available", weekend.Sessions[0].Datasets["drivers"])
 	}
-}
-
-func TestPickDefaultAnalysisSessionSkipsFuture(t *testing.T) {
-	now := mustTime(t, "2025-05-24T18:00:00Z")
-	sessions := []WeekendSession{
-		{ // completed qualifying, partial coverage
-			Session:  models.Session{SessionKey: 100, DateStart: "2025-05-24T14:00:00+00:00"},
-			Datasets: map[string]DatasetInfo{"results": availableLocal(1)},
-		},
-		{ // future race with the richest coverage — must NOT be selected
-			Session: models.Session{SessionKey: 200, DateStart: "2025-05-25T13:00:00+00:00"},
-			Datasets: map[string]DatasetInfo{
-				"results": availableLocal(1),
-				"laps":    availableLocal(1),
-				"stints":  availableLocal(1),
-			},
-		},
-	}
-
-	got := pickDefaultAnalysisSession(sessions, now)
-	if got != 100 {
-		t.Fatalf("pickDefaultAnalysisSession() = %d, want 100 (never a future session)", got)
-	}
-}
-
-func TestPickDefaultAnalysisSessionAllFuture(t *testing.T) {
-	now := mustTime(t, "2025-05-20T00:00:00Z")
-	sessions := []WeekendSession{
-		{Session: models.Session{SessionKey: 100, DateStart: "2025-05-24T14:00:00+00:00"}},
-		{Session: models.Session{SessionKey: 200, DateStart: "2025-05-25T13:00:00+00:00"}},
-	}
-
-	if got := pickDefaultAnalysisSession(sessions, now); got != 0 {
-		t.Fatalf("pickDefaultAnalysisSession() = %d, want 0 (everything upcoming)", got)
-	}
-}
-
-func TestPickDefaultAnalysisSessionPrefersRichestCompleted(t *testing.T) {
-	now := mustTime(t, "2025-05-26T00:00:00Z")
-	sessions := []WeekendSession{
-		{
-			Session:  models.Session{SessionKey: 100, DateStart: "2025-05-24T14:00:00+00:00"},
-			Datasets: map[string]DatasetInfo{"results": availableLocal(1)},
-		},
-		{
-			Session: models.Session{SessionKey: 200, DateStart: "2025-05-25T13:00:00+00:00"},
-			Datasets: map[string]DatasetInfo{
-				"results": availableLocal(1),
-				"laps":    availableLocal(1),
-			},
-		},
-	}
-
-	if got := pickDefaultAnalysisSession(sessions, now); got != 200 {
-		t.Fatalf("pickDefaultAnalysisSession() = %d, want 200 (richest completed)", got)
-	}
-}
-
-func TestGetWeekendSetsDefaultAnalysisSession(t *testing.T) {
-	prev := weekendNow
-	weekendNow = func() time.Time { return mustTime(t, "2025-05-26T00:00:00Z") }
-	t.Cleanup(func() { weekendNow = prev })
-
-	svc := openTestService(t)
-	seedRaceHubData(t, svc.store)
-
-	weekend, err := svc.GetWeekend(1229)
-	if err != nil {
-		t.Fatalf("GetWeekend() error = %v", err)
-	}
-	if weekend.DefaultAnalysisSession != 9472 {
-		t.Fatalf("DefaultAnalysisSession = %d, want 9472", weekend.DefaultAnalysisSession)
-	}
-}
-
-func mustTime(t *testing.T, value string) time.Time {
-	t.Helper()
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		t.Fatalf("parse time %q: %v", value, err)
-	}
-	return parsed
 }
 
 func TestGetChampionshipInputsIncludesSprintPoints(t *testing.T) {

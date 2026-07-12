@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
 import type { Session } from '../types'
 import { RACE_HUB_DATASETS } from '../lib/coverage'
 import { formatCountdown, formatSessionScheduleTime, sessionStartTime } from '../lib/schedule'
+import {
+  sessionStateDescription,
+  type SessionState,
+} from '../lib/sessionState'
 
 const EXPECTED_LABELS: Record<string, string> = {
   results: 'Final results',
@@ -14,9 +17,10 @@ const EXPECTED_LABELS: Record<string, string> = {
   weather: 'Track conditions',
 }
 
-interface Props {
+interface PreSessionProps {
   session: Session
   sessionName: string
+  now: Date
 }
 
 /**
@@ -25,16 +29,8 @@ interface Props {
  * session is upcoming and previews the analysis that will appear once the data
  * is ingested.
  */
-export function PreSessionView({ session, sessionName }: Props) {
+export function PreSessionView({ session, sessionName, now }: PreSessionProps) {
   const start = sessionStartTime(session)
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    if (!start) return
-    const id = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(id)
-  }, [start])
-
   const expected = RACE_HUB_DATASETS.filter((key) => EXPECTED_LABELS[key])
 
   return (
@@ -67,6 +63,79 @@ export function PreSessionView({ session, sessionName }: Props) {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+interface PhaseProps {
+  state: Extract<SessionState, 'preparing' | 'unavailable' | 'cancelled'>
+  sessionName: string
+  onOpenDiagnostics?: () => void
+}
+
+/**
+ * Distinct fan-facing surfaces for settling/preparing and unavailable sessions.
+ * Genuine request failures stay on the page-level error recovery path.
+ */
+export function SessionPhaseView({ state, sessionName, onOpenDiagnostics }: PhaseProps) {
+  const title =
+    state === 'preparing'
+      ? 'Analysis preparing'
+      : state === 'cancelled'
+        ? 'Session cancelled'
+        : 'Analysis unavailable'
+
+  const testId =
+    state === 'preparing'
+      ? 'rh-preparing'
+      : state === 'cancelled'
+        ? 'rh-cancelled'
+        : 'rh-unavailable'
+
+  return (
+    <div className="rh-presession" data-testid={testId}>
+      <section className="rh-presession-band">
+        <span className="rh-presession-eyebrow mono">{sessionStateLabelEyebrow(state)}</span>
+        <h2 className="rh-presession-title">{title}</h2>
+        <p className="rh-presession-sub">
+          {sessionName}: {sessionStateDescription(state)}
+        </p>
+        {state === 'preparing' && (
+          <p className="rh-presession-sub">
+            Check back shortly, or open Diagnostics if you need raw dataset coverage.
+          </p>
+        )}
+        {onOpenDiagnostics && (state === 'preparing' || state === 'unavailable') && (
+          <div className="rh-empty-actions" style={{ marginTop: 'var(--s4)' }}>
+            <button type="button" className="rh-empty-action" onClick={onOpenDiagnostics}>
+              Open Diagnostics
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function sessionStateLabelEyebrow(state: PhaseProps['state']): string {
+  if (state === 'preparing') return 'Settling'
+  if (state === 'cancelled') return 'Cancelled'
+  return 'Unavailable'
+}
+
+interface PartialBannerProps {
+  onOpenDiagnostics?: () => void
+}
+
+export function PartialAnalysisBanner({ onOpenDiagnostics }: PartialBannerProps) {
+  return (
+    <div className="rh-partial-banner" data-testid="rh-partial-banner" role="status">
+      <span>Partial analysis — some datasets are still missing.</span>
+      {onOpenDiagnostics && (
+        <button type="button" className="rh-partial-banner-link" onClick={onOpenDiagnostics}>
+          Diagnostics
+        </button>
+      )}
     </div>
   )
 }

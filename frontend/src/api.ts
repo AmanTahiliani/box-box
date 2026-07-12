@@ -119,7 +119,8 @@ export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
 // (backend story #72). The response is the authoritative WeekendContext shape and
 // is used verbatim as the Weekend home's source of truth. Any HTTP error throws
 // so the hook can surface an explicit error state; there is no client-side
-// re-derivation of the contract.
+// re-derivation of the contract. Race Hub bare-default landing also reads this
+// for `default_analysis_session` (#75).
 export async function fetchWeekendContext(): Promise<WeekendContext> {
   const res = await fetch('/api/v1/weekend-context')
   if (!res.ok) {

@@ -1,12 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  fetchLocalMeetings,
-  fetchRaceHub,
-  fetchSeasons,
-  fetchWeekend,
-} from '../api'
+import { fetchRaceHub, fetchWeekend, fetchWeekendContext } from '../api'
 import { DatasetStrip } from '../components/DatasetStrip'
 import { RaceStoryCanvas } from '../components/RaceStoryCanvas'
 import { TabBar, type Tab } from '../components/TabBar'
@@ -17,101 +12,64 @@ import { CompareView } from '../components/CompareView'
 import { RaceControlView } from '../components/RaceControlView'
 import { WeatherView } from '../components/WeatherView'
 import { OverviewView } from '../components/OverviewView'
-import { PreSessionView } from '../components/PreSessionView'
+import {
+  PartialAnalysisBanner,
+  PreSessionView,
+  SessionPhaseView,
+} from '../components/PreSessionView'
 import { WeekendSwitcher } from '../components/WeekendSwitcher'
 import { SourceBadge } from '../components/SourceBadge'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import { sessionTypeAbbrev } from '../lib/coverage'
+import { formatSessionScheduleTime, sortSessionsByStart } from '../lib/schedule'
 import {
-  formatSessionScheduleTime,
-  pickAnalysisFocusMeeting,
-  sessionStartTime,
-  sortSessionsByStart,
-} from '../lib/schedule'
-import {
+  defaultAnalysisSessionKey,
+  isPartialAnalysis,
   isPreSession,
-  sessionState,
+  isPreparing,
+  isUnavailable,
+  resolveSessionState,
   sessionStateDotClass,
   sessionStateLabel,
 } from '../lib/sessionState'
-import type { Weekend, WeekendSession } from '../types'
+import type { WeekendSession } from '../types'
 
 interface Props {
   sessionKey: number
-}
-
-/**
- * Resolve the session a bare `/race-hub` should open. Prefers the canonical
- * Weekend Context `default_analysis_session` (which never points at a future
- * session), then any completed session with the richest coverage. Returns
- * `undefined` when every session is still upcoming so the caller can fall back
- * to the switcher instead of opening empty analysis.
- */
-function pickAnalysisSession(weekend: Weekend | undefined, now: Date): number | undefined {
-  if (!weekend) return undefined
-  if (weekend.default_analysis_session && weekend.default_analysis_session > 0) {
-    return weekend.default_analysis_session
-  }
-
-  const started = weekend.sessions.filter((s) => {
-    const start = sessionStartTime(s.session)
-    return !start || start <= now
-  })
-  if (started.length === 0) return undefined
-
-  const local = started.filter((s) => s.source === 'local')
-  const partial = started.filter((s) => s.source === 'partial')
-  const pool = local.length > 0 ? local : partial.length > 0 ? partial : started
-  const race = pool.find((s) => s.session.session_type?.toLowerCase().includes('race'))
-  if (race) return race.session.session_key
-  const qual = pool.find((s) => s.session.session_type?.toLowerCase().includes('qualifying'))
-  if (qual) return qual.session.session_key
-  return pool[pool.length - 1]?.session.session_key
 }
 
 export function RaceHubPage({ sessionKey }: Props) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const now = useMemo(() => new Date(), [])
+  const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [phaseDiagnostics, setPhaseDiagnostics] = useState(false)
+  const [now, setNow] = useState(() => new Date())
 
-  // ─── Auto-redirect when no session_key is supplied ───
-  const seasonsQuery = useQuery({
-    queryKey: ['seasons'],
-    queryFn: fetchSeasons,
-    enabled: sessionKey === 0,
+  // Keep schedule-adjacent UI (countdown) moving; Live/completion come from context.
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const contextQuery = useQuery({
+    queryKey: ['weekend-context'],
+    queryFn: fetchWeekendContext,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   })
+  const context = contextQuery.data ?? null
 
-  const latestSeason = seasonsQuery.data?.[0] ?? null
-
-  const meetingsQuery = useQuery({
-    queryKey: ['meetings', latestSeason],
-    queryFn: () => fetchLocalMeetings(latestSeason!),
-    enabled: sessionKey === 0 && latestSeason != null,
-  })
-
-  const focusMeeting = useMemo(() => {
-    if (sessionKey !== 0 || !meetingsQuery.data) return null
-    return pickAnalysisFocusMeeting(meetingsQuery.data, now)
-  }, [sessionKey, meetingsQuery.data, now])
-
-  const fallbackWeekendQuery = useQuery({
-    queryKey: ['weekend', focusMeeting?.meeting_key],
-    queryFn: () => fetchWeekend(focusMeeting!.meeting_key),
-    enabled: sessionKey === 0 && focusMeeting != null,
-  })
-
+  // Bare `/race-hub` resolves only through canonical Weekend Context.
   useEffect(() => {
     if (sessionKey !== 0) return
-    const weekend = fallbackWeekendQuery.data
-    if (!weekend) return
-    const target = pickAnalysisSession(weekend, now)
+    if (!contextQuery.isSuccess || !context) return
+    const target = defaultAnalysisSessionKey(context)
     if (target) {
       navigate({ to: '/race-hub', search: { session_key: target }, replace: true })
     }
-  }, [sessionKey, fallbackWeekendQuery.data, navigate, now])
+  }, [sessionKey, contextQuery.isSuccess, context, navigate])
 
-  // ─── Active session payload ───
   const raceHubQuery = useQuery({
     queryKey: ['race-hub', sessionKey],
     queryFn: () => fetchRaceHub(sessionKey),
@@ -132,47 +90,57 @@ export function RaceHubPage({ sessionKey }: Props) {
   const accent = countryAccent(data?.meeting ?? null)
   const accentStyle = { '--gp-accent': accent } as React.CSSProperties
 
-  const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const openDiagnostics = () => {
+    setActiveTab('data_status')
+    setShowDiagnostics(true)
+    setPhaseDiagnostics(true)
+  }
 
-  // ─── No session_key: show resolving state, fall back to switcher if no local data ───
+  // ─── No session_key: resolve via Weekend Context ───
   if (sessionKey === 0) {
-    if (seasonsQuery.isLoading || meetingsQuery.isLoading || fallbackWeekendQuery.isLoading) {
+    if (contextQuery.isLoading) {
       return (
         <div className="rh-page" style={accentStyle}>
-          <div className="loading-state">resolving latest local weekend…</div>
+          <div className="loading-state">resolving weekend context…</div>
         </div>
       )
     }
-    const seasons = seasonsQuery.data ?? []
-    if (seasons.length === 0) {
+    if (contextQuery.isError) {
       return (
-        <div className="rh-page rh-empty" data-testid="race-hub-empty" style={accentStyle}>
-          <div className="rh-empty-band">
-            <span className="rh-empty-eyebrow mono">box-box · race hub</span>
-            <h1 className="rh-empty-title">No local sessions yet</h1>
-            <p className="rh-empty-sub">
-              The Race Hub reads from local ingest only. Once a weekend is ingested
-              it will open here automatically.
-            </p>
-            <div className="rh-empty-actions">
-              <a href="/admin" className="rh-empty-action">Open Admin · Data Health</a>
-              <a href="/" className="rh-empty-action">Back to Command Center</a>
+        <div className="rh-page" data-testid="race-hub-error" style={accentStyle}>
+          <div className="rh-recover">
+            <div className="error-box">
+              {contextQuery.error instanceof Error
+                ? contextQuery.error.message
+                : 'Failed to load weekend context.'}
+            </div>
+            <div className="rh-recover-actions">
+              <button
+                type="button"
+                className="rh-recover-btn primary"
+                onClick={() => contextQuery.refetch()}
+                data-testid="rh-retry"
+              >
+                Retry
+              </button>
+              <a href="/" className="rh-recover-btn">
+                Back to Command Center
+              </a>
             </div>
           </div>
         </div>
       )
     }
-    // Weekend resolved but every session is upcoming — offer the switcher instead
-    // of silently opening empty analysis.
-    if (fallbackWeekendQuery.data && !pickAnalysisSession(fallbackWeekendQuery.data, now)) {
+
+    if (context && !defaultAnalysisSessionKey(context)) {
       return (
         <div className="rh-page rh-empty" data-testid="race-hub-no-analysis" style={accentStyle}>
           <div className="rh-empty-band">
             <span className="rh-empty-eyebrow mono">box-box · race hub</span>
             <h1 className="rh-empty-title">No completed session to analyse yet</h1>
             <p className="rh-empty-sub">
-              The next weekend hasn’t run. Pick a past session to review, or check
-              back once it’s complete.
+              Weekend Context has no default analysis session. Pick a past session
+              to review, or check back once a session completes with local analysis.
             </p>
             <div className="rh-empty-actions">
               <button
@@ -182,26 +150,31 @@ export function RaceHubPage({ sessionKey }: Props) {
               >
                 Browse Weekends
               </button>
-              <a href="/" className="rh-empty-action">Back to Command Center</a>
+              <a href="/" className="rh-empty-action">
+                Back to Command Center
+              </a>
             </div>
           </div>
           {switcherOpen && (
             <WeekendSwitcher
-              currentMeetingKey={fallbackWeekendQuery.data.meeting_key}
+              currentMeetingKey={context.focus_meeting?.meeting_key}
+              context={context}
+              now={now}
               onClose={() => setSwitcherOpen(false)}
             />
           )}
         </div>
       )
     }
+
     return (
       <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">resolving latest local weekend…</div>
+        <div className="loading-state">resolving weekend context…</div>
       </div>
     )
   }
 
-  // ─── Loading / error for the requested session_key (retry + back to weekend) ───
+  // ─── Loading / error for the requested session_key ───
   if (raceHubQuery.isLoading) {
     return (
       <div className="rh-page" style={accentStyle}>
@@ -210,6 +183,15 @@ export function RaceHubPage({ sessionKey }: Props) {
     )
   }
   if (raceHubQuery.isError || !data) {
+    const backMeeting = context?.focus_meeting?.meeting_key
+    const backSession =
+      defaultAnalysisSessionKey(context) ??
+      context?.previous_completed_session?.session.session_key
+    const backHref =
+      backSession && backSession > 0
+        ? `/race-hub?session_key=${backSession}`
+        : '/race-hub'
+
     return (
       <div className="rh-page" data-testid="race-hub-error" style={accentStyle}>
         <div className="rh-recover">
@@ -227,7 +209,12 @@ export function RaceHubPage({ sessionKey }: Props) {
             >
               Retry
             </button>
-            <a href="/race-hub" className="rh-recover-btn" data-testid="rh-back-weekend">
+            <a
+              href={backHref}
+              className="rh-recover-btn"
+              data-testid="rh-back-weekend"
+              data-meeting-key={backMeeting ?? undefined}
+            >
               Back to Weekend
             </a>
           </div>
@@ -242,12 +229,18 @@ export function RaceHubPage({ sessionKey }: Props) {
     ? Object.fromEntries(weekend.sessions.map((w) => [w.session.session_key, w]))
     : {}
   const activeSessionMeta: WeekendSession | undefined = sessionMeta[sessionKey]
-  const activeState = activeSessionMeta ? sessionState(activeSessionMeta, now) : undefined
-  const preSession = activeState != null && isPreSession(activeState)
+  const activeState = resolveSessionState({
+    weekendSession: activeSessionMeta,
+    context,
+    now,
+  })
+  const preSession = isPreSession(activeState)
+  const preparing = isPreparing(activeState)
+  const unavailable = isUnavailable(activeState)
+  const partial = isPartialAnalysis(activeState)
 
   return (
     <div className="rh-page" data-testid="race-hub" style={accentStyle}>
-      {/* Topbar */}
       <div className="rh-topbar">
         <span className="rh-topbar-label mono">
           box-box · race hub
@@ -270,11 +263,12 @@ export function RaceHubPage({ sessionKey }: Props) {
         <WeekendSwitcher
           currentMeetingKey={meetingKey}
           currentSessionKey={sessionKey}
+          context={context}
+          now={now}
           onClose={() => setSwitcherOpen(false)}
         />
       )}
 
-      {/* GP Identity band */}
       {data.meeting && (
         <section className="rh-identity" data-testid="rh-identity">
           <div className="rh-identity-accent" aria-hidden="true" />
@@ -295,13 +289,16 @@ export function RaceHubPage({ sessionKey }: Props) {
         </section>
       )}
 
-      {/* Session rail */}
       {sessions.length > 0 && (
         <nav className="rh-session-rail" aria-label="Weekend sessions" data-testid="rh-session-rail">
           {sessions.map((session) => {
             const meta = sessionMeta[session.session_key]
             const active = session.session_key === sessionKey
-            const state = meta ? sessionState(meta, now) : undefined
+            const state = resolveSessionState({
+              weekendSession: meta,
+              context,
+              now,
+            })
             return (
               <button
                 key={session.session_key}
@@ -323,45 +320,70 @@ export function RaceHubPage({ sessionKey }: Props) {
                 <span className="rh-session-time mono">
                   {formatSessionScheduleTime(session.date_start)}
                 </span>
-                {state && (
-                  <span className="rh-session-cov mono">
-                    <span
-                      className={`cc-cov-dot ${sessionStateDotClass(state)}`}
-                      aria-hidden="true"
-                    />
-                    {sessionStateLabel(state)}
-                  </span>
-                )}
+                <span className="rh-session-cov mono">
+                  <span
+                    className={`cc-cov-dot ${sessionStateDotClass(state)}`}
+                    aria-hidden="true"
+                  />
+                  {sessionStateLabel(state)}
+                </span>
               </button>
             )
           })}
         </nav>
       )}
 
-      {/* Active session sub-bar */}
       {data.session && (
         <div className="rh-active-bar" data-testid="rh-active-bar">
           <span className="rh-active-name">{data.session.session_name}</span>
           <span className="rh-active-meta mono">
             {formatSessionScheduleTime(data.session.date_start)}
           </span>
-          {activeState && (
-            <span className="rh-active-cov mono" data-testid="rh-active-state">
-              <span
-                className={`cc-cov-dot ${sessionStateDotClass(activeState)}`}
-                aria-hidden="true"
-              />
-              {sessionStateLabel(activeState)}
-            </span>
-          )}
+          <span className="rh-active-cov mono" data-testid="rh-active-state">
+            <span
+              className={`cc-cov-dot ${sessionStateDotClass(activeState)}`}
+              aria-hidden="true"
+            />
+            {sessionStateLabel(activeState)}
+          </span>
           <span className="rh-active-key mono">key {sessionKey}</span>
         </div>
       )}
 
       {preSession && data.session ? (
-        <PreSessionView session={data.session} sessionName={data.session.session_name} />
+        <PreSessionView
+          session={data.session}
+          sessionName={data.session.session_name}
+          now={now}
+        />
+      ) : preparing || unavailable ? (
+        <>
+          <SessionPhaseView
+            state={
+              unavailable
+                ? activeState === 'cancelled'
+                  ? 'cancelled'
+                  : 'unavailable'
+                : 'preparing'
+            }
+            sessionName={data.session?.session_name ?? `Session ${sessionKey}`}
+            onOpenDiagnostics={openDiagnostics}
+          />
+          {phaseDiagnostics && (
+            <div className="data-section" data-testid="rh-phase-diagnostics">
+              <div className="sec-header">
+                <span className="sec-title">Diagnostics</span>
+              </div>
+              <DatasetStatusView datasets={data.datasets} />
+              <div style={{ marginTop: 'var(--s5)' }} data-testid="rh-dataset-strip">
+                <DatasetStrip datasets={data.datasets} />
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <>
+          {partial && <PartialAnalysisBanner onOpenDiagnostics={openDiagnostics} />}
           <TabBar active={activeTab} onChange={setActiveTab} />
 
           {activeTab === 'overview' && <OverviewView data={data} />}

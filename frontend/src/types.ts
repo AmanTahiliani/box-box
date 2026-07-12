@@ -215,12 +215,6 @@ export interface Weekend {
   meeting: Meeting
   sessions: WeekendSession[]
   default_session_key?: number
-  /**
-   * Fan-facing default landing session. Never resolves to a future session, so
-   * bare `/race-hub` never opens empty post-session analysis. `0`/undefined
-   * means every session is still upcoming.
-   */
-  default_analysis_session?: number
 }
 
 export interface LiveStateResponse {
