@@ -51,6 +51,7 @@ const driver = (over: Partial<ChampHubDriver>): ChampHubDriver => ({
   cumulative: [25, 43, 68, 100],
   teammate_wins: 4,
   teammate_losses: 1,
+  round_positions: [],
   ...over,
 })
 

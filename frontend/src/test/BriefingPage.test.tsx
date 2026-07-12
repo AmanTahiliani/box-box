@@ -73,6 +73,7 @@ const drivers: ChampHubDriver[] = [
     cumulative: [25, 43, 68, 100],
     teammate_wins: 4,
     teammate_losses: 1,
+    round_positions: [],
   },
   {
     driver_number: 4,
@@ -89,6 +90,7 @@ const drivers: ChampHubDriver[] = [
     cumulative: [18, 36, 54, 80],
     teammate_wins: 3,
     teammate_losses: 2,
+    round_positions: [],
   },
 ]
 

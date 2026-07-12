@@ -18,6 +18,7 @@ function driver(over: Partial<ChampHubDriver>): ChampHubDriver {
     cumulative: [],
     teammate_wins: 9,
     teammate_losses: 1,
+    round_positions: [],
     ...over,
   }
 }
