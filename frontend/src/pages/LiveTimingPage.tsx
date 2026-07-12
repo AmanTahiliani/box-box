@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchLiveState } from '../api'
+import { fetchLiveState, fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
 import type { LivePosition, LiveStreamData } from '../types'
 import {
   loadPinnedDrivers,
@@ -17,6 +17,14 @@ import { recordGapSamples } from '../lib/gapHistory'
 import { battleNumbers, detectBattles } from '../lib/battles'
 import type { LiveEvent } from '../lib/events'
 import { appendEvents, diffSnapshots, sessionSignature } from '../lib/events'
+import {
+  allowsLiveInterpretations,
+  deriveLivePhase,
+  rendersSnapshot,
+} from '../lib/liveState'
+import type { TransportHealth } from '../lib/liveState'
+import { deriveWeekendContext } from '../lib/weekendContext'
+import { pickFocusMeeting } from '../lib/schedule'
 import { SessionBanner } from '../components/live/SessionBanner'
 import { TrackStatusBanner } from '../components/live/TrackStatusBanner'
 import { TimingTower } from '../components/live/TimingTower'
@@ -26,9 +34,8 @@ import { RaceControlFeed } from '../components/live/RaceControlFeed'
 import { EventRail } from '../components/live/EventRail'
 import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
-import { Archive, Radio } from 'lucide-react'
-
-type StreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+import { LiveHandoff } from '../components/live/LiveHandoff'
+import '../styles/live-state.css'
 
 export function LiveTimingPage() {
   const [activeSnapshot, setActiveSnapshot] = useState<LiveStreamData | null>(null)
@@ -37,25 +44,66 @@ export function LiveTimingPage() {
   const [archiveSnapshotAt, setArchiveSnapshotAt] = useState<string | null>(null)
   const [archiveMode, setArchiveMode] = useState(false)
   const [isLive, setIsLive] = useState(false)
-  const [streamStatus, setStreamStatus] = useState<StreamStatus>('connecting')
+  const [streamStatus, setStreamStatus] = useState<TransportHealth>('connecting')
   const [now, setNow] = useState(Date.now())
   const [gapHistory, setGapHistory] = useState<GapHistoryMap>({})
   const [pinned, setPinned] = useState<string[]>(() => loadPinnedDrivers())
   const [visibleSectors, setVisibleSectors] = useState<VisibleSectorState>({})
-  const [positions, setPositions] = useState<Record<string, LivePosition>>({})
+  const [, setPositions] = useState<Record<string, LivePosition>>({})
   const [events, setEvents] = useState<LiveEvent[]>([])
   const prevSnapshotRef = useRef<LiveStreamData | null>(null)
   const sessionSigRef = useRef('')
   const isLiveRef = useRef(false)
   const archiveModeRef = useRef(false)
-  const snapshot = isLive ? activeSnapshot : archiveMode ? archiveSnapshot : null
   const hasArchive = Boolean(archiveSnapshot)
 
-  const { data, isLoading, isError, error } = useQuery({
+  // Transport health, active-session state, and archive mode are three
+  // independent inputs; deriveLivePhase collapses them into one UI phase.
+  const phase = deriveLivePhase({
+    transport: streamStatus,
+    isLive,
+    hasActiveSnapshot: Boolean(activeSnapshot),
+    hasArchive,
+    archiveMode,
+  })
+  const snapshot = phase === 'archive' ? archiveSnapshot : isLive ? activeSnapshot : null
+
+  const { data, isError, error } = useQuery({
     queryKey: ['live-state'],
     queryFn: fetchLiveState,
     staleTime: 5_000,
   })
+
+  // Weekend context (previous/next/analysis) is only needed when no session is
+  // streaming; keep the queries idle during a live session.
+  const notLive = !isLive
+  const nowDate = useMemo(() => new Date(now), [now])
+  const seasonsQuery = useQuery({
+    queryKey: ['seasons'],
+    queryFn: fetchSeasons,
+    enabled: notLive,
+  })
+  const latestSeason = seasonsQuery.data?.[0] ?? null
+  const meetingsQuery = useQuery({
+    queryKey: ['meetings', latestSeason],
+    queryFn: () => fetchLocalMeetings(latestSeason!),
+    enabled: notLive && latestSeason != null,
+    staleTime: 60_000,
+  })
+  const focusMeeting = useMemo(
+    () => pickFocusMeeting(meetingsQuery.data ?? [], nowDate),
+    [meetingsQuery.data, nowDate],
+  )
+  const weekendQuery = useQuery({
+    queryKey: ['weekend', focusMeeting?.meeting_key],
+    queryFn: () => fetchWeekend(focusMeeting!.meeting_key),
+    enabled: notLive && focusMeeting != null,
+    staleTime: 60_000,
+  })
+  const weekendContext = useMemo(
+    () => deriveWeekendContext(weekendQuery.data, nowDate),
+    [weekendQuery.data, nowDate],
+  )
 
   useEffect(() => {
     if (!data) return
@@ -167,6 +215,8 @@ export function LiveTimingPage() {
   }, [snapshot])
 
   const rawRows = useMemo(() => sortLiveTimingRows(snapshot), [snapshot])
+  // Final-snapshot rows for the settling handoff (independent of live rows).
+  const settlingRows = useMemo(() => sortLiveTimingRows(archiveSnapshot), [archiveSnapshot])
 
   useEffect(() => {
     if (rawRows.length === 0) {
@@ -210,68 +260,72 @@ export function LiveTimingPage() {
     setPositions(archivePositions)
   }
 
+  const handleExitArchive = () => {
+    setArchiveMode(false)
+  }
+
   const archiveTimestamp = archiveSnapshotAt ? new Date(archiveSnapshotAt) : null
   const archiveLabel =
     archiveTimestamp && !Number.isNaN(archiveTimestamp.getTime())
       ? `Archived snapshot from ${archiveTimestamp.toLocaleString()}`
       : 'Archived live timing snapshot'
 
+  const showLiveInterpretations = allowsLiveInterpretations(phase)
+
   return (
-    <div className="page live-page" data-testid="live-page">
+    <div className="page live-page" data-testid="live-page" data-phase={phase}>
       {isError && (
         <div className="error-box">
           {error instanceof Error ? error.message : 'Failed to load live timing state'}
         </div>
       )}
 
-      {streamStatus === 'disconnected' && snapshot && !archiveMode && (
-        <div className="live-status-strip live-status-warn">
-          Stream disconnected — showing last received snapshot
+      {phase === 'disconnected' && (
+        <div className="live-status-strip live-status-warn" data-testid="live-disconnected-strip">
+          Connection lost — showing the last live data while we reconnect. This is not an archive.
         </div>
       )}
 
-      {archiveMode && snapshot && (
+      {phase === 'archive' && (
         <div className="live-status-strip live-status-archive" data-testid="live-archive-strip">
-          {archiveLabel} — live updates are paused for this archive view
+          <span>{archiveLabel} — read-only, live updates are paused</span>
+          <button type="button" className="live-archive-exit" onClick={handleExitArchive}>
+            Exit archive
+          </button>
         </div>
       )}
 
-      {isLoading && !snapshot && (
+      {phase === 'connecting' && (
         <div className="loading-state">connecting to live timing…</div>
       )}
 
-      {!isLoading && !snapshot && (
-        <div className="empty-state ui-card glass-panel" style={{ padding: '40px', textAlign: 'center', marginTop: '20vh', maxWidth: '400px', marginLeft: 'auto', marginRight: 'auto' }} data-testid="live-empty">
-          <div className="live-empty-status" style={{ marginBottom: '16px' }}>
-            <span className={`live-conn live-conn-${streamStatus}`}>{streamStatus}</span>
-          </div>
-          <Radio size={48} style={{ color: 'var(--text-3)', margin: '0 auto 16px auto', display: 'block' }} />
-          <h2 className="empty-state-title" style={{ fontSize: '20px', marginBottom: '8px' }}>No live session active</h2>
-          <p className="empty-state-desc" style={{ color: 'var(--text-2)' }}>
-            The telemetry feed is currently offline. <br /><br /> Check the <a href="/" style={{ color: 'var(--red)', textDecoration: 'underline' }}>Command Center</a> for the weekend schedule or explore historical data in the <a href="/race-hub" style={{ color: 'var(--red)', textDecoration: 'underline' }}>Race Hub</a>.
-          </p>
-          {hasArchive && (
-            <button type="button" className="live-archive-btn" onClick={handleViewArchive}>
-              <Archive size={15} />
-              View Last Session
-            </button>
-          )}
-        </div>
+      {(phase === 'settling' || phase === 'inactive') && (
+        <LiveHandoff
+          phase={phase}
+          transport={streamStatus}
+          context={weekendContext}
+          rows={settlingRows}
+          capturedAt={archiveSnapshotAt}
+          hasArchive={hasArchive}
+          onViewArchive={handleViewArchive}
+        />
       )}
 
-      {snapshot && (
+      {snapshot && rendersSnapshot(phase) && (
         <>
           <SessionBanner
-            isLive={isLive}
-            isArchive={archiveMode}
+            phase={phase}
             snapshot={snapshot}
             rows={rows}
-            connection={streamStatus}
+            transport={streamStatus}
             now={now}
+            capturedAt={phase === 'archive' ? archiveSnapshotAt : null}
           />
           <TrackStatusBanner status={snapshot.TrackStatus} />
           <PinnedDrivers rows={rows} history={gapHistory} pinned={pinned} onToggle={handleTogglePin} />
-          <TyreDegPanel rows={rows} sessionType={snapshot.Session?.SessionType} pinned={pinned} />
+          {showLiveInterpretations && (
+            <TyreDegPanel rows={rows} sessionType={snapshot.Session?.SessionType} pinned={pinned} />
+          )}
           <div className="live-columns">
             <div className="live-tower-col">
               <div className="sec-header">
