@@ -25,7 +25,8 @@ EOF
 
 harness_claude() {                      # Claude Code — print mode, auto-accept edits
   local dir="$1" prompt="$2"
-  ( cd "$dir" && claude -p "$(cat "$prompt")" --permission-mode acceptEdits )
+  local model="${BOXBOX_CLAUDE_MODEL:-opus}"
+  ( cd "$dir" && claude -p "$(cat "$prompt")" --model "$model" --effort high --permission-mode acceptEdits )
 }
 
 harness_codex() {                       # OpenAI Codex CLI — non-interactive exec, full auto
@@ -40,7 +41,8 @@ harness_opencode() {                    # opencode — non-interactive run
 
 harness_cursor() {                      # Cursor CLI agent — composer-2.5, headless full-auto
   local dir="$1" prompt="$2"
-  ( cd "$dir" && cursor-agent -p "$(cat "$prompt")" --model composer-2.5 --force --trust )
+  local model="${BOXBOX_CURSOR_MODEL:-composer-2.5}"
+  ( cd "$dir" && cursor-agent -p "$(cat "$prompt")" --model "$model" --force --trust )
 }
 
 harness_agy() {                         # Antigravity CLI — disabled until headless is verified
