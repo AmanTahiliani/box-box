@@ -74,3 +74,16 @@ export function weekendContextNotice(
   }
   return null
 }
+
+/**
+ * Embedded Preview should disclose its own freshness unless the Weekend shell
+ * already shows an equivalent notice (same DataAvailability kind).
+ */
+export function shouldShowEmbeddedNotice(
+  notice: DataAvailability | null | undefined,
+  shellNotice: DataAvailability | null | undefined,
+): boolean {
+  if (!notice) return false
+  if (!shellNotice) return true
+  return notice !== shellNotice
+}

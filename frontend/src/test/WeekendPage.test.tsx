@@ -50,6 +50,7 @@ import {
   fetchStartingGrid,
   fetchTrackOutline,
 } from '../api'
+import { rememberResponseAvailability } from '../lib/fetch'
 
 const mockContext = vi.mocked(fetchWeekendContext)
 const mockHub = vi.mocked(fetchChampionshipHub)
@@ -432,19 +433,99 @@ describe('WeekendPage canonical contract rendering', () => {
         }),
       }),
     )
-    // Force identity path by omitting meeting prop simulation: sessions for supplements fail,
-    // but shell stays. Actually with canonical meeting, identity never errors — force
-    // championship/track failures instead, and separately test standalone raw error below.
-    mockSessions.mockRejectedValue(new Error('API 500: sessions boom'))
-    mockHub.mockRejectedValue(new Error('API 429: rate limited'))
+    let sessionCalls = 0
+    mockSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey !== 2) return []
+      sessionCalls += 1
+      if (sessionCalls === 1) throw new Error('API 500: sessions boom')
+      return [
+        session({
+          session_key: 21,
+          session_name: 'Practice 1',
+          meeting_key: 2,
+          date_start: '2026-07-24T09:00:00Z',
+        }),
+      ]
+    })
 
     renderAt('/')
     await waitFor(() => expect(screen.getByTestId('wk-pre-head')).toBeInTheDocument())
     expect(screen.getByTestId('wk-pre-head')).toHaveTextContent('Hungarian Grand Prix')
-    expect(screen.getByTestId('weekend-pre-session')).toBeInTheDocument()
-    // Nested preview still mounts with canonical meeting; section errors are sanitized.
-    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
-    expect(screen.queryByText(/API 500|API 429|sessions boom/i)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('preview-sessions-error')).toBeInTheDocument())
+    expect(screen.queryByText(/API 500|sessions boom/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('preview-sessions-retry'))
+    await waitFor(() => expect(screen.getByTestId('preview-schedule')).toHaveTextContent('Practice 1'))
+    expect(sessionCalls).toBe(2)
+    expect(screen.queryByTestId('preview-sessions-error')).not.toBeInTheDocument()
+  })
+
+  it('Limited Retry refetches failed championship/news supplements once', async () => {
+    mockContext.mockResolvedValue(context({ temporal_state: 'between_weekends' }))
+    let hubCalls = 0
+    let newsCalls = 0
+    mockHub.mockImplementation(async () => {
+      hubCalls += 1
+      if (hubCalls === 1) throw new Error('API 503: hub')
+      return hub
+    })
+    mockNews.mockImplementation(async () => {
+      newsCalls += 1
+      if (newsCalls === 1) throw new Error('API 503: news')
+      return []
+    })
+
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-data-notice')).toHaveTextContent(/Limited/i))
+    const retry = screen.getByTestId('weekend-data-notice').querySelector('button')!
+    expect(retry).toBeEnabled()
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+
+    await waitFor(() => expect(screen.queryByTestId('weekend-data-notice')).not.toBeInTheDocument())
+    expect(hubCalls).toBe(2)
+    expect(newsCalls).toBe(2)
+    // Canonical context is not the failed resource — only one initial fetch.
+    expect(mockContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('pre_session keeps shell Partial while disclosing distinct Preview stale', async () => {
+    const next = meeting({
+      meeting_key: 2,
+      meeting_name: 'Hungarian Grand Prix',
+      date_start: '2026-07-24T09:00:00Z',
+    })
+    mockContext.mockResolvedValue(
+      context({
+        temporal_state: 'pre_session',
+        next_meeting: next,
+        focus_meeting: next,
+        next_session: ctxSession({
+          session: session({
+            session_key: 21,
+            session_name: 'Practice 1',
+            meeting_key: 2,
+            date_start: '2026-07-24T09:00:00Z',
+          }),
+          meeting: next,
+          availability: availability({ freshness: 'partial', local_analysis: 'partial' }),
+        }),
+      }),
+    )
+    mockSessions.mockResolvedValue([
+      session({
+        session_key: 21,
+        session_name: 'Practice 1',
+        meeting_key: 2,
+        date_start: '2026-07-24T09:00:00Z',
+      }),
+    ])
+    rememberResponseAvailability(hub, { source: 'openf1', freshness: 'stale' })
+    mockHub.mockResolvedValue(hub)
+
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-data-notice')).toHaveTextContent(/Partial/i))
+    await waitFor(() => expect(screen.getByTestId('preview-data-notice')).toHaveTextContent(/Stale/i))
   })
 
   it('restores Race Hub meeting/session focus from the Weekend URL search contract', async () => {

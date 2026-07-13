@@ -517,12 +517,35 @@ export function BriefingPage() {
   const hasDigest = meetings.length > 0
   const showEmpty = tagFiltered.length === 0 && grouped.recent.length === 0
 
+  const supplementsFetching =
+    meetingsQuery.isFetching || hubQuery.isFetching || seasonsQuery.isFetching
+  // React Query v5 clears isError while a post-error refetch is in flight
+  // (status → pending). Keep Limited mounted so Retry can show aria-busy.
+  const supplementDegraded = (q: {
+    isError: boolean
+    isFetching: boolean
+    isFetched: boolean
+    data: unknown
+  }) => q.isError || (q.isFetching && q.isFetched && q.data == null)
   const supplementsLimited =
     !isLoading &&
     !isError &&
-    ((meetingsQuery.isError && !meetingsQuery.isFetching) ||
-      (hubQuery.isError && !hubQuery.isFetching) ||
-      (seasonsQuery.isError && !seasonsQuery.isFetching))
+    (supplementDegraded(meetingsQuery) ||
+      supplementDegraded(hubQuery) ||
+      supplementDegraded(seasonsQuery))
+  const supplementsRetrying = supplementsLimited && supplementsFetching
+
+  const retrySupplements = () => {
+    if (supplementDegraded(meetingsQuery) && !meetingsQuery.isFetching) {
+      void meetingsQuery.refetch()
+    }
+    if (supplementDegraded(hubQuery) && !hubQuery.isFetching) {
+      void hubQuery.refetch()
+    }
+    if (supplementDegraded(seasonsQuery) && !seasonsQuery.isFetching) {
+      void seasonsQuery.refetch()
+    }
+  }
 
   const newsAvailability = noticeFromResponse(allNews, { includeLocal: true })
   const hubAvailability = noticeFromResponse(hub, { includeLocal: false })
@@ -560,11 +583,8 @@ export function BriefingPage() {
             <DataNotice
               availability="limited"
               message="Weekend grouping or driver tags are limited. Articles are still available."
-              onRetry={() => {
-                if (meetingsQuery.isError && !meetingsQuery.isFetching) void meetingsQuery.refetch()
-                if (hubQuery.isError && !hubQuery.isFetching) void hubQuery.refetch()
-                if (seasonsQuery.isError && !seasonsQuery.isFetching) void seasonsQuery.refetch()
-              }}
+              onRetry={retrySupplements}
+              retrying={supplementsRetrying}
               testId="briefing-data-notice"
             />
           )}

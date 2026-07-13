@@ -4,6 +4,7 @@ import type { WeekendContext } from '../../types'
 import { RacePreviewPage } from '../../pages/RacePreviewPage'
 import { ChampionshipRoundStrip, CountdownDisplay, Flag, SessionRail, railNodes } from './shared'
 import { meetingIdentity } from '../../lib/weekendContext'
+import type { DataAvailability } from '../../lib/availability'
 
 /**
  * PreSessionView folds the race preview surface into the Weekend home so there is
@@ -14,7 +15,16 @@ import { meetingIdentity } from '../../lib/weekendContext'
  * Canonical meeting/session identity is passed into Preview so the nested surface
  * cannot independently re-resolve a different current weekend.
  */
-export function PreSessionView({ context, now }: { context: WeekendContext; now: Date }) {
+export function PreSessionView({
+  context,
+  now,
+  shellAvailability = null,
+}: {
+  context: WeekendContext
+  now: Date
+  /** Weekend shell notice already shown — Preview dedupes only an equivalent kind. */
+  shellAvailability?: DataAvailability | null
+}) {
   const meeting = context.next_meeting ?? context.focus_meeting
   const identity = meetingIdentity(meeting)
   const next = context.next_session?.session
@@ -52,6 +62,7 @@ export function PreSessionView({ context, now }: { context: WeekendContext; now:
           embedded
           meeting={meeting}
           season={context.season ?? meeting?.year}
+          shellAvailability={shellAvailability}
         />
       </div>
 

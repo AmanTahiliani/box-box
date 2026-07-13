@@ -10,7 +10,12 @@ import {
   fetchTrackOutline,
 } from '../api'
 import { DataNotice, RouteState } from '../components/RouteState'
-import { noticeFromResponse, noticeMessage } from '../lib/availability'
+import {
+  noticeFromResponse,
+  noticeMessage,
+  shouldShowEmbeddedNotice,
+  type DataAvailability,
+} from '../lib/availability'
 import { userFacingError } from '../lib/fetch'
 import { countryAccent, countryFlag, formatGpDateRange } from '../lib/gpIdentity'
 import {
@@ -272,12 +277,18 @@ export interface RacePreviewPageProps {
   season?: number
   /** Embedded under Weekend — identity failures stay non-blocking. */
   embedded?: boolean
+  /**
+   * Availability already disclosed by the Weekend shell. Embedded Preview
+   * suppresses only an equivalent notice kind; distinct truth stays visible.
+   */
+  shellAvailability?: DataAvailability | null
 }
 
 export function RacePreviewPage({
   meeting: canonicalMeeting,
   season: canonicalSeason,
   embedded = false,
+  shellAvailability = null,
 }: RacePreviewPageProps = {}) {
   const [now, setNow] = useState(() => Date.now())
 
@@ -398,6 +409,17 @@ export function RacePreviewPage({
     noticeFromResponse(sessionsQuery.data, { includeLocal: false }) ??
     noticeFromResponse(priorResultsQuery.data, { includeLocal: false })
 
+  const showFreshnessNotice =
+    Boolean(dataNotice) &&
+    (!embedded || shouldShowEmbeddedNotice(dataNotice, shellAvailability))
+
+  const sessionsFailed = sessionsQuery.isError
+  const sessionsRetrying = sessionsQuery.isFetching
+
+  const retrySessions = () => {
+    if (!sessionsQuery.isFetching) void sessionsQuery.refetch()
+  }
+
   if (identityLoading) {
     return (
       <div className={embedded ? 'preview-embedded' : 'page'} data-testid="preview-loading">
@@ -455,12 +477,23 @@ export function RacePreviewPage({
       data-meeting-key={previewMeeting.meeting_key}
       data-embedded={embedded ? 'true' : undefined}
     >
-      {/* Weekend shell owns availability disclosure when Preview is embedded. */}
-      {!embedded && dataNotice && (
+      {showFreshnessNotice && dataNotice && (
         <DataNotice
           availability={dataNotice}
           message={noticeMessage(dataNotice)}
           testId="preview-data-notice"
+        />
+      )}
+
+      {sessionsFailed && (
+        <RouteState
+          kind="error"
+          title="Session schedule unavailable"
+          error={sessionsQuery.error}
+          onRetry={retrySessions}
+          retrying={sessionsRetrying}
+          testId="preview-sessions-error"
+          retryTestId="preview-sessions-retry"
         />
       )}
 
@@ -473,6 +506,20 @@ export function RacePreviewPage({
           now={nowDate}
           accent={accent}
         />
+      )}
+
+      {/* Embedded: still surface recovered schedule once sessions load. */}
+      {embedded && sessions.length > 0 && (
+        <div className="preview-schedule" data-testid="preview-schedule">
+          {sessions.map((session) => (
+            <div key={session.session_key} className="preview-schedule-item">
+              <span className="preview-schedule-name">{session.session_name}</span>
+              <span className="preview-schedule-time">
+                {formatSessionScheduleTime(session.date_start)}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="preview-grid">

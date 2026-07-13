@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createRouter, createRootRoute, createRoute } from '@tanstack/react-router'
+import { rememberResponseAvailability } from '../lib/fetch'
 import { RacePreviewPage } from '../pages/RacePreviewPage'
 import { ApiError } from '../lib/fetch'
 import type { ChampHubDriver, ChampionshipHub, EnrichedGrid, EnrichedResult, Meeting, Session, TrackOutline } from '../types'
@@ -175,7 +176,12 @@ const outline: TrackOutline = {
   bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 },
 }
 
-function renderPage(props?: { meeting?: Meeting; season?: number; embedded?: boolean }) {
+function renderPage(props?: {
+  meeting?: Meeting
+  season?: number
+  embedded?: boolean
+  shellAvailability?: 'local' | 'partial' | 'stale' | 'archive' | 'limited' | 'missing' | null
+}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const Page = () => <RacePreviewPage {...props} />
   const rootRoute = createRootRoute({
@@ -288,7 +294,7 @@ describe('RacePreviewPage', () => {
       return []
     })
 
-    renderPage({ meeting: upcomingMeeting, season: 2099, embedded: true })
+    renderPage({ meeting: upcomingMeeting, season: 2099, embedded: true, shellAvailability: 'partial' })
 
     await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
     expect(screen.getByTestId('preview-page')).toHaveAttribute('data-meeting-key', '100')
@@ -298,8 +304,74 @@ describe('RacePreviewPage', () => {
     expect(mockFetchMeetings).not.toHaveBeenCalledWith(2099, expect.anything(), expect.anything())
     expect(mockFetchSessions).toHaveBeenCalledWith(100, 'auto', expect.anything())
     expect(screen.queryByTestId('preview-header')).not.toBeInTheDocument()
-    // Weekend shell owns availability disclosure — no stacked Preview notice.
+  })
+
+  it('dedupes an equivalent shell notice but shows distinct Preview freshness', async () => {
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) return sessions
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    const staleHub = { ...hub }
+    rememberResponseAvailability(staleHub, { source: 'openf1', freshness: 'stale' })
+    mockFetchChampionshipHub.mockResolvedValue(staleHub)
+
+    const distinct = renderPage({
+      meeting: upcomingMeeting,
+      season: 2099,
+      embedded: true,
+      shellAvailability: 'partial',
+    })
+    await waitFor(() => expect(screen.getByTestId('preview-data-notice')).toHaveTextContent(/Stale/i))
+    distinct.unmount()
+
+    const partialHub = { ...hub }
+    rememberResponseAvailability(partialHub, { source: 'openf1', freshness: 'partial' })
+    mockFetchChampionshipHub.mockResolvedValue(partialHub)
+
+    renderPage({
+      meeting: upcomingMeeting,
+      season: 2099,
+      embedded: true,
+      shellAvailability: 'partial',
+    })
+    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
     expect(screen.queryByTestId('preview-data-notice')).not.toBeInTheDocument()
+  })
+
+  it('shows sanitized sessions failure with Retry that refetches once', async () => {
+    let sessionCalls = 0
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey !== 100) return [priorRaceSession]
+      sessionCalls += 1
+      if (sessionCalls === 1) {
+        throw new ApiError('http', 'API 500: sessions boom', { status: 500 })
+      }
+      return sessions
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    renderPage({ meeting: upcomingMeeting, season: 2099, embedded: true })
+
+    await waitFor(() => expect(screen.getByTestId('preview-sessions-error')).toBeInTheDocument())
+    expect(screen.getByTestId('preview-sessions-error')).not.toHaveTextContent(/API 500|sessions boom/i)
+    expect(screen.getByTestId('preview-page')).toBeInTheDocument()
+
+    const retry = screen.getByTestId('preview-sessions-retry')
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+
+    await waitFor(() => expect(screen.getByTestId('preview-schedule')).toHaveTextContent('FP1'))
+    expect(sessionCalls).toBe(2)
+    expect(screen.queryByTestId('preview-sessions-error')).not.toBeInTheDocument()
   })
 
   it('sanitizes raw HTTP errors and offers a guarded keyboard Retry', async () => {

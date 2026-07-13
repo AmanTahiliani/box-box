@@ -219,5 +219,36 @@ describe('BriefingPage digest layout', () => {
     })
     expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
     expect(screen.queryByTestId('briefing-error')).not.toBeInTheDocument()
+
+    let meetingsCalls = 1
+    let hubCalls = 1
+    let resolveMeetings!: (value: Meeting[]) => void
+    let resolveHub!: (value: ChampionshipHub) => void
+    mockFetchSeasonMeetings.mockImplementation(
+      () =>
+        new Promise<Meeting[]>((resolve) => {
+          meetingsCalls += 1
+          resolveMeetings = resolve
+        }),
+    )
+    mockFetchHub.mockImplementation(
+      () =>
+        new Promise<ChampionshipHub>((resolve) => {
+          hubCalls += 1
+          resolveHub = resolve
+        }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retrying…' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Retrying…' })).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Retrying…' }))
+    expect(meetingsCalls).toBe(2)
+    expect(hubCalls).toBe(2)
+
+    resolveMeetings([bahrain, monaco])
+    resolveHub(hub)
+    await waitFor(() => expect(screen.queryByTestId('briefing-data-notice')).not.toBeInTheDocument())
+    expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
   })
 })

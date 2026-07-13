@@ -25,9 +25,9 @@ export interface UseWeekendContextResult {
   /** True when championship or news supplements failed while context succeeded. */
   supplementsLimited: boolean
   now: Date
-  /** Refetch the canonical weekend-context read. */
+  /** Refetch canonical context and/or failed supplements as appropriate. */
   refetch: () => void
-  /** True while a canonical refetch is in flight. */
+  /** True while a relevant refetch is in flight. */
   isFetching: boolean
 }
 
@@ -88,14 +88,41 @@ export function useWeekendContext(): UseWeekendContextResult {
     [canonical],
   )
 
+  // Keep Limited visible while a failed supplement is refetching so Retry can
+  // expose disabled/aria-busy. React Query v5 clears isError during that refetch.
+  const supplementDegraded = (q: {
+    isError: boolean
+    isFetching: boolean
+    isFetched: boolean
+    data: unknown
+  }) => q.isError || (q.isFetching && q.isFetched && q.data == null)
+
   const supplementsLimited =
     canonicalReady &&
-    ((championshipQuery.isError && !championshipQuery.isFetching) ||
-      (newsQuery.isError && !newsQuery.isFetching))
+    (supplementDegraded(championshipQuery) || supplementDegraded(newsQuery))
 
   let loadState: WeekendLoadState = 'loading'
   if (contextQuery.isError) loadState = 'error'
   else if (canonicalReady) loadState = 'ready'
+
+  const refetch = () => {
+    if (!canonicalReady) {
+      if (!contextQuery.isFetching) void contextQuery.refetch()
+      return
+    }
+    // Freshness notice Retry refreshes the canonical context.
+    if (availabilityNotice && !contextQuery.isFetching) {
+      void contextQuery.refetch()
+    }
+    // Limited Retry must hit the failed supplements — not merely context.
+    // Gate on degraded (error or in-flight post-error refetch), not isError alone.
+    if (championshipQuery.isError && !championshipQuery.isFetching) {
+      void championshipQuery.refetch()
+    }
+    if (newsQuery.isError && !newsQuery.isFetching) {
+      void newsQuery.refetch()
+    }
+  }
 
   return {
     context: canonical,
@@ -106,9 +133,8 @@ export function useWeekendContext(): UseWeekendContextResult {
     availabilityNotice,
     supplementsLimited,
     now: nowDate,
-    refetch: () => {
-      if (!contextQuery.isFetching) void contextQuery.refetch()
-    },
-    isFetching: contextQuery.isFetching,
+    refetch,
+    isFetching:
+      contextQuery.isFetching || championshipQuery.isFetching || newsQuery.isFetching,
   }
 }

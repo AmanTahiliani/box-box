@@ -304,9 +304,14 @@ export function LiveTimingPage() {
   // feed-health truth rather than "Connection lost" + "Feed healthy".
   const feedHealth = effectiveFeedHealth(streamStatus, phase)
 
+  // A usable SSE/stream snapshot must not coexist with the fatal initial-state
+  // error — gate once live or retained archive data arrives.
+  const hasUsableStreamData = Boolean(activeSnapshot) || Boolean(archiveSnapshot)
+  const showInitialError = isError && !hasUsableStreamData
+
   return (
     <div className="page live-page" data-testid="live-page" data-phase={phase}>
-      {isError && (
+      {showInitialError && (
         <RouteState
           kind="error"
           title="Live timing unavailable"
@@ -334,7 +339,7 @@ export function LiveTimingPage() {
         </div>
       )}
 
-      {phase === 'connecting' && (isLoading || !liveStateFetched) && (
+      {phase === 'connecting' && (isLoading || !liveStateFetched) && !hasUsableStreamData && (
         <RouteState
           kind="loading"
           title="connecting to live timing…"

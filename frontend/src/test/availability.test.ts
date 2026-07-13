@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { QueryClient, QueryObserver } from '@tanstack/react-query'
 import {
   apiFetch,
+  availabilityAwareStructuralSharing,
   clearApiFetchInflight,
   DATA_FRESHNESS_HEADER,
   DATA_SOURCE_HEADER,
@@ -10,6 +12,7 @@ import {
 import {
   noticeFromFreshness,
   noticeFromResponse,
+  shouldShowEmbeddedNotice,
   weekendContextNotice,
 } from '../lib/availability'
 import type { WeekendContext } from '../types'
@@ -85,6 +88,13 @@ describe('response availability metadata', () => {
     expect(noticeFromResponse(hub)).toBe('stale')
   })
 
+  it('dedupes only equivalent embedded Preview notices', () => {
+    expect(shouldShowEmbeddedNotice('stale', 'partial')).toBe(true)
+    expect(shouldShowEmbeddedNotice('partial', 'partial')).toBe(false)
+    expect(shouldShowEmbeddedNotice('stale', null)).toBe(true)
+    expect(shouldShowEmbeddedNotice(null, 'partial')).toBe(false)
+  })
+
   it('derives Weekend Context notices from typed session freshness, skipping routine local', () => {
     const context: WeekendContext = {
       season: 2026,
@@ -127,5 +137,85 @@ describe('response availability metadata', () => {
       },
     }
     expect(weekendContextNotice(localOnly)).toBeNull()
+  })
+
+  it('updates metadata when structural sharing reuses an equal JSON object', () => {
+    const body = { season: 2026, drivers: [{ points: 1 }] }
+    const first = structuredClone(body)
+    const second = structuredClone(body)
+    rememberResponseAvailability(first, { source: 'openf1', freshness: 'stale' })
+    rememberResponseAvailability(second, { source: 'openf1', freshness: 'fresh' })
+
+    const shared = availabilityAwareStructuralSharing(first, second)
+    expect(shared).toBe(first)
+    expect(getResponseAvailability(shared)).toEqual({ source: 'openf1', freshness: 'fresh' })
+    expect(noticeFromResponse(shared)).toBeNull()
+
+    const third = structuredClone(body)
+    rememberResponseAvailability(third, { source: 'openf1', freshness: 'partial' })
+    const sharedAgain = availabilityAwareStructuralSharing(shared, third)
+    expect(sharedAgain).toBe(first)
+    expect(noticeFromResponse(sharedAgain)).toBe('partial')
+  })
+
+  it('QueryObserver stale→fresh and fresh→partial refetches update metadata and notices', async () => {
+    const body = { season: 2026, drivers: [{ points: 42 }] }
+    const sequence: Array<'stale' | 'fresh' | 'partial'> = ['stale', 'fresh', 'partial']
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const freshness = sequence[Math.min(call, sequence.length - 1)]
+        call += 1
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            [DATA_SOURCE_HEADER]: 'openf1',
+            [DATA_FRESHNESS_HEADER]: freshness,
+          },
+        })
+      }),
+    )
+
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          structuralSharing: availabilityAwareStructuralSharing,
+        },
+      },
+    })
+    const observer = new QueryObserver(client, {
+      queryKey: ['availability-observer'],
+      queryFn: () => apiFetch<typeof body>('/api/v1/championship/hub'),
+      staleTime: 0,
+    })
+
+    const notices: Array<string | null> = []
+    const unsub = observer.subscribe((result) => {
+      if (result.data) notices.push(noticeFromResponse(result.data))
+    })
+
+    await observer.refetch()
+    expect(noticeFromResponse(observer.getCurrentResult().data)).toBe('stale')
+    expect(notices[notices.length - 1]).toBe('stale')
+
+    await observer.refetch()
+    expect(observer.getCurrentResult().data).toEqual(body)
+    expect(getResponseAvailability(observer.getCurrentResult().data!)).toEqual({
+      source: 'openf1',
+      freshness: 'fresh',
+    })
+    expect(noticeFromResponse(observer.getCurrentResult().data)).toBeNull()
+    expect(notices[notices.length - 1]).toBeNull()
+
+    await observer.refetch()
+    expect(noticeFromResponse(observer.getCurrentResult().data)).toBe('partial')
+    expect(notices[notices.length - 1]).toBe('partial')
+    expect(call).toBe(3)
+
+    unsub()
+    client.clear()
   })
 })

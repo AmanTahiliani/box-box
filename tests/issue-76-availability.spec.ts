@@ -184,33 +184,66 @@ async function stubPreSession(page: Page, opts?: { failSessions?: boolean; recov
 }
 
 test.describe('Issue #76 availability / Preview resilience evidence', () => {
-  test('Weekend pre-session keeps shell usable on Preview supplement failure and recovers', async ({
+  test('Weekend pre-session recovers Preview sessions via Retry and keeps distinct notices', async ({
     page,
   }, testInfo) => {
-    await stubPreSession(page, { failSessions: true, recover: true })
+    let sessionCalls = 0
+    let allowSessions = false
+    await stubPreSession(page)
+    await page.unroute('**/api/v1/sessions**')
+    await page.route('**/api/v1/sessions**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.searchParams.get('meeting_key') === '2') {
+        sessionCalls += 1
+      }
+      if (!allowSessions) {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'API 500: forced sessions failure' }),
+        })
+        return
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            session_key: 21,
+            session_name: 'Practice 1',
+            session_type: 'Practice',
+            meeting_key: 2,
+            date_start: '2026-07-24T09:00:00Z',
+            date_end: '2026-07-24T10:00:00Z',
+            gmt_offset: '',
+          },
+        ]),
+      })
+    })
+
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')
 
     await expect(page.getByTestId('weekend-pre-session')).toBeVisible()
     await expect(page.getByTestId('wk-pre-head')).toContainText('Hungarian Grand Prix')
     await expect(page.getByTestId('weekend-data-notice')).toContainText(/Partial/i)
-    // Weekend shell owns disclosure — embedded Preview must not stack a second notice.
-    await expect(page.getByTestId('preview-data-notice')).toHaveCount(0)
+    // Shell Partial + Preview championship Stale are distinct — both may show.
+    await expect(page.getByTestId('preview-data-notice')).toContainText(/Stale/i)
     await expect(page.getByTestId('preview-page')).toBeVisible()
     await expect(page.getByTestId('preview-page')).toHaveAttribute('data-meeting-key', '2')
-    // No raw HTTP jargon in the primary Weekend child.
+    await expect(page.getByTestId('preview-sessions-error')).toBeVisible()
     await expect(page.locator('body')).not.toContainText(/API 500|forced sessions failure/i)
-    // Title fight remains usable from the shared championship supplement.
     await expect(page.getByTestId('preview-title-fight-card')).toContainText('VER')
 
-    // Recovery: guarded Retry on the shell notice re-runs context; sessions auto-recover
-    // on React Query retry (recover stub). Shell stays usable either way.
-    const retry = page.getByTestId('weekend-data-notice').getByRole('button', { name: 'Retry' })
+    const failedCalls = sessionCalls
+    expect(failedCalls).toBeGreaterThanOrEqual(1)
+
+    allowSessions = true
+    const retry = page.getByTestId('preview-sessions-retry')
     await expect(retry).toBeEnabled()
     await retry.click()
-    await expect(page.getByTestId('weekend-pre-session')).toBeVisible()
-    await expect(page.getByTestId('preview-page')).toBeVisible()
-    await expect(page.getByTestId('preview-title-fight-card')).toContainText('VER')
+    await expect(page.getByTestId('preview-schedule')).toContainText('Practice 1')
+    await expect(page.getByTestId('preview-sessions-error')).toHaveCount(0)
+    expect(sessionCalls).toBe(failedCalls + 1)
 
     await page.screenshot({
       path: path.join(evidenceDir, `weekend-presession-failure-mobile-${testInfo.project.name}.png`),
@@ -222,9 +255,8 @@ test.describe('Issue #76 availability / Preview resilience evidence', () => {
       path: path.join(evidenceDir, `weekend-presession-partial-desktop-${testInfo.project.name}.png`),
       fullPage: true,
     })
-    // Desktop evidence must also keep a single Partial notice vocabulary.
     await expect(page.getByTestId('weekend-data-notice')).toContainText(/Partial/i)
-    await expect(page.getByTestId('preview-data-notice')).toHaveCount(0)
+    await expect(page.getByTestId('preview-data-notice')).toContainText(/Stale/i)
   })
 
   test('Championship discloses stale metadata above usable standings', async ({ page }, testInfo) => {
@@ -343,6 +375,8 @@ test.describe('Issue #76 availability / Preview resilience evidence', () => {
     await expect(page.getByTestId('briefing-data-notice')).toContainText(/Limited/i)
     await expect(page.getByText('Paddock briefing sample')).toBeVisible()
     await expect(page.locator('body')).not.toContainText(/API 503/i)
+    const retry = page.getByTestId('briefing-data-notice').getByRole('button', { name: 'Retry' })
+    await expect(retry).toBeEnabled()
     await page.screenshot({
       path: path.join(evidenceDir, `briefing-limited-mobile-${testInfo.project.name}.png`),
       fullPage: true,

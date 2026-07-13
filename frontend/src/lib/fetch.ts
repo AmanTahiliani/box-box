@@ -1,5 +1,7 @@
 /** Bounded fetch helpers for primary-route resilience. */
 
+import { replaceEqualDeep } from '@tanstack/react-query'
+
 export const DEFAULT_FETCH_TIMEOUT_MS = 15_000
 
 /** CORS-readable success provenance headers from the Go API. */
@@ -53,6 +55,35 @@ export function rememberResponseAvailability(
   meta: ResponseAvailability,
 ): void {
   responseAvailability.set(data, meta)
+}
+
+/** Drop availability metadata from a payload (e.g. after a header-less refetch). */
+export function clearResponseAvailability(data: object): void {
+  responseAvailability.delete(data)
+}
+
+/**
+ * React Query structural sharing that keeps header availability in sync.
+ *
+ * Default `replaceEqualDeep` reuses the previous object when JSON is equal, which
+ * would leave stale WeakMap metadata attached after a stale→fresh (or fresh→partial)
+ * refetch of an identical body. Always re-bind the latest fetch's metadata onto the
+ * object that lands in the query cache.
+ */
+export function availabilityAwareStructuralSharing<T>(
+  oldData: T | undefined,
+  newData: T,
+): T {
+  const meta = getResponseAvailability(newData)
+  const shared = replaceEqualDeep(oldData, newData) as T
+  if (shared !== null && typeof shared === 'object') {
+    if (meta) {
+      rememberResponseAvailability(shared as object, meta)
+    } else {
+      clearResponseAvailability(shared as object)
+    }
+  }
+  return shared
 }
 
 export type ApiErrorKind = 'http' | 'timeout' | 'abort' | 'network'
