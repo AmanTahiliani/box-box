@@ -164,8 +164,8 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 	if ttl > 0 {
 		age := time.Since(time.Unix(createdAt, 0))
 		if age > ttl {
-			// Expired — delete and return miss.
-			_, _ = c.db.Exec(`DELETE FROM cache WHERE key = ?`, key)
+			// Expired entries remain stored so get() can use them as a stale
+			// fallback if the live request fails. Prune() owns physical cleanup.
 			atomic.AddInt64(&c.stats.Misses, 1)
 			return nil, false
 		}

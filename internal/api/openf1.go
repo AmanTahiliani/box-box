@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,8 +60,14 @@ func retryAfter429(resp *http.Response) time.Duration {
 // Without this, concurrent fan-outs (championship hub, track prefetch) burst
 // past the free-tier limit and callers silently treat 429s as missing data.
 func (c *OpenF1Client) doPaced(req *http.Request) (*http.Response, error) {
+	return c.doPacedContext(req.Context(), req)
+}
+
+func (c *OpenF1Client) doPacedContext(ctx context.Context, req *http.Request) (*http.Response, error) {
 	for attempt := 0; ; attempt++ {
-		c.pacer.wait()
+		if err := c.pacer.waitContext(ctx); err != nil {
+			return nil, err
+		}
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			return nil, err
@@ -70,7 +77,14 @@ func (c *OpenF1Client) doPaced(req *http.Request) (*http.Response, error) {
 		}
 		delay := retryAfter429(resp)
 		resp.Body.Close()
-		time.Sleep(delay)
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		}
+		timer.Stop()
 	}
 }
 
@@ -83,13 +97,23 @@ func (c *OpenF1Client) doPaced(req *http.Request) (*http.Response, error) {
 // entry for this URL, that stale entry is returned instead of propagating the
 // error.  The client's staleFlag is set so the UI can show a disclaimer.
 func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
+	return c.getContext(context.Background(), url)
+}
+
+// getContext is the cancellable form used by bounded optional web enrichment.
+// A caller cancellation never falls back to stale data: the work is no longer
+// relevant to that response and must stop instead of continuing in background.
+func (c *OpenF1Client) getContext(ctx context.Context, url string) (io.ReadCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// 1. Check the cache for a fresh (non-expired) entry.
 	if cachedData, ok := c.cache.Get(url); ok {
 		return io.NopCloser(bytes.NewReader(cachedData)), nil
 	}
 
 	// 2. Attempt a live network request.
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		// Even a request-construction failure warrants a stale fallback.
 		return c.tryStale(url, err)
@@ -98,8 +122,11 @@ func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
 
-	resp, err := c.doPaced(req)
+	resp, err := c.doPacedContext(ctx, req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return c.tryStale(url, err)
 	}
 	defer resp.Body.Close()
@@ -128,6 +155,9 @@ func (c *OpenF1Client) get(url string) (io.ReadCloser, error) {
 	// 3. Success — read the body, store in cache, return.
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return c.tryStale(url, err)
 	}
 
@@ -245,7 +275,13 @@ func (c *OpenF1Client) GetDriversForSession(sessionKey int) ([]models.Driver, er
 }
 
 func (c *OpenF1Client) GetDriver(sessionKey, driverNumber int) (*models.Driver, error) {
-	body, err := c.get(fmt.Sprintf("%s/v1/drivers?session_key=%d&driver_number=%d", c.url, sessionKey, driverNumber))
+	return c.GetDriverContext(context.Background(), sessionKey, driverNumber)
+}
+
+// GetDriverContext is a cancellable single-driver lookup for optional bounded
+// enrichment. Other public methods retain their existing background semantics.
+func (c *OpenF1Client) GetDriverContext(ctx context.Context, sessionKey, driverNumber int) (*models.Driver, error) {
+	body, err := c.getContext(ctx, fmt.Sprintf("%s/v1/drivers?session_key=%d&driver_number=%d", c.url, sessionKey, driverNumber))
 	if err != nil {
 		return nil, err
 	}

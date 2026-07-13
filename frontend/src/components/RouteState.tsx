@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { isTimeoutError, userFacingError } from '../lib/fetch'
+import { noticeMessage, type DataAvailability } from '../lib/availability'
 
-/** Weekend Context terminology for coverage / availability indicators. */
-export type DataAvailability = 'local' | 'partial' | 'stale' | 'archive' | 'limited' | 'missing'
+export type { DataAvailability }
 
 export function availabilityLabel(kind: DataAvailability): string {
   switch (kind) {
@@ -131,6 +131,7 @@ interface StaleNoticeProps {
   availability?: DataAvailability
   message?: string
   onRetry?: () => void
+  retrying?: boolean
   testId?: string
 }
 
@@ -139,26 +140,22 @@ export function DataNotice({
   availability = 'stale',
   message,
   onRetry,
+  retrying = false,
   testId = 'data-notice',
 }: StaleNoticeProps) {
-  const defaultMessage =
-    availability === 'stale'
-      ? 'Showing stale cached data. Retry to refresh.'
-      : availability === 'limited'
-        ? 'Some optional details are unavailable. Core local data is shown.'
-        : availability === 'partial'
-          ? 'Coverage is partial for this weekend.'
-          : availability === 'archive'
-            ? 'Showing an archived snapshot.'
-            : 'Data availability is limited.'
-
   return (
     <div className="data-notice" data-testid={testId} role="status">
       <AvailabilityBadge kind={availability} />
-      <span className="data-notice-text">{message ?? defaultMessage}</span>
+      <span className="data-notice-text">{message ?? noticeMessage(availability)}</span>
       {onRetry && (
-        <button type="button" className="route-state-retry data-notice-retry" onClick={onRetry}>
-          Retry
+        <button
+          type="button"
+          className="route-state-retry data-notice-retry"
+          onClick={onRetry}
+          disabled={retrying}
+          aria-busy={retrying || undefined}
+        >
+          {retrying ? 'Retrying…' : 'Retry'}
         </button>
       )}
     </div>

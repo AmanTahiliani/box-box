@@ -24,7 +24,8 @@ import {
 } from '../lib/digest'
 import { stripHtml, timeAgo } from '../utils'
 import type { ArticleContent, NewsItem } from '../types'
-import { RouteState } from '../components/RouteState'
+import { DataNotice, RouteState } from '../components/RouteState'
+import { aggregateNotices, noticeFromResponse, noticeMessage } from '../lib/availability'
 import '../styles/digest.css'
 
 type Category = 'all' | 'official' | 'news' | 'video'
@@ -516,6 +517,43 @@ export function BriefingPage() {
   const hasDigest = meetings.length > 0
   const showEmpty = tagFiltered.length === 0 && grouped.recent.length === 0
 
+  const supplementsFetching =
+    meetingsQuery.isFetching || hubQuery.isFetching || seasonsQuery.isFetching
+  // React Query v5 clears isError while a post-error refetch is in flight
+  // (status → pending). Keep Limited mounted so Retry can show aria-busy.
+  const supplementDegraded = (q: {
+    isError: boolean
+    isFetching: boolean
+    isFetched: boolean
+    data: unknown
+  }) => q.isError || (q.isFetching && q.isFetched && q.data == null)
+  const supplementsLimited =
+    !isLoading &&
+    !isError &&
+    (supplementDegraded(meetingsQuery) ||
+      supplementDegraded(hubQuery) ||
+      supplementDegraded(seasonsQuery))
+  const supplementsRetrying = supplementsLimited && supplementsFetching
+
+  const retrySupplements = () => {
+    if (supplementDegraded(meetingsQuery) && !meetingsQuery.isFetching) {
+      void meetingsQuery.refetch()
+    }
+    if (supplementDegraded(hubQuery) && !hubQuery.isFetching) {
+      void hubQuery.refetch()
+    }
+    if (supplementDegraded(seasonsQuery) && !seasonsQuery.isFetching) {
+      void seasonsQuery.refetch()
+    }
+  }
+
+  // Aggregate by severity so routine local News cannot mask stale hub/meetings.
+  const availability = aggregateNotices([
+    noticeFromResponse(allNews, { includeLocal: true }),
+    noticeFromResponse(hub, { includeLocal: false }),
+    noticeFromResponse(meetings, { includeLocal: false }),
+  ])
+
   return (
     <div className="bp-page" data-testid="briefing-page">
       <div className="bp-topbar">
@@ -543,6 +581,27 @@ export function BriefingPage() {
 
       {!isLoading && !isError && (
         <>
+          {supplementsLimited && (
+            <DataNotice
+              availability="limited"
+              message="Weekend grouping or driver tags are limited. Articles are still available."
+              onRetry={retrySupplements}
+              retrying={supplementsRetrying}
+              testId="briefing-data-notice"
+            />
+          )}
+          {!supplementsLimited && availability && (
+            <DataNotice
+              availability={availability}
+              message={noticeMessage(availability)}
+              onRetry={() => {
+                if (!isFetching) void refetch()
+              }}
+              retrying={isFetching}
+              testId="briefing-data-notice"
+            />
+          )}
+
           <CategoryTabs
             active={activeCategory}
             counts={counts}

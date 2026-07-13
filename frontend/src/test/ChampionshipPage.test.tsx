@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createRouter, createRootRoute, createRoute } from '@tanstack/react-router'
 import { ChampionshipPage } from '../pages/ChampionshipPage'
 import type { ChampHubDriver, ChampHubTeam, ChampionshipHub } from '../types'
+import { rememberResponseAvailability } from '../lib/fetch'
 
 vi.mock('../api', () => ({
   fetchSeasons: vi.fn(),
@@ -225,5 +226,37 @@ describe('ChampionshipPage', () => {
     expect(rows[0]).toHaveTextContent('6–5')
     expect(rows[1]).toHaveTextContent('Red Bull')
     expect(rows[1]).toHaveTextContent('9–1')
+  })
+
+  it('shows a non-blocking stale notice above usable standings', async () => {
+    const staleHub = { ...hub }
+    rememberResponseAvailability(staleHub, { source: 'openf1', freshness: 'stale' })
+    mockFetchHub.mockResolvedValue(staleHub)
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship')).toBeInTheDocument())
+    expect(screen.getByTestId('championship-data-notice')).toHaveTextContent(/Stale/i)
+    expect(screen.getByTestId('champ-view-drivers')).toBeInTheDocument()
+    expect(screen.getAllByText('VER').length).toBeGreaterThan(0)
+  })
+
+  it('shows a non-blocking partial notice when reported', async () => {
+    const partialHub = { ...hub }
+    rememberResponseAvailability(partialHub, { source: 'openf1', freshness: 'partial' })
+    mockFetchHub.mockResolvedValue(partialHub)
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship-data-notice')).toBeInTheDocument())
+    expect(screen.getByTestId('championship-data-notice')).toHaveTextContent(/Partial/i)
+  })
+
+  it('shows a non-blocking local notice when reported', async () => {
+    const localHub = { ...hub }
+    rememberResponseAvailability(localHub, { source: 'local', freshness: 'local' })
+    mockFetchHub.mockResolvedValue(localHub)
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship-data-notice')).toBeInTheDocument())
+    expect(screen.getByTestId('championship-data-notice')).toHaveTextContent(/Local/i)
   })
 })

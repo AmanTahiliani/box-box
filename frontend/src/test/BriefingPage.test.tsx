@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BriefingPage } from '../pages/BriefingPage'
@@ -21,6 +21,7 @@ import {
   fetchChampionshipHub,
   markNewsRead,
 } from '../api'
+import { rememberResponseAvailability } from '../lib/fetch'
 
 const mockFetchNews = vi.mocked(fetchNews)
 const mockFetchNewsArticle = vi.mocked(fetchNewsArticle)
@@ -207,5 +208,63 @@ describe('BriefingPage digest layout', () => {
       expect(screen.getByRole('tab', { name: /All/i })).toBeInTheDocument()
     })
     expect(screen.getByRole('tab', { name: /News/i })).toBeInTheDocument()
+  })
+
+  it('keeps articles usable and shows Limited when grouping supplements fail', async () => {
+    mockFetchSeasonMeetings.mockRejectedValue(new Error('API 503: meetings failed'))
+    mockFetchHub.mockRejectedValue(new Error('API 503: hub failed'))
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('briefing-data-notice')).toHaveTextContent(/Limited/i)
+    })
+    expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
+    expect(screen.queryByTestId('briefing-error')).not.toBeInTheDocument()
+
+    let meetingsCalls = 1
+    let hubCalls = 1
+    let resolveMeetings!: (value: Meeting[]) => void
+    let resolveHub!: (value: ChampionshipHub) => void
+    mockFetchSeasonMeetings.mockImplementation(
+      () =>
+        new Promise<Meeting[]>((resolve) => {
+          meetingsCalls += 1
+          resolveMeetings = resolve
+        }),
+    )
+    mockFetchHub.mockImplementation(
+      () =>
+        new Promise<ChampionshipHub>((resolve) => {
+          hubCalls += 1
+          resolveHub = resolve
+        }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retrying…' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Retrying…' })).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Retrying…' }))
+    expect(meetingsCalls).toBe(2)
+    expect(hubCalls).toBe(2)
+
+    resolveMeetings([bahrain, monaco])
+    resolveHub(hub)
+    await waitFor(() => expect(screen.queryByTestId('briefing-data-notice')).not.toBeInTheDocument())
+    expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
+  })
+
+  it('preserves Stale hub over routine local News when sources conflict', async () => {
+    const localNews = [...newsItems]
+    rememberResponseAvailability(localNews, { source: 'local', freshness: 'local' })
+    const staleHub = { ...hub }
+    rememberResponseAvailability(staleHub, { source: 'openf1', freshness: 'stale' })
+    mockFetchNews.mockResolvedValue(localNews)
+    mockFetchHub.mockResolvedValue(staleHub)
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('briefing-data-notice')).toHaveTextContent(/Stale/i))
+    expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
+    expect(screen.queryByTestId('briefing-error')).not.toBeInTheDocument()
   })
 })

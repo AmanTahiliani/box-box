@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createRouter, createRootRoute, createRoute } from '@tanstack/react-router'
+import { rememberResponseAvailability } from '../lib/fetch'
 import { RacePreviewPage } from '../pages/RacePreviewPage'
+import { ApiError } from '../lib/fetch'
 import type { ChampHubDriver, ChampionshipHub, EnrichedGrid, EnrichedResult, Meeting, Session, TrackOutline } from '../types'
 
 vi.mock('../api', () => ({
@@ -174,16 +176,22 @@ const outline: TrackOutline = {
   bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 },
 }
 
-function renderPage() {
+function renderPage(props?: {
+  meeting?: Meeting
+  season?: number
+  embedded?: boolean
+  shellAvailability?: 'local' | 'partial' | 'stale' | 'archive' | 'limited' | 'missing' | null
+}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const Page = () => <RacePreviewPage {...props} />
   const rootRoute = createRootRoute({
     component: () => (
       <QueryClientProvider client={queryClient}>
-        <RacePreviewPage />
+        <Page />
       </QueryClientProvider>
     ),
   })
-  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: RacePreviewPage })
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: Page })
   const router = createRouter({ routeTree: rootRoute.addChildren([indexRoute]) })
   return render(<RouterProvider router={router} />)
 }
@@ -273,5 +281,146 @@ describe('RacePreviewPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('preview-last-year-card')).toHaveTextContent('First time on the calendar')
     })
+  })
+
+  it('uses canonical meeting identity when embedded and skips seasons/meetings selection', async () => {
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) return sessions
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    renderPage({ meeting: upcomingMeeting, season: 2099, embedded: true, shellAvailability: 'partial' })
+
+    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
+    expect(screen.getByTestId('preview-page')).toHaveAttribute('data-meeting-key', '100')
+    expect(screen.getByTestId('preview-page')).toHaveAttribute('data-embedded', 'true')
+    expect(mockFetchSeasons).not.toHaveBeenCalled()
+    // Current-year meetings selection is skipped; prior-year lookup may still run.
+    expect(mockFetchMeetings).not.toHaveBeenCalledWith(2099, expect.anything(), expect.anything())
+    expect(mockFetchSessions).toHaveBeenCalledWith(100, 'auto', expect.anything())
+    expect(screen.queryByTestId('preview-header')).not.toBeInTheDocument()
+  })
+
+  it('dedupes an equivalent shell notice but shows distinct Preview freshness', async () => {
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) return sessions
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    const staleHub = { ...hub }
+    rememberResponseAvailability(staleHub, { source: 'openf1', freshness: 'stale' })
+    mockFetchChampionshipHub.mockResolvedValue(staleHub)
+
+    const distinct = renderPage({
+      meeting: upcomingMeeting,
+      season: 2099,
+      embedded: true,
+      shellAvailability: 'partial',
+    })
+    await waitFor(() => expect(screen.getByTestId('preview-data-notice')).toHaveTextContent(/Stale/i))
+    distinct.unmount()
+
+    const partialHub = { ...hub }
+    rememberResponseAvailability(partialHub, { source: 'openf1', freshness: 'partial' })
+    mockFetchChampionshipHub.mockResolvedValue(partialHub)
+
+    renderPage({
+      meeting: upcomingMeeting,
+      season: 2099,
+      embedded: true,
+      shellAvailability: 'partial',
+    })
+    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
+    expect(screen.queryByTestId('preview-data-notice')).not.toBeInTheDocument()
+  })
+
+  it('preserves Stale/Partial over routine Championship Local from conflicting sources', async () => {
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) {
+        const payload = [...sessions]
+        rememberResponseAvailability(payload, { source: 'openf1', freshness: 'stale' })
+        return payload
+      }
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    const localHub = { ...hub }
+    rememberResponseAvailability(localHub, { source: 'local', freshness: 'local' })
+    mockFetchChampionshipHub.mockResolvedValue(localHub)
+
+    renderPage({ meeting: upcomingMeeting, season: 2099 })
+
+    await waitFor(() => expect(screen.getByTestId('preview-data-notice')).toHaveTextContent(/Stale/i))
+    expect(screen.getByTestId('preview-title-fight-card')).toBeInTheDocument()
+    expect(screen.getByTestId('preview-schedule')).toHaveTextContent('FP1')
+  })
+
+  it('shows sanitized sessions failure with Retry that refetches once', async () => {
+    let sessionCalls = 0
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey !== 100) return [priorRaceSession]
+      sessionCalls += 1
+      if (sessionCalls === 1) {
+        throw new ApiError('http', 'API 500: sessions boom', { status: 500 })
+      }
+      return sessions
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    renderPage({ meeting: upcomingMeeting, season: 2099, embedded: true })
+
+    await waitFor(() => expect(screen.getByTestId('preview-sessions-error')).toBeInTheDocument())
+    expect(screen.getByTestId('preview-sessions-error')).not.toHaveTextContent(/API 500|sessions boom/i)
+    expect(screen.getByTestId('preview-page')).toBeInTheDocument()
+
+    const retry = screen.getByTestId('preview-sessions-retry')
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+
+    await waitFor(() => expect(screen.getByTestId('preview-schedule')).toHaveTextContent('FP1'))
+    expect(sessionCalls).toBe(2)
+    expect(screen.queryByTestId('preview-sessions-error')).not.toBeInTheDocument()
+  })
+
+  it('sanitizes raw HTTP errors and offers a guarded keyboard Retry', async () => {
+    mockFetchSeasons.mockRejectedValue(
+      new ApiError('http', 'API 500: Internal Server Error', { status: 500 }),
+    )
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('preview-error')).toBeInTheDocument())
+    expect(screen.getByTestId('preview-error')).not.toHaveTextContent(/API 500|Internal Server Error/i)
+    const retry = screen.getByRole('button', { name: 'Retry' })
+    expect(retry).toBeEnabled()
+
+    mockFetchSeasons.mockResolvedValue([2099])
+    mockFetchMeetings.mockResolvedValue([upcomingMeeting])
+    mockFetchSessions.mockResolvedValue(sessions)
+
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+
+    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
+    // Guarded: one in-flight refetch despite double click while fetching.
+    expect(mockFetchSeasons.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 })

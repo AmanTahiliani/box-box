@@ -9,6 +9,15 @@ import {
   fetchStartingGrid,
   fetchTrackOutline,
 } from '../api'
+import { DataNotice, RouteState } from '../components/RouteState'
+import {
+  aggregateNotices,
+  noticeFromResponse,
+  noticeMessage,
+  shouldShowEmbeddedNotice,
+  type DataAvailability,
+} from '../lib/availability'
+import { userFacingError } from '../lib/fetch'
 import { countryAccent, countryFlag, formatGpDateRange } from '../lib/gpIdentity'
 import {
   buildTitleFightContext,
@@ -37,7 +46,7 @@ function SectionState({
   children,
 }: {
   loading?: boolean
-  error?: Error | null
+  error?: unknown
   empty?: boolean
   emptyMessage?: string
   children: ReactNode
@@ -47,8 +56,8 @@ function SectionState({
   }
   if (error) {
     return (
-      <div className="preview-section-state error">
-        {error instanceof Error ? error.message : 'Failed to load'}
+      <div className="preview-section-state error" role="status">
+        {userFacingError(error)}
       </div>
     )
   }
@@ -66,7 +75,7 @@ function TrackOutlineCard({
 }: {
   outline: TrackOutline | null | undefined
   loading: boolean
-  error: Error | null
+  error: unknown
   accent: string
 }) {
   const outlinePath = useMemo(() => buildOutlinePath(outline?.points ?? []), [outline])
@@ -101,7 +110,7 @@ function LastYearCard({
 }: {
   year: number | null
   loading: boolean
-  error: Error | null
+  error: unknown
   podium: ReturnType<typeof extractPodium>
   pole: ReturnType<typeof extractPole>
   isFirstTime: boolean
@@ -150,7 +159,7 @@ function TitleFightCard({
   season,
 }: {
   loading: boolean
-  error: Error | null
+  error: unknown
   drivers: ReturnType<typeof buildTitleFightContext>
   sprintWeekend: boolean
   season: number | null
@@ -259,7 +268,29 @@ function PreviewHeader({
   )
 }
 
-export function RacePreviewPage() {
+export interface RacePreviewPageProps {
+  /**
+   * Canonical meeting identity from Weekend Context. When set, Preview must not
+   * independently re-select another current meeting/session.
+   */
+  meeting?: Meeting
+  /** Season for championship supplement; defaults to meeting.year. */
+  season?: number
+  /** Embedded under Weekend — identity failures stay non-blocking. */
+  embedded?: boolean
+  /**
+   * Availability already disclosed by the Weekend shell. Embedded Preview
+   * suppresses only an equivalent notice kind; distinct truth stays visible.
+   */
+  shellAvailability?: DataAvailability | null
+}
+
+export function RacePreviewPage({
+  meeting: canonicalMeeting,
+  season: canonicalSeason,
+  embedded = false,
+  shellAvailability = null,
+}: RacePreviewPageProps = {}) {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -268,28 +299,34 @@ export function RacePreviewPage() {
   }, [])
 
   const nowDate = useMemo(() => new Date(now), [now])
+  const hasCanonicalMeeting = canonicalMeeting != null && canonicalMeeting.meeting_key > 0
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
     queryFn: ({ signal }) => fetchSeasons(signal),
+    enabled: !hasCanonicalMeeting,
   })
 
-  const latestSeason = seasonsQuery.data?.[0] ?? null
+  const latestSeason =
+    canonicalSeason ??
+    canonicalMeeting?.year ??
+    seasonsQuery.data?.[0] ??
+    null
 
   const meetingsQuery = useQuery({
     queryKey: ['meetings', latestSeason, 'auto'],
-    queryFn: () => fetchMeetings(latestSeason!, 'auto'),
-    enabled: latestSeason != null,
+    queryFn: ({ signal }) => fetchMeetings(latestSeason!, 'auto', signal),
+    enabled: !hasCanonicalMeeting && latestSeason != null,
   })
 
-  const previewMeeting = useMemo(
-    () => pickPreviewMeeting(meetingsQuery.data ?? [], nowDate),
-    [meetingsQuery.data, nowDate],
-  )
+  const previewMeeting = useMemo(() => {
+    if (hasCanonicalMeeting) return canonicalMeeting
+    return pickPreviewMeeting(meetingsQuery.data ?? [], nowDate)
+  }, [hasCanonicalMeeting, canonicalMeeting, meetingsQuery.data, nowDate])
 
   const sessionsQuery = useQuery({
     queryKey: ['sessions', previewMeeting?.meeting_key, 'auto'],
-    queryFn: () => fetchSessions(previewMeeting!.meeting_key, 'auto'),
+    queryFn: ({ signal }) => fetchSessions(previewMeeting!.meeting_key, 'auto', signal),
     enabled: previewMeeting != null,
   })
 
@@ -305,7 +342,7 @@ export function RacePreviewPage() {
 
   const priorMeetingsQuery = useQuery({
     queryKey: ['meetings', priorYear, 'auto'],
-    queryFn: () => fetchMeetings(priorYear!, 'auto'),
+    queryFn: ({ signal }) => fetchMeetings(priorYear!, 'auto', signal),
     enabled: priorYear != null && previewMeeting != null,
   })
 
@@ -316,7 +353,7 @@ export function RacePreviewPage() {
 
   const priorSessionsQuery = useQuery({
     queryKey: ['sessions', priorMeeting?.meeting_key, 'auto'],
-    queryFn: () => fetchSessions(priorMeeting!.meeting_key, 'auto'),
+    queryFn: ({ signal }) => fetchSessions(priorMeeting!.meeting_key, 'auto', signal),
     enabled: priorMeeting != null,
   })
 
@@ -327,25 +364,25 @@ export function RacePreviewPage() {
 
   const priorResultsQuery = useQuery({
     queryKey: ['results', priorRaceSession?.session_key, 'auto'],
-    queryFn: () => fetchResults(priorRaceSession!.session_key, 'auto'),
+    queryFn: ({ signal }) => fetchResults(priorRaceSession!.session_key, 'auto', signal),
     enabled: priorRaceSession != null,
   })
 
   const priorGridQuery = useQuery({
     queryKey: ['grid', priorRaceSession?.session_key, 'auto'],
-    queryFn: () => fetchStartingGrid(priorRaceSession!.session_key, 'auto'),
+    queryFn: ({ signal }) => fetchStartingGrid(priorRaceSession!.session_key, 'auto', signal),
     enabled: priorRaceSession != null,
   })
 
   const trackOutlineQuery = useQuery({
     queryKey: ['track-outline', previewMeeting?.circuit_key, previewMeeting?.year],
-    queryFn: () => fetchTrackOutline(previewMeeting!.circuit_key!, previewMeeting!.year),
+    queryFn: ({ signal }) => fetchTrackOutline(previewMeeting!.circuit_key!, previewMeeting!.year, signal),
     enabled: previewMeeting?.circuit_key != null && previewMeeting.circuit_key > 0,
   })
 
   const championshipQuery = useQuery({
     queryKey: ['championship-hub', latestSeason],
-    queryFn: () => fetchChampionshipHub(latestSeason!),
+    queryFn: ({ signal }) => fetchChampionshipHub(latestSeason!, signal),
     enabled: latestSeason != null,
   })
 
@@ -359,15 +396,56 @@ export function RacePreviewPage() {
   const accent = countryAccent(previewMeeting)
   const isFirstTimeCircuit = priorMeeting == null && priorYear != null && !priorMeetingsQuery.isLoading
 
-  if (seasonsQuery.isLoading || meetingsQuery.isLoading) {
-    return <div className="page loading-state" data-testid="preview-loading">loading preview…</div>
+  const identityLoading = !hasCanonicalMeeting && (seasonsQuery.isLoading || meetingsQuery.isLoading)
+  const identityError = !hasCanonicalMeeting && (seasonsQuery.isError || meetingsQuery.isError)
+  const identityRetrying = seasonsQuery.isFetching || meetingsQuery.isFetching
+
+  const retryIdentity = () => {
+    if (seasonsQuery.isError && !seasonsQuery.isFetching) void seasonsQuery.refetch()
+    if (meetingsQuery.isError && !meetingsQuery.isFetching) void meetingsQuery.refetch()
   }
 
-  if (seasonsQuery.isError || meetingsQuery.isError) {
+  // Worst reported truth across primary + supplements — Local must not mask
+  // Sessions/Prior Results Stale/Partial/Limited/Archive.
+  const dataNotice = aggregateNotices([
+    noticeFromResponse(championshipQuery.data, { includeLocal: true }),
+    noticeFromResponse(sessionsQuery.data, { includeLocal: false }),
+    noticeFromResponse(priorResultsQuery.data, { includeLocal: false }),
+  ])
+
+  const showFreshnessNotice =
+    Boolean(dataNotice) &&
+    (!embedded || shouldShowEmbeddedNotice(dataNotice, shellAvailability))
+
+  const sessionsFailed = sessionsQuery.isError
+  const sessionsRetrying = sessionsQuery.isFetching
+
+  const retrySessions = () => {
+    if (!sessionsQuery.isFetching) void sessionsQuery.refetch()
+  }
+
+  if (identityLoading) {
+    return (
+      <div className={embedded ? 'preview-embedded' : 'page'} data-testid="preview-loading">
+        <RouteState kind="loading" title="loading preview…" />
+      </div>
+    )
+  }
+
+  if (identityError) {
     const err = seasonsQuery.error ?? meetingsQuery.error
     return (
-      <div className="page error-box" data-testid="preview-error">
-        {err instanceof Error ? err.message : 'Failed to load preview'}
+      <div className={embedded ? 'preview-embedded' : 'page'} data-testid="preview-error">
+        <RouteState
+          kind="error"
+          title="Preview details unavailable"
+          error={err}
+          onRetry={() => {
+            if (!identityRetrying) retryIdentity()
+          }}
+          retrying={identityRetrying}
+          retryTestId="preview-retry"
+        />
       </div>
     )
   }
@@ -386,7 +464,7 @@ export function RacePreviewPage() {
         {titleFight.length > 0 && (
           <TitleFightCard
             loading={championshipQuery.isLoading}
-            error={championshipQuery.isError ? (championshipQuery.error as Error) : null}
+            error={championshipQuery.isError ? championshipQuery.error : null}
             drivers={titleFight}
             sprintWeekend={false}
             season={latestSeason}
@@ -397,20 +475,62 @@ export function RacePreviewPage() {
   }
 
   return (
-    <div className="preview-page" data-testid="preview-page">
-      <PreviewHeader
-        meeting={previewMeeting}
-        sessions={sessions}
-        countdownSession={countdownSession}
-        now={nowDate}
-        accent={accent}
-      />
+    <div
+      className="preview-page"
+      data-testid="preview-page"
+      data-meeting-key={previewMeeting.meeting_key}
+      data-embedded={embedded ? 'true' : undefined}
+    >
+      {showFreshnessNotice && dataNotice && (
+        <DataNotice
+          availability={dataNotice}
+          message={noticeMessage(dataNotice)}
+          testId="preview-data-notice"
+        />
+      )}
+
+      {sessionsFailed && (
+        <RouteState
+          kind="error"
+          title="Session schedule unavailable"
+          error={sessionsQuery.error}
+          onRetry={retrySessions}
+          retrying={sessionsRetrying}
+          testId="preview-sessions-error"
+          retryTestId="preview-sessions-retry"
+        />
+      )}
+
+      {/* Embedded Weekend already shows the canonical countdown header — skip the duplicate. */}
+      {!embedded && (
+        <PreviewHeader
+          meeting={previewMeeting}
+          sessions={sessions}
+          countdownSession={countdownSession}
+          now={nowDate}
+          accent={accent}
+        />
+      )}
+
+      {/* Embedded: still surface recovered schedule once sessions load. */}
+      {embedded && sessions.length > 0 && (
+        <div className="preview-schedule" data-testid="preview-schedule">
+          {sessions.map((session) => (
+            <div key={session.session_key} className="preview-schedule-item">
+              <span className="preview-schedule-name">{session.session_name}</span>
+              <span className="preview-schedule-time">
+                {formatSessionScheduleTime(session.date_start)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="preview-grid">
         <TrackOutlineCard
           outline={trackOutlineQuery.data}
           loading={trackOutlineQuery.isLoading}
-          error={trackOutlineQuery.isError ? (trackOutlineQuery.error as Error) : null}
+          error={trackOutlineQuery.isError ? trackOutlineQuery.error : null}
           accent={accent}
         />
 
@@ -419,9 +539,9 @@ export function RacePreviewPage() {
           loading={priorMeetingsQuery.isLoading || priorSessionsQuery.isLoading || priorResultsQuery.isLoading}
           error={
             priorMeetingsQuery.isError
-              ? (priorMeetingsQuery.error as Error)
+              ? priorMeetingsQuery.error
               : priorResultsQuery.isError
-                ? (priorResultsQuery.error as Error)
+                ? priorResultsQuery.error
                 : null
           }
           podium={podium}
@@ -432,7 +552,7 @@ export function RacePreviewPage() {
 
       <TitleFightCard
         loading={championshipQuery.isLoading}
-        error={championshipQuery.isError ? (championshipQuery.error as Error) : null}
+        error={championshipQuery.isError ? championshipQuery.error : null}
         drivers={titleFight}
         sprintWeekend={sprintWeekend}
         season={latestSeason}

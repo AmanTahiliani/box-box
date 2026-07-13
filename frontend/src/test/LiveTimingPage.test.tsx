@@ -356,7 +356,7 @@ describe('LiveTimingPage', () => {
     expect(screen.queryByText('LIVE SESSION')).not.toBeInTheDocument()
   })
 
-  it('shows the inactive weekend context when nothing is live or retained', async () => {
+  it('shows inactive handoff when nothing is live or retained', async () => {
     renderPage(
       { is_live: false, data: null },
       {
@@ -391,5 +391,165 @@ describe('LiveTimingPage', () => {
     await waitFor(() =>
       expect(screen.getByTestId('live-handoff-next')).toHaveTextContent('Practice 1'),
     )
+  })
+
+  it('clears fatal initial error once SSE supplies a live snapshot', async () => {
+    type Listener = (event: { data: string }) => void
+    class RecoveringEventSource {
+      onopen: (() => void) | null = null
+      onerror: (() => void) | null = null
+      private listeners = new Map<string, Listener[]>()
+      static latest: RecoveringEventSource | null = null
+      constructor() {
+        RecoveringEventSource.latest = this
+        setTimeout(() => this.onopen?.(), 0)
+      }
+      addEventListener(type: string, listener: Listener) {
+        const list = this.listeners.get(type) ?? []
+        list.push(listener)
+        this.listeners.set(type, list)
+      }
+      emit(type: string, data: unknown) {
+        for (const listener of this.listeners.get(type) ?? []) {
+          listener({ data: JSON.stringify(data) })
+        }
+      }
+      close() {}
+    }
+
+    Object.defineProperty(window, 'EventSource', {
+      value: RecoveringEventSource,
+      writable: true,
+      configurable: true,
+    })
+
+    mockFetchLiveState.mockRejectedValue(new Error('API 503: live state unavailable'))
+    mockFetchLiveTrackOutline.mockResolvedValue({
+      circuit_key: 1,
+      points: [],
+      bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 },
+    })
+    mockFetchWeekendContext.mockResolvedValue({
+      temporal_state: 'no_season',
+      championship_round: 0,
+      total_championship_rounds: 0,
+    })
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <LiveTimingPage />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByTestId('live-initial-error')).toBeInTheDocument()
+    expect(screen.getByText(/Live timing unavailable/i)).toBeInTheDocument()
+
+    await act(async () => {
+      RecoveringEventSource.latest?.emit('snapshot', {
+        is_live: true,
+        data: raceSnapshot,
+      })
+    })
+
+    await waitFor(() => expect(screen.getByText('Timing Tower')).toBeInTheDocument())
+    expect(screen.queryByTestId('live-initial-error')).not.toBeInTheDocument()
+    expect(screen.getByTestId('live-page')).toHaveAttribute('data-phase', 'live')
+    expect(screen.queryByText(/Live timing unavailable/i)).not.toBeInTheDocument()
+  })
+
+  it('clears fatal initial error when SSE reports authoritative inactive null state', async () => {
+    type Listener = (event: { data: string }) => void
+    class InactiveEventSource {
+      onopen: (() => void) | null = null
+      onerror: (() => void) | null = null
+      private listeners = new Map<string, Listener[]>()
+      static latest: InactiveEventSource | null = null
+      constructor() {
+        InactiveEventSource.latest = this
+        setTimeout(() => this.onopen?.(), 0)
+      }
+      addEventListener(type: string, listener: Listener) {
+        const list = this.listeners.get(type) ?? []
+        list.push(listener)
+        this.listeners.set(type, list)
+      }
+      emit(type: string, data: unknown) {
+        for (const listener of this.listeners.get(type) ?? []) {
+          listener({ data: JSON.stringify(data) })
+        }
+      }
+      close() {}
+    }
+
+    Object.defineProperty(window, 'EventSource', {
+      value: InactiveEventSource,
+      writable: true,
+      configurable: true,
+    })
+
+    mockFetchLiveState.mockRejectedValue(new Error('API 503: live state unavailable'))
+    mockFetchLiveTrackOutline.mockResolvedValue({
+      circuit_key: 1,
+      points: [],
+      bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 },
+    })
+    mockFetchWeekendContext.mockResolvedValue({
+      temporal_state: 'between_weekends',
+      championship_round: 5,
+      total_championship_rounds: 24,
+      season: 2026,
+    })
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <LiveTimingPage />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByTestId('live-initial-error')).toBeInTheDocument()
+
+    await act(async () => {
+      InactiveEventSource.latest?.emit('snapshot', {
+        is_live: false,
+        data: null,
+        last_snapshot: null,
+      })
+    })
+
+    await waitFor(() => expect(screen.getByTestId('live-inactive')).toBeInTheDocument())
+    expect(screen.queryByTestId('live-initial-error')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Live timing unavailable/i)).not.toBeInTheDocument()
+    expect(screen.getByTestId('live-page')).toHaveAttribute('data-phase', 'inactive')
+    expect(screen.queryByText('Timing Tower')).not.toBeInTheDocument()
+  })
+
+  it('keeps bounded initial error + Retry when no stream data arrives', async () => {
+    mockFetchLiveState.mockRejectedValue(new Error('API 503: live state unavailable'))
+    mockFetchLiveTrackOutline.mockResolvedValue({
+      circuit_key: 1,
+      points: [],
+      bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 },
+    })
+    mockFetchWeekendContext.mockResolvedValue({
+      temporal_state: 'no_season',
+      championship_round: 0,
+      total_championship_rounds: 0,
+    })
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <LiveTimingPage />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByTestId('live-initial-error')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
+    expect(screen.queryByText('Timing Tower')).not.toBeInTheDocument()
   })
 })

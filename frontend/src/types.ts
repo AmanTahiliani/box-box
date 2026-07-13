@@ -472,6 +472,8 @@ export type TemporalState =
 // ContextAvailability mirrors query.ContextAvailability. Every field is present
 // in a canonical payload except the optional `observed_at`.
 export interface ContextAvailability {
+  /** Domain / FIA provenance: local | mixed | fia (additive; may be absent on older payloads). */
+  source?: string
   schedule: string
   live_transport: string
   live_session: string

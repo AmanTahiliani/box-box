@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -26,8 +27,12 @@ type requestPacer struct {
 
 // wait blocks until this caller's reserved slot arrives.
 func (p *requestPacer) wait() {
+	_ = p.waitContext(context.Background())
+}
+
+func (p *requestPacer) waitContext(ctx context.Context) error {
 	if p == nil || p.interval <= 0 {
-		return
+		return nil
 	}
 	p.mu.Lock()
 	now := time.Now()
@@ -38,8 +43,18 @@ func (p *requestPacer) wait() {
 	p.next = p.next.Add(p.interval)
 	p.mu.Unlock()
 	if sleep > 0 {
-		time.Sleep(sleep)
+		timer := time.NewTimer(sleep)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			// Keep the unused reservation in the schedule. Blindly reclaiming an
+			// interval can collide with later callers that already reserved their
+			// wake times, releasing two requests simultaneously.
+			return ctx.Err()
+		}
 	}
+	return nil
 }
 
 type OpenF1Client struct {
@@ -54,6 +69,26 @@ type OpenF1Client struct {
 	// The UI reads this via LastResponseWasStale() to decide whether to show
 	// a disclaimer banner. The flag is sticky until ClearStaleFlag() is called.
 	staleFlag int32
+}
+
+// Scoped returns a lightweight request-scoped view of the client. Network,
+// pacing and cache resources are shared, while the stale fallback indicator is
+// deliberately not shared. Web handlers use this view so a stale fallback in
+// one concurrent HTTP request can never mark an unrelated response as stale.
+//
+// The legacy client-wide stale flag remains available for the TUI, whose loads
+// are intentionally aggregated into one navigation-level notice.
+func (c *OpenF1Client) Scoped() *OpenF1Client {
+	if c == nil {
+		return nil
+	}
+	return &OpenF1Client{
+		url:        c.url,
+		apiKey:     c.apiKey,
+		httpClient: c.httpClient,
+		cache:      c.cache,
+		pacer:      c.pacer,
+	}
 }
 
 func NewOpenF1Client(url string, timeout time.Duration) *OpenF1Client {

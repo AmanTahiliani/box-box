@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -16,6 +17,7 @@ type fakeReplayClient struct {
 	drivers []models.Driver
 	locs    map[int][]models.Location
 	err     error
+	locErrs map[int]error
 
 	mu          sync.Mutex
 	inFlight    int
@@ -46,7 +48,38 @@ func (f *fakeReplayClient) GetLocation(sessionKey, driverNumber int) ([]models.L
 	f.inFlight--
 	f.mu.Unlock()
 
-	return f.locs[driverNumber], nil
+	return f.locs[driverNumber], f.locErrs[driverNumber]
+}
+
+func TestAssembleReplayFramesReportsPartialDriverSeries(t *testing.T) {
+	start := time.Date(2025, 5, 25, 13, 0, 0, 0, time.UTC)
+	client := &fakeReplayClient{
+		drivers: []models.Driver{{DriverNumber: 1}, {DriverNumber: 4}},
+		locs: map[int][]models.Location{
+			1: {{Date: start.Format(time.RFC3339Nano), X: 1, Y: 2}},
+		},
+		locErrs: map[int]error{4: errors.New("location unavailable")},
+	}
+	resp, incomplete, err := assembleReplayFrames(context.Background(), client, 99, defaultReplayIntervalMS)
+	if err != nil {
+		t.Fatalf("partial replay should remain usable: %v", err)
+	}
+	if !incomplete || len(resp.Frames) != 1 {
+		t.Fatalf("partial replay = incomplete %v, frames %+v", incomplete, resp.Frames)
+	}
+	if got := replayResponseFreshness(resp, incomplete); got != "partial" {
+		t.Fatalf("partial replay freshness = %q", got)
+	}
+}
+
+func TestAssembleReplayFramesEmptyDriverSetIsLimited(t *testing.T) {
+	resp, incomplete, err := assembleReplayFrames(context.Background(), &fakeReplayClient{}, 99, defaultReplayIntervalMS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !incomplete || replayResponseFreshness(resp, incomplete) != "limited" {
+		t.Fatalf("empty replay = incomplete %v, freshness %q", incomplete, replayResponseFreshness(resp, incomplete))
+	}
 }
 
 func TestAssembleReplayFramesSnapsNearestSamplesAndOmitsEmptyDrivers(t *testing.T) {
@@ -70,9 +103,15 @@ func TestAssembleReplayFramesSnapsNearestSamplesAndOmitsEmptyDrivers(t *testing.
 		},
 	}
 
-	resp, err := assembleReplayFrames(context.Background(), client, 99, 5000)
+	resp, incomplete, err := assembleReplayFrames(context.Background(), client, 99, 5000)
 	if err != nil {
 		t.Fatalf("assembleReplayFrames() error = %v", err)
+	}
+	if !incomplete {
+		t.Fatal("empty entrant location series was labelled complete")
+	}
+	if got := replayResponseFreshness(resp, incomplete); got != "partial" {
+		t.Fatalf("empty entrant freshness = %q", got)
 	}
 	if resp.SessionKey != 99 || resp.Interval != 5000 {
 		t.Fatalf("response metadata = %+v", resp)
@@ -112,7 +151,7 @@ func TestAssembleReplayFramesCapsFrameCount(t *testing.T) {
 		locs:    map[int][]models.Location{1: locs},
 	}
 
-	resp, err := assembleReplayFrames(context.Background(), client, 99, defaultReplayIntervalMS)
+	resp, _, err := assembleReplayFrames(context.Background(), client, 99, defaultReplayIntervalMS)
 	if err != nil {
 		t.Fatalf("assembleReplayFrames() error = %v", err)
 	}
@@ -139,7 +178,7 @@ func TestAssembleReplayFramesBoundsLocationFanOut(t *testing.T) {
 		delay:   5 * time.Millisecond,
 	}
 
-	if _, err := assembleReplayFrames(context.Background(), client, 99, defaultReplayIntervalMS); err != nil {
+	if _, _, err := assembleReplayFrames(context.Background(), client, 99, defaultReplayIntervalMS); err != nil {
 		t.Fatalf("assembleReplayFrames() error = %v", err)
 	}
 	if client.maxInFlight > replayFetchConcurrency {
@@ -167,7 +206,7 @@ func TestHandleReplayFramesValidatesParamsAndFloorsInterval(t *testing.T) {
 	client := &fakeReplayClient{drivers: []models.Driver{{DriverNumber: 1}}, locs: map[int][]models.Location{
 		1: {{Date: time.Date(2025, 5, 25, 13, 0, 0, 0, time.UTC).Format(time.RFC3339Nano), X: 1, Y: 2}},
 	}}
-	resp, err := assembleReplayFrames(context.Background(), client, 99, 1000)
+	resp, _, err := assembleReplayFrames(context.Background(), client, 99, 1000)
 	if err != nil {
 		t.Fatalf("assembleReplayFrames() error = %v", err)
 	}

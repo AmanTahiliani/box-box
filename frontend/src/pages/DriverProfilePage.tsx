@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { fetchDriverSummary, fetchSeasons } from '../api'
 import { DataNotice, RouteState } from '../components/RouteState'
+import { noticeFromResponse, noticeMessage } from '../lib/availability'
 import { teamColor } from '../utils'
 import { countryFlag } from '../lib/gpIdentity'
 import {
@@ -85,19 +86,25 @@ export function DriverProfilePage({ driverNumber, year }: Props) {
   return (
     <DriverProfileBody
       summary={summary}
+      availability={noticeFromResponse(summary, { includeLocal: false })}
       onRetry={() => {
         if (!summaryQuery.isFetching) void summaryQuery.refetch()
       }}
+      retrying={summaryQuery.isFetching}
     />
   )
 }
 
 function DriverProfileBody({
   summary,
+  availability,
   onRetry,
+  retrying,
 }: {
   summary: DriverSummary
+  availability?: ReturnType<typeof noticeFromResponse>
   onRetry?: () => void
+  retrying?: boolean
 }) {
   const color = teamColor(summary.team_colour)
   const deltas = gridFinishDeltas(summary.rounds)
@@ -109,11 +116,21 @@ function DriverProfileBody({
           availability="limited"
           message="Optional remote details are unavailable. Showing local season identity and results."
           onRetry={onRetry}
+          retrying={retrying}
           testId="driver-profile-limited"
         />
       )}
       {summary.source === 'local' && summary.enrichment !== 'limited' && (
         <DataNotice availability="local" message="Loaded from local season data." testId="driver-profile-local" />
+      )}
+      {availability === 'stale' && summary.enrichment !== 'limited' && (
+        <DataNotice
+          availability="stale"
+          message={noticeMessage('stale')}
+          onRetry={onRetry}
+          retrying={retrying}
+          testId="driver-profile-stale"
+        />
       )}
       <header className="dp-header" data-testid="dp-header" style={{ borderLeftColor: color }}>
         <div className="dp-identity">
