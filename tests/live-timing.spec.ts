@@ -476,4 +476,31 @@ test.describe('Live Timing (no session)', () => {
     await expect(page.getByTestId('live-page')).toHaveAttribute('data-phase', /^(live|disconnected)$/)
     await expect(page.locator('.live-tower')).toContainText('VER')
   })
+
+  test('clears fatal initial error once SSE supplies an inactive null state', async ({ page }) => {
+    await page.route('**/api/v1/live/state', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'API 503: live state unavailable' }),
+      }),
+    )
+    await page.route('**/api/v1/live/stream', (route) =>
+      route.fulfill({
+        contentType: 'text/event-stream',
+        headers: { 'Cache-Control': 'no-cache' },
+        body: `event: snapshot\ndata: ${JSON.stringify({
+          is_live: false,
+          data: null,
+          last_snapshot: null,
+        })}\n\n`,
+      }),
+    )
+
+    await page.goto('/live')
+    await expect(page.getByTestId('live-inactive')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('live-initial-error')).toHaveCount(0)
+    await expect(page.getByText(/Live timing unavailable/i)).toHaveCount(0)
+    await expect(page.getByTestId('live-page')).toHaveAttribute('data-phase', 'inactive')
+  })
 })

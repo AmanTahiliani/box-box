@@ -25,7 +25,7 @@ import {
 import { stripHtml, timeAgo } from '../utils'
 import type { ArticleContent, NewsItem } from '../types'
 import { DataNotice, RouteState } from '../components/RouteState'
-import { noticeFromResponse, noticeMessage } from '../lib/availability'
+import { aggregateNotices, noticeFromResponse, noticeMessage } from '../lib/availability'
 import '../styles/digest.css'
 
 type Category = 'all' | 'official' | 'news' | 'video'
@@ -547,10 +547,12 @@ export function BriefingPage() {
     }
   }
 
-  const newsAvailability = noticeFromResponse(allNews, { includeLocal: true })
-  const hubAvailability = noticeFromResponse(hub, { includeLocal: false })
-  const meetingsAvailability = noticeFromResponse(meetings, { includeLocal: false })
-  const availability = newsAvailability ?? hubAvailability ?? meetingsAvailability
+  // Aggregate by severity so routine local News cannot mask stale hub/meetings.
+  const availability = aggregateNotices([
+    noticeFromResponse(allNews, { includeLocal: true }),
+    noticeFromResponse(hub, { includeLocal: false }),
+    noticeFromResponse(meetings, { includeLocal: false }),
+  ])
 
   return (
     <div className="bp-page" data-testid="briefing-page">

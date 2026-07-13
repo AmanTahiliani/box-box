@@ -21,6 +21,7 @@ import {
   fetchChampionshipHub,
   markNewsRead,
 } from '../api'
+import { rememberResponseAvailability } from '../lib/fetch'
 
 const mockFetchNews = vi.mocked(fetchNews)
 const mockFetchNewsArticle = vi.mocked(fetchNewsArticle)
@@ -250,5 +251,20 @@ describe('BriefingPage digest layout', () => {
     resolveHub(hub)
     await waitFor(() => expect(screen.queryByTestId('briefing-data-notice')).not.toBeInTheDocument())
     expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
+  })
+
+  it('preserves Stale hub over routine local News when sources conflict', async () => {
+    const localNews = [...newsItems]
+    rememberResponseAvailability(localNews, { source: 'local', freshness: 'local' })
+    const staleHub = { ...hub }
+    rememberResponseAvailability(staleHub, { source: 'openf1', freshness: 'stale' })
+    mockFetchNews.mockResolvedValue(localNews)
+    mockFetchHub.mockResolvedValue(staleHub)
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('briefing-data-notice')).toHaveTextContent(/Stale/i))
+    expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
+    expect(screen.queryByTestId('briefing-error')).not.toBeInTheDocument()
   })
 })

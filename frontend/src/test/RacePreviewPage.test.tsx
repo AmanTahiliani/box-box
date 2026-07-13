@@ -344,6 +344,32 @@ describe('RacePreviewPage', () => {
     expect(screen.queryByTestId('preview-data-notice')).not.toBeInTheDocument()
   })
 
+  it('preserves Stale/Partial over routine Championship Local from conflicting sources', async () => {
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) {
+        const payload = [...sessions]
+        rememberResponseAvailability(payload, { source: 'openf1', freshness: 'stale' })
+        return payload
+      }
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+
+    const localHub = { ...hub }
+    rememberResponseAvailability(localHub, { source: 'local', freshness: 'local' })
+    mockFetchChampionshipHub.mockResolvedValue(localHub)
+
+    renderPage({ meeting: upcomingMeeting, season: 2099 })
+
+    await waitFor(() => expect(screen.getByTestId('preview-data-notice')).toHaveTextContent(/Stale/i))
+    expect(screen.getByTestId('preview-title-fight-card')).toBeInTheDocument()
+    expect(screen.getByTestId('preview-schedule')).toHaveTextContent('FP1')
+  })
+
   it('shows sanitized sessions failure with Retry that refetches once', async () => {
     let sessionCalls = 0
     mockFetchSessions.mockImplementation(async (meetingKey: number) => {

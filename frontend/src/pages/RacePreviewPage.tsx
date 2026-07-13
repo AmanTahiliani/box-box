@@ -11,6 +11,7 @@ import {
 } from '../api'
 import { DataNotice, RouteState } from '../components/RouteState'
 import {
+  aggregateNotices,
   noticeFromResponse,
   noticeMessage,
   shouldShowEmbeddedNotice,
@@ -404,10 +405,13 @@ export function RacePreviewPage({
     if (meetingsQuery.isError && !meetingsQuery.isFetching) void meetingsQuery.refetch()
   }
 
-  const dataNotice =
-    noticeFromResponse(championshipQuery.data, { includeLocal: true }) ??
-    noticeFromResponse(sessionsQuery.data, { includeLocal: false }) ??
-    noticeFromResponse(priorResultsQuery.data, { includeLocal: false })
+  // Worst reported truth across primary + supplements — Local must not mask
+  // Sessions/Prior Results Stale/Partial/Limited/Archive.
+  const dataNotice = aggregateNotices([
+    noticeFromResponse(championshipQuery.data, { includeLocal: true }),
+    noticeFromResponse(sessionsQuery.data, { includeLocal: false }),
+    noticeFromResponse(priorResultsQuery.data, { includeLocal: false }),
+  ])
 
   const showFreshnessNotice =
     Boolean(dataNotice) &&

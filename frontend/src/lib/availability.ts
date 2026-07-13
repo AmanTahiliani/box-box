@@ -8,6 +8,19 @@ export type DataAvailability = 'local' | 'partial' | 'stale' | 'archive' | 'limi
 const NOTICE_FRESHNESS = new Set<string>(['stale', 'partial', 'local', 'limited', 'archive'])
 
 /**
+ * Product-impact severity for aggregating conflicting reported freshness.
+ * Higher wins so routine Local cannot mask Limited/Partial/Stale/Archive.
+ */
+const NOTICE_SEVERITY: Record<DataAvailability, number> = {
+  local: 1,
+  archive: 2,
+  stale: 3,
+  partial: 4,
+  limited: 5,
+  missing: 6,
+}
+
+/**
  * Map a reported freshness string onto shared DataNotice vocabulary.
  * Returns null for unreported / routine-success values (`fresh`, `live`, …).
  * Never invents stale from React Query staleTime.
@@ -35,6 +48,23 @@ export function noticeFromResponse(
   )
 }
 
+/**
+ * Pick the worst (highest product-impact) reported notice among sources.
+ * Equivalent kinds collapse to one; Local never masks a stronger disclosure.
+ */
+export function aggregateNotices(
+  notices: Array<DataAvailability | null | undefined>,
+): DataAvailability | null {
+  let worst: DataAvailability | null = null
+  for (const notice of notices) {
+    if (!notice) continue
+    if (!worst || NOTICE_SEVERITY[notice] > NOTICE_SEVERITY[worst]) {
+      worst = notice
+    }
+  }
+  return worst
+}
+
 export function noticeMessage(kind: DataAvailability): string {
   switch (kind) {
     case 'stale':
@@ -52,27 +82,43 @@ export function noticeMessage(kind: DataAvailability): string {
   }
 }
 
-/** Pick the first notable freshness from Weekend Context session refs. */
+/**
+ * Session whose state the Weekend shell is presenting — mirrors backend
+ * focusedContextSession so an older terminal session never overrides focus.
+ */
+export function focusedContextSession(context: WeekendContext): ContextSession | undefined {
+  if (context.active_session) return context.active_session
+  if (!context.focus_meeting) return undefined
+  const focusKey = context.focus_meeting.meeting_key
+  for (const ref of [
+    context.next_session,
+    context.previous_completed_session,
+    context.default_analysis_session,
+  ]) {
+    if (ref?.meeting?.meeting_key === focusKey) return ref
+    // Session.meeting_key is always present even when meeting identity is sparse.
+    if (ref && ref.session.meeting_key === focusKey) return ref
+  }
+  return undefined
+}
+
+/**
+ * Weekend shell notice from authoritative response headers when present.
+ * A header that intentionally maps to no notice (e.g. focused local/local with
+ * Local suppressed) must not fall through to older previous-session archive/partial.
+ * When headers are absent, typed focus-session freshness may be used.
+ */
 export function weekendContextNotice(
   context: WeekendContext,
   responseMeta?: ResponseAvailability,
 ): DataAvailability | null {
-  const fromHeader =
-    noticeFromFreshness(responseMeta?.freshness, { includeLocal: false }) ??
-    noticeFromFreshness(getResponseAvailability(context)?.freshness, { includeLocal: false })
-  if (fromHeader) return fromHeader
-
-  const refs: Array<ContextSession | undefined> = [
-    context.active_session,
-    context.next_session,
-    context.previous_completed_session,
-    context.default_analysis_session,
-  ]
-  for (const ref of refs) {
-    const notice = noticeFromFreshness(ref?.availability.freshness, { includeLocal: false })
-    if (notice) return notice
+  const headerMeta = responseMeta ?? getResponseAvailability(context)
+  if (headerMeta) {
+    return noticeFromFreshness(headerMeta.freshness, { includeLocal: false })
   }
-  return null
+
+  const focus = focusedContextSession(context)
+  return noticeFromFreshness(focus?.availability.freshness, { includeLocal: false })
 }
 
 /**

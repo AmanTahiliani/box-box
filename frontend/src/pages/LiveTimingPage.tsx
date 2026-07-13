@@ -58,6 +58,9 @@ export function LiveTimingPage() {
   const [visibleSectors, setVisibleSectors] = useState<VisibleSectorState>({})
   const [, setPositions] = useState<Record<string, LivePosition>>({})
   const [events, setEvents] = useState<LiveEvent[]>([])
+  // Authoritative SSE snapshot/event receipt — distinct from non-null timing rows.
+  // An inactive `is_live:false,data:null,last_snapshot:null` event is still valid.
+  const [authoritativeSseReceived, setAuthoritativeSseReceived] = useState(false)
   const prevSnapshotRef = useRef<LiveStreamData | null>(null)
   const sessionSigRef = useRef('')
   const isLiveRef = useRef(false)
@@ -180,6 +183,9 @@ export function LiveTimingPage() {
     events.addEventListener('snapshot', (event) => {
       const state = parseLiveStateEvent(event.data)
       if (!state || cancelled) return
+      // Valid SSE state clears a false fatal REST error even when all snapshots
+      // are null (inactive handoff) — do not require non-null timing rows.
+      setAuthoritativeSseReceived(true)
       const nextLive = state.is_live && Boolean(state.data)
       setIsLive(nextLive)
       if (nextLive && state.data) {
@@ -304,10 +310,11 @@ export function LiveTimingPage() {
   // feed-health truth rather than "Connection lost" + "Feed healthy".
   const feedHealth = effectiveFeedHealth(streamStatus, phase)
 
-  // A usable SSE/stream snapshot must not coexist with the fatal initial-state
-  // error — gate once live or retained archive data arrives.
+  // Usable timing rows OR an authoritative SSE state event (including inactive
+  // null payloads) clear the fatal initial REST error. Preserve error+Retry only
+  // when neither REST nor SSE yields a valid state.
   const hasUsableStreamData = Boolean(activeSnapshot) || Boolean(archiveSnapshot)
-  const showInitialError = isError && !hasUsableStreamData
+  const showInitialError = isError && !hasUsableStreamData && !authoritativeSseReceived
 
   return (
     <div className="page live-page" data-testid="live-page" data-phase={phase}>
@@ -347,7 +354,7 @@ export function LiveTimingPage() {
         />
       )}
 
-      {(phase === 'settling' || phase === 'inactive') && (
+      {(phase === 'settling' || phase === 'inactive') && !showInitialError && (
         <>
           {contextAvailabilityNotice && (
             <DataNotice

@@ -459,6 +459,74 @@ describe('LiveTimingPage', () => {
     expect(screen.queryByText(/Live timing unavailable/i)).not.toBeInTheDocument()
   })
 
+  it('clears fatal initial error when SSE reports authoritative inactive null state', async () => {
+    type Listener = (event: { data: string }) => void
+    class InactiveEventSource {
+      onopen: (() => void) | null = null
+      onerror: (() => void) | null = null
+      private listeners = new Map<string, Listener[]>()
+      static latest: InactiveEventSource | null = null
+      constructor() {
+        InactiveEventSource.latest = this
+        setTimeout(() => this.onopen?.(), 0)
+      }
+      addEventListener(type: string, listener: Listener) {
+        const list = this.listeners.get(type) ?? []
+        list.push(listener)
+        this.listeners.set(type, list)
+      }
+      emit(type: string, data: unknown) {
+        for (const listener of this.listeners.get(type) ?? []) {
+          listener({ data: JSON.stringify(data) })
+        }
+      }
+      close() {}
+    }
+
+    Object.defineProperty(window, 'EventSource', {
+      value: InactiveEventSource,
+      writable: true,
+      configurable: true,
+    })
+
+    mockFetchLiveState.mockRejectedValue(new Error('API 503: live state unavailable'))
+    mockFetchLiveTrackOutline.mockResolvedValue({
+      circuit_key: 1,
+      points: [],
+      bounds: { minX: 0, maxX: 1, minY: 0, maxY: 1 },
+    })
+    mockFetchWeekendContext.mockResolvedValue({
+      temporal_state: 'between_weekends',
+      championship_round: 5,
+      total_championship_rounds: 24,
+      season: 2026,
+    })
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <LiveTimingPage />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByTestId('live-initial-error')).toBeInTheDocument()
+
+    await act(async () => {
+      InactiveEventSource.latest?.emit('snapshot', {
+        is_live: false,
+        data: null,
+        last_snapshot: null,
+      })
+    })
+
+    await waitFor(() => expect(screen.getByTestId('live-inactive')).toBeInTheDocument())
+    expect(screen.queryByTestId('live-initial-error')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Live timing unavailable/i)).not.toBeInTheDocument()
+    expect(screen.getByTestId('live-page')).toHaveAttribute('data-phase', 'inactive')
+    expect(screen.queryByText('Timing Tower')).not.toBeInTheDocument()
+  })
+
   it('keeps bounded initial error + Retry when no stream data arrives', async () => {
     mockFetchLiveState.mockRejectedValue(new Error('API 503: live state unavailable'))
     mockFetchLiveTrackOutline.mockResolvedValue({

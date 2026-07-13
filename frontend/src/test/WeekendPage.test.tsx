@@ -489,6 +489,104 @@ describe('WeekendPage canonical contract rendering', () => {
     expect(mockContext).toHaveBeenCalledTimes(1)
   })
 
+  it('Limited Retry exposes disabled Retrying… aria-busy while deferred supplements recover', async () => {
+    mockContext.mockResolvedValue(context({ temporal_state: 'between_weekends' }))
+    let hubCalls = 0
+    let newsCalls = 0
+    let resolveHub!: (value: ChampionshipHub) => void
+    let resolveNews!: (value: []) => void
+    mockHub.mockImplementation(
+      () =>
+        new Promise<ChampionshipHub>((resolve, reject) => {
+          hubCalls += 1
+          if (hubCalls === 1) {
+            reject(new Error('API 503: hub'))
+            return
+          }
+          resolveHub = resolve
+        }),
+    )
+    mockNews.mockImplementation(
+      () =>
+        new Promise<[]>((resolve, reject) => {
+          newsCalls += 1
+          if (newsCalls === 1) {
+            reject(new Error('API 503: news'))
+            return
+          }
+          resolveNews = resolve
+        }),
+    )
+
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-data-notice')).toHaveTextContent(/Limited/i))
+    expect(mockContext).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retrying…' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Retrying…' })).toHaveAttribute('aria-busy', 'true')
+    // Double-click while pending must not issue extra supplement or context requests.
+    fireEvent.click(screen.getByRole('button', { name: 'Retrying…' }))
+    expect(hubCalls).toBe(2)
+    expect(newsCalls).toBe(2)
+    expect(mockContext).toHaveBeenCalledTimes(1)
+
+    resolveHub(hub)
+    resolveNews([])
+    await waitFor(() => expect(screen.queryByTestId('weekend-data-notice')).not.toBeInTheDocument())
+    expect(hubCalls).toBe(2)
+    expect(newsCalls).toBe(2)
+    expect(mockContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('between-sessions header local/local suppresses Archive from terminal previous', async () => {
+    const focus = meeting({
+      meeting_key: 2,
+      meeting_name: 'Belgian Grand Prix',
+      date_start: '2026-07-10T09:00:00Z',
+    })
+    const previous = meeting({
+      meeting_key: 1,
+      meeting_name: 'British Grand Prix',
+      circuit_short_name: 'Silverstone',
+      date_start: '2026-07-05T09:00:00Z',
+    })
+    const payload = context({
+      temporal_state: 'between_sessions',
+      focus_meeting: focus,
+      next_meeting: focus,
+      previous_meeting: previous,
+      next_session: ctxSession({
+        session: session({
+          session_key: 21,
+          session_name: 'Practice 1',
+          meeting_key: 2,
+          date_start: '2026-07-10T09:00:00Z',
+        }),
+        meeting: focus,
+        availability: availability({ source: 'local', freshness: 'local' }),
+      }),
+      previous_completed_session: ctxSession({
+        session: session({
+          session_key: 99,
+          session_name: 'Race',
+          session_type: 'Race',
+          meeting_key: 1,
+          date_start: '2026-07-05T14:00:00Z',
+        }),
+        meeting: previous,
+        availability: availability({ source: 'fia', freshness: 'archive', archive: 'available' }),
+      }),
+    })
+    rememberResponseAvailability(payload, { source: 'local', freshness: 'local' })
+    mockContext.mockResolvedValue(payload)
+
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-between-sessions')).toBeInTheDocument())
+    expect(screen.queryByTestId('weekend-data-notice')).not.toBeInTheDocument()
+    expect(screen.queryByText(/archived snapshot/i)).not.toBeInTheDocument()
+  })
+
   it('pre_session keeps shell Partial while disclosing distinct Preview stale', async () => {
     const next = meeting({
       meeting_key: 2,

@@ -10,6 +10,7 @@ import {
   rememberResponseAvailability,
 } from '../lib/fetch'
 import {
+  aggregateNotices,
   noticeFromFreshness,
   noticeFromResponse,
   shouldShowEmbeddedNotice,
@@ -95,12 +96,36 @@ describe('response availability metadata', () => {
     expect(shouldShowEmbeddedNotice(null, 'partial')).toBe(false)
   })
 
+  it('aggregates conflicting sources by severity so Local cannot mask worse truth', () => {
+    expect(aggregateNotices(['local', 'stale'])).toBe('stale')
+    expect(aggregateNotices(['local', 'partial'])).toBe('partial')
+    expect(aggregateNotices(['local', 'limited'])).toBe('limited')
+    expect(aggregateNotices(['local', 'archive'])).toBe('archive')
+    expect(aggregateNotices(['stale', 'partial', 'local'])).toBe('partial')
+    expect(aggregateNotices(['stale', 'stale', null])).toBe('stale')
+    expect(aggregateNotices([null, undefined])).toBeNull()
+  })
+
   it('derives Weekend Context notices from typed session freshness, skipping routine local', () => {
     const context: WeekendContext = {
       season: 2026,
       temporal_state: 'pre_session',
       championship_round: 1,
       total_championship_rounds: 24,
+      focus_meeting: {
+        meeting_key: 2,
+        meeting_name: 'Belgian Grand Prix',
+        meeting_official_name: '',
+        location: 'Spa',
+        country_name: 'Belgium',
+        country_code: 'BEL',
+        country_flag: '',
+        circuit_key: 7,
+        circuit_short_name: 'Spa',
+        date_start: '2026-07-24T09:00:00Z',
+        date_end: '2026-07-26T16:00:00Z',
+        year: 2026,
+      },
       next_session: {
         session: {
           session_key: 21,
@@ -110,6 +135,20 @@ describe('response availability metadata', () => {
           date_start: '2026-07-24T09:00:00Z',
           date_end: '2026-07-24T10:00:00Z',
           gmt_offset: '',
+        },
+        meeting: {
+          meeting_key: 2,
+          meeting_name: 'Belgian Grand Prix',
+          meeting_official_name: '',
+          location: 'Spa',
+          country_name: 'Belgium',
+          country_code: 'BEL',
+          country_flag: '',
+          circuit_key: 7,
+          circuit_short_name: 'Spa',
+          date_start: '2026-07-24T09:00:00Z',
+          date_end: '2026-07-26T16:00:00Z',
+          year: 2026,
         },
         availability: {
           source: 'local',
@@ -137,6 +176,90 @@ describe('response availability metadata', () => {
       },
     }
     expect(weekendContextNotice(localOnly)).toBeNull()
+  })
+
+  it('authoritative Weekend header local/local does not fall through to previous archive', () => {
+    const focusMeeting = {
+      meeting_key: 2,
+      meeting_name: 'Belgian Grand Prix',
+      meeting_official_name: '',
+      location: 'Spa',
+      country_name: 'Belgium',
+      country_code: 'BEL',
+      country_flag: '',
+      circuit_key: 7,
+      circuit_short_name: 'Spa',
+      date_start: '2026-07-10T09:00:00Z',
+      date_end: '2026-07-12T16:00:00Z',
+      year: 2026,
+    }
+    const previousMeeting = {
+      ...focusMeeting,
+      meeting_key: 1,
+      meeting_name: 'British Grand Prix',
+      circuit_short_name: 'Silverstone',
+      location: 'Silverstone',
+      country_name: 'United Kingdom',
+      country_code: 'GBR',
+    }
+    const context: WeekendContext = {
+      season: 2026,
+      temporal_state: 'between_sessions',
+      championship_round: 12,
+      total_championship_rounds: 24,
+      focus_meeting: focusMeeting,
+      next_session: {
+        session: {
+          session_key: 21,
+          session_name: 'Practice 1',
+          session_type: 'Practice',
+          meeting_key: 2,
+          date_start: '2026-07-10T09:00:00Z',
+          date_end: '2026-07-10T10:00:00Z',
+          gmt_offset: '',
+        },
+        meeting: focusMeeting,
+        availability: {
+          source: 'local',
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'unavailable',
+          local_analysis: 'pending',
+          freshness: 'local',
+          limitations: [],
+        },
+      },
+      previous_completed_session: {
+        session: {
+          session_key: 99,
+          session_name: 'Race',
+          session_type: 'Race',
+          meeting_key: 1,
+          date_start: '2026-07-05T14:00:00Z',
+          date_end: '2026-07-05T16:00:00Z',
+          gmt_offset: '',
+        },
+        meeting: previousMeeting,
+        availability: {
+          source: 'fia',
+          schedule: 'available',
+          live_transport: 'unknown',
+          live_session: 'inactive',
+          archive: 'available',
+          local_analysis: 'complete',
+          freshness: 'archive',
+          limitations: [],
+        },
+      },
+    }
+
+    rememberResponseAvailability(context, { source: 'local', freshness: 'local' })
+    expect(weekendContextNotice(context)).toBeNull()
+
+    // Without an authoritative header, typed focus (upcoming local) still suppresses Local.
+    const noHeader: WeekendContext = { ...context }
+    expect(weekendContextNotice(noHeader)).toBeNull()
   })
 
   it('updates metadata when structural sharing reuses an equal JSON object', () => {
