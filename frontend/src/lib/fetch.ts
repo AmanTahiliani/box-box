@@ -2,6 +2,59 @@
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 15_000
 
+/** CORS-readable success provenance headers from the Go API. */
+export const DATA_SOURCE_HEADER = 'X-BoxBox-Data-Source'
+export const DATA_FRESHNESS_HEADER = 'X-BoxBox-Data-Freshness'
+
+/** Reported response source values (`openf1|local|mixed`, plus `fia` for live). */
+export type DataSourceHeader = 'openf1' | 'local' | 'mixed' | 'fia' | string
+
+/** Reported freshness (`fresh|stale|local|partial`, plus live/archive/limited). */
+export type DataFreshnessHeader =
+  | 'fresh'
+  | 'stale'
+  | 'local'
+  | 'partial'
+  | 'live'
+  | 'archive'
+  | 'limited'
+  | string
+
+/** Additive success-response availability metadata (never inferred from React Query). */
+export interface ResponseAvailability {
+  source?: DataSourceHeader
+  freshness?: DataFreshnessHeader
+}
+
+const responseAvailability = new WeakMap<object, ResponseAvailability>()
+
+function readHeader(headers: Headers, name: string): string | undefined {
+  const value = headers.get(name)?.trim()
+  return value || undefined
+}
+
+function captureResponseAvailability(data: unknown, headers: Headers): void {
+  if (data === null || (typeof data !== 'object' && typeof data !== 'function')) return
+  const source = readHeader(headers, DATA_SOURCE_HEADER)
+  const freshness = readHeader(headers, DATA_FRESHNESS_HEADER)
+  if (!source && !freshness) return
+  responseAvailability.set(data as object, { source, freshness })
+}
+
+/** Read availability metadata captured from the last successful fetch of this payload. */
+export function getResponseAvailability(data: unknown): ResponseAvailability | undefined {
+  if (data === null || (typeof data !== 'object' && typeof data !== 'function')) return undefined
+  return responseAvailability.get(data as object)
+}
+
+/** Test / manual helper — attach reported availability to a payload object. */
+export function rememberResponseAvailability(
+  data: object,
+  meta: ResponseAvailability,
+): void {
+  responseAvailability.set(data, meta)
+}
+
 export type ApiErrorKind = 'http' | 'timeout' | 'abort' | 'network'
 
 export class ApiError extends Error {
@@ -159,7 +212,9 @@ async function rawApiFetch<T>(url: string, options: ApiFetchOptions = {}): Promi
       })
     }
 
-    return (await res.json()) as T
+    const data = (await res.json()) as T
+    captureResponseAvailability(data, res.headers)
+    return data
   } finally {
     clearTimeout(timer)
   }

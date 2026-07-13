@@ -364,6 +364,86 @@ describe('WeekendPage canonical contract rendering', () => {
     expect(screen.queryByTestId('weekend-between-races')).not.toBeInTheDocument()
   })
 
+  it('pre_session embeds Preview with canonical meeting identity (no seasons/meetings re-resolve)', async () => {
+    const next = meeting({
+      meeting_key: 2,
+      meeting_name: 'Hungarian Grand Prix',
+      date_start: '2026-07-24T09:00:00Z',
+    })
+    mockContext.mockResolvedValue(
+      context({
+        temporal_state: 'pre_session',
+        next_meeting: next,
+        focus_meeting: next,
+        next_session: ctxSession({
+          session: session({
+            session_key: 21,
+            session_name: 'Practice 1',
+            meeting_key: 2,
+            date_start: '2026-07-24T09:00:00Z',
+          }),
+          meeting: next,
+          availability: availability({ freshness: 'partial', local_analysis: 'partial' }),
+        }),
+      }),
+    )
+    mockSessions.mockResolvedValue([
+      session({
+        session_key: 21,
+        session_name: 'Practice 1',
+        meeting_key: 2,
+        date_start: '2026-07-24T09:00:00Z',
+      }),
+    ])
+
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-pre-session')).toBeInTheDocument())
+    expect(screen.getByTestId('wk-pre-head')).toHaveTextContent('Hungarian Grand Prix')
+    expect(screen.getByTestId('weekend-data-notice')).toHaveTextContent(/Partial/i)
+
+    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
+    expect(screen.getByTestId('preview-page')).toHaveAttribute('data-meeting-key', '2')
+    expect(screen.getByTestId('preview-page')).toHaveAttribute('data-embedded', 'true')
+    // Canonical identity was passed — Preview must not fan out to seasons /
+    // current-season meetings selection. Prior-year lookup for "Last year here"
+    // remains an intentional supplement.
+    expect(mockSeasons).not.toHaveBeenCalled()
+    expect(mockMeetings).not.toHaveBeenCalledWith(2026, expect.anything(), expect.anything())
+    expect(mockSessions).toHaveBeenCalledWith(2, 'auto', expect.anything())
+  })
+
+  it('preview supplement failure keeps the Weekend shell usable with sanitized Retry', async () => {
+    const next = meeting({
+      meeting_key: 2,
+      meeting_name: 'Hungarian Grand Prix',
+      date_start: '2026-07-24T09:00:00Z',
+    })
+    mockContext.mockResolvedValue(
+      context({
+        temporal_state: 'pre_session',
+        next_meeting: next,
+        focus_meeting: next,
+        next_session: ctxSession({
+          session: session({ session_key: 21, session_name: 'Practice 1', meeting_key: 2 }),
+          meeting: next,
+        }),
+      }),
+    )
+    // Force identity path by omitting meeting prop simulation: sessions for supplements fail,
+    // but shell stays. Actually with canonical meeting, identity never errors — force
+    // championship/track failures instead, and separately test standalone raw error below.
+    mockSessions.mockRejectedValue(new Error('API 500: sessions boom'))
+    mockHub.mockRejectedValue(new Error('API 429: rate limited'))
+
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('wk-pre-head')).toBeInTheDocument())
+    expect(screen.getByTestId('wk-pre-head')).toHaveTextContent('Hungarian Grand Prix')
+    expect(screen.getByTestId('weekend-pre-session')).toBeInTheDocument()
+    // Nested preview still mounts with canonical meeting; section errors are sanitized.
+    await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
+    expect(screen.queryByText(/API 500|API 429|sessions boom/i)).not.toBeInTheDocument()
+  })
+
   it('restores Race Hub meeting/session focus from the Weekend URL search contract', async () => {
     mockContext.mockResolvedValue(
       context({

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BriefingPage } from '../pages/BriefingPage'
@@ -207,5 +207,17 @@ describe('BriefingPage digest layout', () => {
       expect(screen.getByRole('tab', { name: /All/i })).toBeInTheDocument()
     })
     expect(screen.getByRole('tab', { name: /News/i })).toBeInTheDocument()
+  })
+
+  it('keeps articles usable and shows Limited when grouping supplements fail', async () => {
+    mockFetchSeasonMeetings.mockRejectedValue(new Error('API 503: meetings failed'))
+    mockFetchHub.mockRejectedValue(new Error('API 503: hub failed'))
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('briefing-data-notice')).toHaveTextContent(/Limited/i)
+    })
+    expect(screen.getByText('Verstappen sets the pace in Bahrain')).toBeInTheDocument()
+    expect(screen.queryByTestId('briefing-error')).not.toBeInTheDocument()
   })
 })

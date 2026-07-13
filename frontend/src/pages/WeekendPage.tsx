@@ -5,6 +5,8 @@ import { LiveHandoffView } from '../components/weekend/LiveHandoffView'
 import { PreSessionView } from '../components/weekend/PreSessionView'
 import { WeekendError, WeekendLimited, WeekendLoading } from '../components/weekend/StatusViews'
 import { WeekendFocusBanner } from '../components/weekend/WeekendFocusBanner'
+import { DataNotice } from '../components/RouteState'
+import { noticeMessage, type DataAvailability } from '../lib/availability'
 import { resolveViewState } from '../lib/weekendContext'
 import type {
   WeekendBriefingItem,
@@ -60,6 +62,44 @@ function renderState(view: WeekendViewState, args: RenderArgs) {
   }
 }
 
+function WeekendAvailabilityNotices({
+  availabilityNotice,
+  supplementsLimited,
+  onRetry,
+  retrying,
+}: {
+  availabilityNotice: DataAvailability | null
+  supplementsLimited: boolean
+  onRetry: () => void
+  retrying: boolean
+}) {
+  // Prefer a single reported freshness notice; Limited for failed supplements
+  // only when freshness itself is not already disclosing a stronger state.
+  if (availabilityNotice) {
+    return (
+      <DataNotice
+        availability={availabilityNotice}
+        message={noticeMessage(availabilityNotice)}
+        onRetry={onRetry}
+        retrying={retrying}
+        testId="weekend-data-notice"
+      />
+    )
+  }
+  if (supplementsLimited) {
+    return (
+      <DataNotice
+        availability="limited"
+        message="Championship or briefing supplements are unavailable. Weekend schedule context is still shown."
+        onRetry={onRetry}
+        retrying={retrying}
+        testId="weekend-data-notice"
+      />
+    )
+  }
+  return null
+}
+
 export function WeekendPage({
   preview = false,
   focusMeetingKey,
@@ -71,8 +111,18 @@ export function WeekendPage({
   /** Restored from `/?session_key=` when returning from Race Hub analysis. */
   focusSessionKey?: number
 }) {
-  const { context, loadState, error, championship, briefing, now, refetch, isFetching } =
-    useWeekendContext()
+  const {
+    context,
+    loadState,
+    error,
+    championship,
+    briefing,
+    availabilityNotice,
+    supplementsLimited,
+    now,
+    refetch,
+    isFetching,
+  } = useWeekendContext()
   const hasFocus =
     (focusMeetingKey != null && focusMeetingKey > 0) ||
     (focusSessionKey != null && focusSessionKey > 0)
@@ -108,6 +158,12 @@ export function WeekendPage({
       {hasFocus && (
         <WeekendFocusBanner meetingKey={focusMeetingKey} sessionKey={focusSessionKey} />
       )}
+      <WeekendAvailabilityNotices
+        availabilityNotice={availabilityNotice}
+        supplementsLimited={supplementsLimited}
+        onRetry={refetch}
+        retrying={isFetching}
+      />
       {renderState(view, { context, now, championship, briefing, preview })}
     </main>
   )

@@ -20,7 +20,8 @@ import {
 } from '../components/PreSessionView'
 import { WeekendSwitcher } from '../components/WeekendSwitcher'
 import { SourceBadge } from '../components/SourceBadge'
-import { RouteState } from '../components/RouteState'
+import { DataNotice, RouteState } from '../components/RouteState'
+import { noticeFromResponse, noticeMessage } from '../lib/availability'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import { sessionTypeAbbrev } from '../lib/coverage'
 import { formatSessionScheduleTime, sortSessionsByStart } from '../lib/schedule'
@@ -247,6 +248,11 @@ export function RaceHubPage({ sessionKey }: Props) {
   const preparing = isPreparing(activeState)
   const unavailable = isUnavailable(activeState)
   const partial = isPartialAnalysis(activeState)
+  // Distinct stale disclosure from response headers — skip routine local (already
+  // covered by SourceBadge) and skip partial when the readiness banner is shown.
+  const freshnessNotice = noticeFromResponse(data, { includeLocal: false })
+  const showFreshnessNotice =
+    freshnessNotice != null && !(partial && freshnessNotice === 'partial')
 
   return (
     <div className="rh-page" data-testid="race-hub" style={accentStyle}>
@@ -277,6 +283,18 @@ export function RaceHubPage({ sessionKey }: Props) {
           {switcherOpen ? 'Close' : 'Switch Weekend'}
         </button>
       </div>
+
+      {showFreshnessNotice && freshnessNotice && (
+        <DataNotice
+          availability={freshnessNotice}
+          message={noticeMessage(freshnessNotice)}
+          onRetry={() => {
+            if (!raceHubQuery.isFetching) void raceHubQuery.refetch()
+          }}
+          retrying={raceHubQuery.isFetching}
+          testId="race-hub-data-notice"
+        />
+      )}
 
       {switcherOpen && (
         <WeekendSwitcher

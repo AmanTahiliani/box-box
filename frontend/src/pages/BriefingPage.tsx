@@ -24,7 +24,8 @@ import {
 } from '../lib/digest'
 import { stripHtml, timeAgo } from '../utils'
 import type { ArticleContent, NewsItem } from '../types'
-import { RouteState } from '../components/RouteState'
+import { DataNotice, RouteState } from '../components/RouteState'
+import { noticeFromResponse, noticeMessage } from '../lib/availability'
 import '../styles/digest.css'
 
 type Category = 'all' | 'official' | 'news' | 'video'
@@ -516,6 +517,18 @@ export function BriefingPage() {
   const hasDigest = meetings.length > 0
   const showEmpty = tagFiltered.length === 0 && grouped.recent.length === 0
 
+  const supplementsLimited =
+    !isLoading &&
+    !isError &&
+    ((meetingsQuery.isError && !meetingsQuery.isFetching) ||
+      (hubQuery.isError && !hubQuery.isFetching) ||
+      (seasonsQuery.isError && !seasonsQuery.isFetching))
+
+  const newsAvailability = noticeFromResponse(allNews, { includeLocal: true })
+  const hubAvailability = noticeFromResponse(hub, { includeLocal: false })
+  const meetingsAvailability = noticeFromResponse(meetings, { includeLocal: false })
+  const availability = newsAvailability ?? hubAvailability ?? meetingsAvailability
+
   return (
     <div className="bp-page" data-testid="briefing-page">
       <div className="bp-topbar">
@@ -543,6 +556,30 @@ export function BriefingPage() {
 
       {!isLoading && !isError && (
         <>
+          {supplementsLimited && (
+            <DataNotice
+              availability="limited"
+              message="Weekend grouping or driver tags are limited. Articles are still available."
+              onRetry={() => {
+                if (meetingsQuery.isError && !meetingsQuery.isFetching) void meetingsQuery.refetch()
+                if (hubQuery.isError && !hubQuery.isFetching) void hubQuery.refetch()
+                if (seasonsQuery.isError && !seasonsQuery.isFetching) void seasonsQuery.refetch()
+              }}
+              testId="briefing-data-notice"
+            />
+          )}
+          {!supplementsLimited && availability && (
+            <DataNotice
+              availability={availability}
+              message={noticeMessage(availability)}
+              onRetry={() => {
+                if (!isFetching) void refetch()
+              }}
+              retrying={isFetching}
+              testId="briefing-data-notice"
+            />
+          )}
+
           <CategoryTabs
             active={activeCategory}
             counts={counts}

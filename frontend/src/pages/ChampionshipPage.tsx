@@ -7,8 +7,9 @@ import type { ChampHubDriver, ChampionshipHub } from '../types'
 import { ChampionshipSimulator } from '../components/ChampionshipSimulator'
 import { RivalryCompare } from '../components/RivalryCompare'
 import { Meaning } from '../components/Meaning'
-import { RouteState } from '../components/RouteState'
+import { DataNotice, RouteState } from '../components/RouteState'
 import { TeammateH2H } from '../components/TeammateH2H'
+import { noticeFromResponse, noticeMessage } from '../lib/availability'
 import { teammatePairs } from '../lib/h2h'
 import { pointsGapMeaning } from '../lib/meaning'
 
@@ -151,16 +152,32 @@ export function ChampionshipPage() {
     )
   }
 
-  return <ChampionshipBody hub={hub} view={view} setView={setView} />
+  const availability = noticeFromResponse(hub, { includeLocal: true })
+
+  return (
+    <ChampionshipBody
+      hub={hub}
+      view={view}
+      setView={setView}
+      availability={availability}
+      onRetry={() => {
+        if (!hubQuery.isFetching) void hubQuery.refetch()
+      }}
+      retrying={hubQuery.isFetching}
+    />
+  )
 }
 
 interface BodyProps {
   hub: ChampionshipHub
   view: View
   setView: (v: View) => void
+  availability?: ReturnType<typeof noticeFromResponse>
+  onRetry?: () => void
+  retrying?: boolean
 }
 
-function ChampionshipBody({ hub, view, setView }: BodyProps) {
+function ChampionshipBody({ hub, view, setView, availability, onRetry, retrying }: BodyProps) {
   const { drivers, teams } = hub
   const leader = drivers[0]
   const remaining = hub.rounds_left * 25
@@ -216,6 +233,15 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
 
   return (
     <div className="champ-page" data-testid="championship">
+      {availability && (
+        <DataNotice
+          availability={availability}
+          message={noticeMessage(availability)}
+          onRetry={onRetry}
+          retrying={retrying}
+          testId="championship-data-notice"
+        />
+      )}
       <div className="champ-header">
         <div className="champ-title-row">
           <span className="champ-accent" aria-hidden="true" />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchChampionshipHub, fetchNews, fetchWeekendContext } from '../api'
+import { weekendContextNotice, type DataAvailability } from '../lib/availability'
 import { championshipImpact, briefingItems } from '../lib/weekendContext'
 import type {
   WeekendChampionshipImpact,
@@ -19,6 +20,10 @@ export interface UseWeekendContextResult {
   championship?: WeekendChampionshipImpact
   /** Supplementary briefing items (not part of the #72 contract). */
   briefing: WeekendBriefingItem[]
+  /** Non-blocking availability notice from reported context freshness/headers. */
+  availabilityNotice: DataAvailability | null
+  /** True when championship or news supplements failed while context succeeded. */
+  supplementsLimited: boolean
   now: Date
   /** Refetch the canonical weekend-context read. */
   refetch: () => void
@@ -78,6 +83,16 @@ export function useWeekendContext(): UseWeekendContextResult {
   )
   const briefing = useMemo(() => briefingItems(newsQuery.data ?? []), [newsQuery.data])
 
+  const availabilityNotice = useMemo(
+    () => (canonical ? weekendContextNotice(canonical) : null),
+    [canonical],
+  )
+
+  const supplementsLimited =
+    canonicalReady &&
+    ((championshipQuery.isError && !championshipQuery.isFetching) ||
+      (newsQuery.isError && !newsQuery.isFetching))
+
   let loadState: WeekendLoadState = 'loading'
   if (contextQuery.isError) loadState = 'error'
   else if (canonicalReady) loadState = 'ready'
@@ -88,6 +103,8 @@ export function useWeekendContext(): UseWeekendContextResult {
     error: contextQuery.error instanceof Error ? contextQuery.error : undefined,
     championship,
     briefing,
+    availabilityNotice,
+    supplementsLimited,
     now: nowDate,
     refetch: () => {
       if (!contextQuery.isFetching) void contextQuery.refetch()

@@ -36,7 +36,8 @@ import { EventRail } from '../components/live/EventRail'
 import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
 import { LiveHandoff } from '../components/live/LiveHandoff'
-import { RouteState } from '../components/RouteState'
+import { DataNotice, RouteState } from '../components/RouteState'
+import { weekendContextNotice } from '../lib/availability'
 import '../styles/live-state.css'
 
 /** How often to re-check weekend-context while analysis is still ingesting. */
@@ -124,6 +125,12 @@ export function LiveTimingPage() {
     refetchIntervalInBackground: false,
   })
   const weekendContext = contextQuery.data
+  // Context freshness belongs only on inactive/settling handoff — never relabel
+  // active FIA timing because an optional REST supplement reported stale/limited.
+  const contextAvailabilityNotice =
+    (phase === 'settling' || phase === 'inactive') && weekendContext
+      ? weekendContextNotice(weekendContext)
+      : null
 
   useEffect(() => {
     if (!data) return
@@ -336,15 +343,23 @@ export function LiveTimingPage() {
       )}
 
       {(phase === 'settling' || phase === 'inactive') && (
-        <LiveHandoff
-          phase={phase}
-          transport={feedHealth}
-          context={weekendContext}
-          rows={settlingRows}
-          capturedAt={archiveSnapshotAt}
-          hasArchive={hasArchive}
-          onViewArchive={handleViewArchive}
-        />
+        <>
+          {contextAvailabilityNotice && (
+            <DataNotice
+              availability={contextAvailabilityNotice}
+              testId="live-context-data-notice"
+            />
+          )}
+          <LiveHandoff
+            phase={phase}
+            transport={feedHealth}
+            context={weekendContext}
+            rows={settlingRows}
+            capturedAt={archiveSnapshotAt}
+            hasArchive={hasArchive}
+            onViewArchive={handleViewArchive}
+          />
+        </>
       )}
 
       {snapshot && rendersSnapshot(phase) && (
