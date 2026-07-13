@@ -278,6 +278,15 @@ describe('RaceStoryCanvas replay map', () => {
     expect(screen.getByTestId('chapter-card-0')).not.toHaveClass('active')
   })
 
+  it('exposes the final running order outcome region with winner position', () => {
+    renderCanvas()
+
+    const outcome = screen.getByTestId('race-story-outcome')
+    expect(outcome).toHaveAttribute('aria-label', 'Final running order')
+    expect(outcome).toHaveTextContent('VER')
+    expect(outcome.querySelector('.rs-pos-col')).toHaveTextContent('1')
+  })
+
   it('renders the empty-state card when positions are unavailable', () => {
     renderCanvas({
       datasets: { positions: { status: 'missing', source: 'local', count: 0 } },

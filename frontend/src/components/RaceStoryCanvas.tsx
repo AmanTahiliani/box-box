@@ -704,7 +704,12 @@ export function RaceStoryCanvas({ data }: Props) {
       </div>
 
       {displayResults.length > 0 && (
-        <div className="rs-field-list">
+        <div
+          className="rs-field-list"
+          role="region"
+          aria-label="Final running order"
+          data-testid="race-story-outcome"
+        >
           {displayResults.map((r, i) => {
             const gridPos = grid.find((g) => g.driver_number === r.driver_number)?.position ?? 0
             const currentPos = scrubTime !== null ? i + 1 : r.position
