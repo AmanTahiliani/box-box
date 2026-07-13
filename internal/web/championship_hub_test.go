@@ -39,7 +39,7 @@ func championshipTestUpstream(t *testing.T, driversOK, meetingHasRace bool) *htt
 			}
 			_, _ = w.Write([]byte(`[{"driver_number":1,"name_acronym":"VER","full_name":"Max Verstappen","team_name":"Red Bull","team_colour":"3671c6"}]`))
 		case "/v1/meetings":
-			_, _ = w.Write([]byte(`[{"meeting_key":1,"meeting_name":"Test GP"}]`))
+			_, _ = w.Write([]byte(`[{"meeting_key":1,"meeting_name":"Mystery Grand Prix"}]`))
 		case "/v1/session_result":
 			_, _ = w.Write([]byte(`[{"driver_number":1,"position":1,"points":25}]`))
 		case "/v1/starting_grid":
@@ -83,6 +83,51 @@ func TestFetchSeasonRacesMeetingWithoutRaceIsIncomplete(t *testing.T) {
 	}
 	if !incomplete || len(races) != 0 {
 		t.Fatalf("no-Race meeting = races %d, incomplete %v", len(races), incomplete)
+	}
+}
+
+func TestFetchSeasonRacesRecognizedTestingMeetingIsNotIncomplete(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/meetings":
+			_, _ = w.Write([]byte(`[{"meeting_key":1253,"meeting_name":"Pre-Season Testing"}]`))
+		case "/v1/sessions":
+			_, _ = w.Write([]byte(`[{"session_key":1,"meeting_key":1253,"session_name":"Day 1","session_type":"Testing"}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+	client := api.NewOpenF1Client(upstream.URL, 2*time.Second)
+	defer client.Close()
+
+	races, incomplete, err := fetchSeasonRaces(client.Scoped(), time.Now().Year())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if incomplete || len(races) != 0 {
+		t.Fatalf("recognized testing meeting = races %d, incomplete %v", len(races), incomplete)
+	}
+}
+
+func TestKnownNonChampionshipMeetingRequiresTestingToken(t *testing.T) {
+	if !isKnownNonChampionshipMeeting(models.Meeting{MeetingName: "Pre-Season Testing"}, nil) {
+		t.Fatal("pre-season testing was not recognized")
+	}
+	if isKnownNonChampionshipMeeting(models.Meeting{MeetingName: "Fastest Grand Prix"}, nil) {
+		t.Fatal("substring inside a normal word was treated as testing")
+	}
+	if !isKnownNonChampionshipMeeting(models.Meeting{MeetingName: "Winter Event"}, []models.Session{{SessionType: "Test"}}) {
+		t.Fatal("explicit Test session was not recognized")
+	}
+}
+
+func TestHandleChampionshipHubSourceLocalWithoutAggregateIsLimited(t *testing.T) {
+	server := NewServer(nil, 0, nil)
+	recorder := httptest.NewRecorder()
+	server.handleChampionshipHub(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/championship/hub?year=2026&source=local", nil))
+	if recorder.Code != http.StatusOK || recorder.Header().Get(dataSourceHeader) != "none" || recorder.Header().Get(dataFreshnessHeader) != "limited" {
+		t.Fatalf("empty local championship = %d %q/%q body=%s", recorder.Code, recorder.Header().Get(dataSourceHeader), recorder.Header().Get(dataFreshnessHeader), recorder.Body.String())
 	}
 }
 

@@ -107,8 +107,11 @@ func TestAssembleReplayFramesSnapsNearestSamplesAndOmitsEmptyDrivers(t *testing.
 	if err != nil {
 		t.Fatalf("assembleReplayFrames() error = %v", err)
 	}
-	if incomplete {
-		t.Fatal("complete driver series reported incomplete")
+	if !incomplete {
+		t.Fatal("empty entrant location series was labelled complete")
+	}
+	if got := replayResponseFreshness(resp, incomplete); got != "partial" {
+		t.Fatalf("empty entrant freshness = %q", got)
 	}
 	if resp.SessionKey != 99 || resp.Interval != 5000 {
 		t.Fatalf("response metadata = %+v", resp)

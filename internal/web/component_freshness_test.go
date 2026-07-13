@@ -69,6 +69,19 @@ func TestStrategyOptionalComponentFailureReportsPartial(t *testing.T) {
 	assertAvailabilityHeaders(t, recorder, "openf1", "partial")
 }
 
+func TestStrategyEmptyPrimaryDataReportsLimited(t *testing.T) {
+	server := componentTestServer(t, map[string]string{
+		"/v1/stints":         `[]`,
+		"/v1/pit":            `[]`,
+		"/v1/session_result": `[{"driver_number":1,"position":1,"number_of_laps":10}]`,
+		"/v1/drivers":        `[{"driver_number":1,"full_name":"Max Verstappen","team_name":"Red Bull","team_colour":"3671c6"}]`,
+		"/v1/race_control":   `[]`,
+	}, nil)
+	recorder := httptest.NewRecorder()
+	server.handleStrategy(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/strategy?session_key=99", nil))
+	assertAvailabilityHeaders(t, recorder, "openf1", "limited")
+}
+
 func TestLapsComparisonDoesNotLabelMissingComponentsFresh(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -12,6 +12,20 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type fakeStaleReporter bool
+
+func (f fakeStaleReporter) LastResponseWasStale() bool { return bool(f) }
+
+func TestStaleFreshnessTakesPrecedenceOverPartialAndLimited(t *testing.T) {
+	for _, fallback := range []string{"partial", "limited"} {
+		recorder := httptest.NewRecorder()
+		markOpenF1Availability(recorder, fakeStaleReporter(true), fallback)
+		if recorder.Header().Get(dataFreshnessHeader) != "stale" {
+			t.Fatalf("fallback %q overrode stale: %q", fallback, recorder.Header().Get(dataFreshnessHeader))
+		}
+	}
+}
+
 func TestOpenF1HandlerReportsFreshThenStaleSuccess(t *testing.T) {
 	year := time.Now().Year()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

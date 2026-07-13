@@ -113,7 +113,7 @@ func assembleReplayFrames(ctx context.Context, client replayDataClient, sessionK
 	}
 	resp.StartTime = start.Format(time.RFC3339Nano)
 	resp.Frames = snapReplayFrames(series, start, intervalMS)
-	return resp, err != nil || len(resp.Frames) == 0, nil
+	return resp, err != nil || len(series) < len(driverNumbers) || len(resp.Frames) == 0, nil
 }
 
 func uniqueDriverNumbers(drivers []models.Driver) []int {

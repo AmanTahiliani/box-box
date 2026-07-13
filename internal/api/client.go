@@ -48,11 +48,9 @@ func (p *requestPacer) waitContext(ctx context.Context) error {
 		select {
 		case <-timer.C:
 		case <-ctx.Done():
-			// Return the unused reservation so repeated bounded enrichment
-			// cancellations do not leave pacing debt for later real requests.
-			p.mu.Lock()
-			p.next = p.next.Add(-p.interval)
-			p.mu.Unlock()
+			// Keep the unused reservation in the schedule. Blindly reclaiming an
+			// interval can collide with later callers that already reserved their
+			// wake times, releasing two requests simultaneously.
 			return ctx.Err()
 		}
 	}

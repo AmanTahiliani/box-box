@@ -836,7 +836,7 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if mode == sourceLocal {
-			markLocalResponse(w, false)
+			markDataResponse(w, "none", "limited")
 			writeJSON(w, resp)
 			return
 		}
@@ -959,6 +959,9 @@ func fetchSeasonRaces(client *api.OpenF1Client, year int) (races []meetingRace, 
 			}
 		}
 		if raceKey == 0 {
+			if isKnownNonChampionshipMeeting(m, sessions) {
+				return meetingRace{}, false
+			}
 			failed.Store(true)
 			// The meeting list does not identify non-championship events. Skipping
 			// a meeting without a Race may be expected (testing), but the aggregate
@@ -973,6 +976,29 @@ func fetchSeasonRaces(client *api.OpenF1Client, year int) (races []meetingRace, 
 		return meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}, true
 	})
 	return races, failed.Load(), nil
+}
+
+func isKnownNonChampionshipMeeting(meeting models.Meeting, sessions []models.Session) bool {
+	if hasTestingToken(meeting.MeetingName + " " + meeting.MeetingOfficialName) {
+		return true
+	}
+	for _, session := range sessions {
+		if hasTestingToken(session.SessionName + " " + session.SessionType) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTestingToken(value string) bool {
+	for _, token := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}) {
+		if token == "test" || token == "tests" || token == "testing" {
+			return true
+		}
+	}
+	return false
 }
 
 // aggregateChampionshipHub is the pure aggregation core (no network) so it can be
@@ -1415,9 +1441,11 @@ func (s *Server) handleStrategy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Non-race sessions have no stints.
+	// Empty strategy data may mean a non-race session or a race still settling.
 	if len(stints) == 0 {
-		markOpenF1AggregateResponse(w, client, driversErr != nil || rcErr != nil)
+		// Without session-type evidence, an empty primary strategy dataset is
+		// not enough to prove "not applicable" (it may still be settling).
+		markOpenF1Availability(w, client, "limited")
 		writeJSON(w, map[string]any{"note": "Not applicable", "drivers": []any{}})
 		return
 	}
