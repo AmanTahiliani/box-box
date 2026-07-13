@@ -5,6 +5,7 @@ import { fetchLocalMeetings, fetchSeasons, fetchWeekend } from '../api'
 import { formatCoverageHint } from '../lib/coverage'
 import { SourceBadge } from './SourceBadge'
 import { SessionCoverageDots } from './SessionCoverageDots'
+import { RouteState } from './RouteState'
 import type { Meeting, WeekendSession } from '../types'
 
 function formatMeetingDates(meeting: Meeting): string {
@@ -29,18 +30,18 @@ export function LocalDataNavigator({ onSelectSession }: Props) {
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryFn: ({ signal }) => fetchSeasons(signal),
   })
 
   const meetingsQuery = useQuery({
     queryKey: ['meetings', selectedYear],
-    queryFn: () => fetchLocalMeetings(selectedYear!),
+    queryFn: ({ signal }) => fetchLocalMeetings(selectedYear!, signal),
     enabled: selectedYear != null,
   })
 
   const weekendQuery = useQuery({
     queryKey: ['weekend', selectedMeetingKey],
-    queryFn: () => fetchWeekend(selectedMeetingKey!),
+    queryFn: ({ signal }) => fetchWeekend(selectedMeetingKey!, signal),
     enabled: selectedMeetingKey != null,
   })
 
@@ -68,14 +69,22 @@ export function LocalDataNavigator({ onSelectSession }: Props) {
   }
 
   if (seasonsQuery.isLoading) {
-    return <div className="nav-panel loading-state">loading local seasons…</div>
+    return <RouteState kind="loading" title="loading local seasons…" className="nav-panel" />
   }
 
   if (seasonsQuery.isError) {
     return (
-      <div className="nav-panel error-box">
-        {seasonsQuery.error instanceof Error ? seasonsQuery.error.message : 'Failed to load seasons'}
-      </div>
+      <RouteState
+        kind="error"
+        className="nav-panel"
+        title="Local seasons unavailable"
+        error={seasonsQuery.error}
+        onRetry={() => {
+          if (!seasonsQuery.isFetching) void seasonsQuery.refetch()
+        }}
+        retrying={seasonsQuery.isFetching}
+        testId="weekend-error"
+      />
     )
   }
 
@@ -124,9 +133,16 @@ export function LocalDataNavigator({ onSelectSession }: Props) {
       )}
 
       {meetingsQuery.isError && (
-        <div className="error-box" style={{ marginTop: 'var(--s4)' }}>
-          {meetingsQuery.error instanceof Error ? meetingsQuery.error.message : 'Failed to load meetings'}
-        </div>
+        <RouteState
+          kind="error"
+          title="Meetings unavailable"
+          error={meetingsQuery.error}
+          onRetry={() => {
+            if (!meetingsQuery.isFetching) void meetingsQuery.refetch()
+          }}
+          retrying={meetingsQuery.isFetching}
+          testId="weekend-meetings-error"
+        />
       )}
 
       {!meetingsQuery.isLoading && !meetingsQuery.isError && meetings.length === 0 && (
@@ -194,9 +210,16 @@ export function LocalDataNavigator({ onSelectSession }: Props) {
       )}
 
       {selectedMeetingKey != null && weekendQuery.isError && (
-        <div className="error-box" style={{ marginTop: 'var(--s4)' }}>
-          {weekendQuery.error instanceof Error ? weekendQuery.error.message : 'Failed to load weekend'}
-        </div>
+        <RouteState
+          kind="error"
+          title="Weekend unavailable"
+          error={weekendQuery.error}
+          onRetry={() => {
+            if (!weekendQuery.isFetching) void weekendQuery.refetch()
+          }}
+          retrying={weekendQuery.isFetching}
+          testId="weekend-error"
+        />
       )}
 
       {weekend && (

@@ -271,7 +271,7 @@ export function RacePreviewPage() {
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryFn: ({ signal }) => fetchSeasons(signal),
   })
 
   const latestSeason = seasonsQuery.data?.[0] ?? null

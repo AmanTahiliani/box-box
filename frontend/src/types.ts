@@ -446,6 +446,10 @@ export interface DriverSummary {
   cumulative: number[]
   round_labels: string[]
   rounds: DriverSummaryRound[]
+  /** Data origin: local domain DB or OpenF1 fallback. */
+  source?: 'local' | 'openf1'
+  /** Optional remote enrichment status — limited means profile still renders. */
+  enrichment?: 'full' | 'limited' | 'none'
 }
 
 // ── Weekend Context ──

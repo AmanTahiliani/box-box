@@ -36,6 +36,7 @@ import { EventRail } from '../components/live/EventRail'
 import { TeamRadioTicker } from '../components/live/TeamRadioTicker'
 import { TyreDegPanel } from '../components/live/TyreDegPanel'
 import { LiveHandoff } from '../components/live/LiveHandoff'
+import { RouteState } from '../components/RouteState'
 import '../styles/live-state.css'
 
 /** How often to re-check weekend-context while analysis is still ingesting. */
@@ -67,12 +68,15 @@ export function LiveTimingPage() {
 
   const {
     data,
+    isLoading,
     isError,
     error,
+    refetch,
+    isFetching,
     isFetched: liveStateFetched,
   } = useQuery({
     queryKey: ['live-state'],
-    queryFn: fetchLiveState,
+    queryFn: ({ signal }) => fetchLiveState(signal),
     staleTime: 5_000,
   })
 
@@ -109,7 +113,7 @@ export function LiveTimingPage() {
   // analysis-ready without a manual refresh.
   const contextQuery = useQuery({
     queryKey: ['weekend-context'],
-    queryFn: fetchWeekendContext,
+    queryFn: ({ signal }) => fetchWeekendContext(signal),
     enabled: !isLive,
     staleTime: WEEKEND_CONTEXT_STALE_MS,
     refetchInterval: (query) => {
@@ -296,9 +300,16 @@ export function LiveTimingPage() {
   return (
     <div className="page live-page" data-testid="live-page" data-phase={phase}>
       {isError && (
-        <div className="error-box">
-          {error instanceof Error ? error.message : 'Failed to load live timing state'}
-        </div>
+        <RouteState
+          kind="error"
+          title="Live timing unavailable"
+          error={error}
+          onRetry={() => {
+            if (!isFetching) void refetch()
+          }}
+          retrying={isFetching}
+          testId="live-initial-error"
+        />
       )}
 
       {phase === 'disconnected' && (
@@ -316,8 +327,12 @@ export function LiveTimingPage() {
         </div>
       )}
 
-      {phase === 'connecting' && (
-        <div className="loading-state">connecting to live timing…</div>
+      {phase === 'connecting' && (isLoading || !liveStateFetched) && (
+        <RouteState
+          kind="loading"
+          title="connecting to live timing…"
+          testId="live-initial-loading"
+        />
       )}
 
       {(phase === 'settling' || phase === 'inactive') && (

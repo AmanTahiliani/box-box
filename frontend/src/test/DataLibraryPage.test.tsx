@@ -116,7 +116,7 @@ describe('DataLibraryPage', () => {
 
     expect(await screen.findByTestId('data-library')).toBeInTheDocument()
     await waitFor(() => {
-      expect(mockFetchLocalMeetings).toHaveBeenCalledWith(2025)
+      expect(mockFetchLocalMeetings).toHaveBeenCalledWith(2025, expect.any(AbortSignal))
     })
 
     expect(await screen.findByTestId('meeting-detail')).toBeInTheDocument()

@@ -120,7 +120,7 @@ describe('DriverProfilePage', () => {
 
     // With an explicit year, the seasons list is not needed.
     expect(mockFetchSeasons).not.toHaveBeenCalled()
-    expect(mockFetchSummary).toHaveBeenCalledWith(1, 2025)
+    expect(mockFetchSummary).toHaveBeenCalledWith(1, 2025, expect.any(AbortSignal))
   })
 
   it('defaults to the latest season when no year is given', async () => {
@@ -129,16 +129,19 @@ describe('DriverProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('driver-profile')).toBeInTheDocument()
     })
-    expect(mockFetchSummary).toHaveBeenCalledWith(1, 2025)
+    expect(mockFetchSummary).toHaveBeenCalledWith(1, 2025, expect.any(AbortSignal))
   })
 
-  it('shows the API error message on failure', async () => {
+  it('shows a user-facing error with retry instead of raw API jargon', async () => {
     mockFetchSummary.mockRejectedValue(new Error('API 404: Not Found'))
     renderPage({ driverNumber: 99, year: 2025 })
 
     await waitFor(() => {
-      expect(screen.getByText('API 404: Not Found')).toBeInTheDocument()
+      expect(screen.getByTestId('driver-profile-error')).toBeInTheDocument()
     })
+    expect(screen.queryByText(/API 404/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.getByTestId('driver-profile-error')).toHaveTextContent(/Something went wrong/i)
   })
 
   it('shows empty states when no rounds are completed', async () => {

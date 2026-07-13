@@ -34,25 +34,25 @@ export function PaddockBriefing() {
 
   const { data: news, isLoading, isError } = useQuery({
     queryKey: ['news'],
-    queryFn: () => fetchNews(100),
+    queryFn: ({ signal }) => fetchNews(100, undefined, signal),
     staleTime: 60_000,
   })
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryFn: ({ signal }) => fetchSeasons(signal),
   })
   const latestSeason = seasonsQuery.data?.[0] ?? null
 
   const meetingsQuery = useQuery({
     queryKey: ['season-meetings', latestSeason],
-    queryFn: () => fetchSeasonMeetings(latestSeason!),
+    queryFn: ({ signal }) => fetchSeasonMeetings(latestSeason!, signal),
     enabled: latestSeason != null,
   })
 
   const hubQuery = useQuery({
     queryKey: ['championship-hub', latestSeason],
-    queryFn: () => fetchChampionshipHub(latestSeason!),
+    queryFn: ({ signal }) => fetchChampionshipHub(latestSeason!, signal),
     enabled: latestSeason != null,
   })
 

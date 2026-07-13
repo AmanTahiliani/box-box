@@ -1,3 +1,4 @@
+import { apiFetch } from './lib/fetch'
 import type {
   ArticleContent,
   CarDataSample,
@@ -18,101 +19,118 @@ import type {
   WeekendContext,
 } from './types'
 
-export async function fetchRaceHub(sessionKey: number): Promise<RaceHub> {
-  const res = await fetch(`/api/v1/race-hub?session_key=${sessionKey}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+export async function fetchRaceHub(sessionKey: number, signal?: AbortSignal): Promise<RaceHub> {
+  return apiFetch<RaceHub>(`/api/v1/race-hub?session_key=${sessionKey}`, {
+    signal,
+    dedupeKey: `race-hub:${sessionKey}`,
+  })
 }
 
-export async function fetchSeasons(): Promise<number[]> {
-  const res = await fetch('/api/v1/seasons')
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const years = await res.json()
+export async function fetchSeasons(signal?: AbortSignal): Promise<number[]> {
+  const years = await apiFetch<number[]>('/api/v1/seasons', {
+    signal,
+    dedupeKey: 'seasons',
+  })
   return Array.isArray(years) ? years : []
 }
 
-export async function fetchLocalMeetings(year: number): Promise<Meeting[]> {
-  const res = await fetch(`/api/v1/meetings?year=${year}&source=local`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const meetings = await res.json()
+export async function fetchLocalMeetings(year: number, signal?: AbortSignal): Promise<Meeting[]> {
+  const meetings = await apiFetch<Meeting[]>(`/api/v1/meetings?year=${year}&source=local`, {
+    signal,
+    dedupeKey: `meetings:local:${year}`,
+  })
   return Array.isArray(meetings) ? meetings : []
 }
 
-export async function fetchSeasonMeetings(year: number): Promise<Meeting[]> {
-  return fetchMeetings(year, 'openf1')
+export async function fetchSeasonMeetings(year: number, signal?: AbortSignal): Promise<Meeting[]> {
+  return fetchMeetings(year, 'openf1', signal)
 }
 
-export async function fetchMeetings(year: number, source = 'auto'): Promise<Meeting[]> {
-  const res = await fetch(`/api/v1/meetings?year=${year}&source=${source}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const meetings = await res.json()
+export async function fetchMeetings(
+  year: number,
+  source = 'auto',
+  signal?: AbortSignal,
+): Promise<Meeting[]> {
+  const meetings = await apiFetch<Meeting[]>(`/api/v1/meetings?year=${year}&source=${source}`, {
+    signal,
+    dedupeKey: `meetings:${source}:${year}`,
+  })
   return Array.isArray(meetings) ? meetings : []
 }
 
-export async function fetchResults(sessionKey: number, source = 'auto'): Promise<EnrichedResult[]> {
-  const res = await fetch(`/api/v1/results?session_key=${sessionKey}&source=${source}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const results = await res.json()
+export async function fetchResults(
+  sessionKey: number,
+  source = 'auto',
+  signal?: AbortSignal,
+): Promise<EnrichedResult[]> {
+  const results = await apiFetch<EnrichedResult[]>(
+    `/api/v1/results?session_key=${sessionKey}&source=${source}`,
+    { signal, dedupeKey: `results:${source}:${sessionKey}` },
+  )
   return Array.isArray(results) ? results : []
 }
 
-export async function fetchStartingGrid(sessionKey: number, source = 'auto'): Promise<EnrichedGrid[]> {
-  const res = await fetch(`/api/v1/grid?session_key=${sessionKey}&source=${source}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const grid = await res.json()
+export async function fetchStartingGrid(
+  sessionKey: number,
+  source = 'auto',
+  signal?: AbortSignal,
+): Promise<EnrichedGrid[]> {
+  const grid = await apiFetch<EnrichedGrid[]>(
+    `/api/v1/grid?session_key=${sessionKey}&source=${source}`,
+    { signal, dedupeKey: `grid:${source}:${sessionKey}` },
+  )
   return Array.isArray(grid) ? grid : []
 }
 
-export async function fetchTrackOutline(circuitKey: number, year: number): Promise<TrackOutline | null> {
-  const res = await fetch(`/api/v1/track-outline?circuit_key=${circuitKey}&year=${year}`)
-  if (!res.ok) return null
-  const data = await res.json()
-  if (data?.error || !Array.isArray(data?.points) || data.points.length < 2) return null
-  return data as TrackOutline
+export async function fetchTrackOutline(
+  circuitKey: number,
+  year: number,
+  signal?: AbortSignal,
+): Promise<TrackOutline | null> {
+  try {
+    const data = await apiFetch<TrackOutline & { error?: string }>(
+      `/api/v1/track-outline?circuit_key=${circuitKey}&year=${year}`,
+      { signal, dedupeKey: `track-outline:${circuitKey}:${year}` },
+    )
+    if (data?.error || !Array.isArray(data?.points) || data.points.length < 2) return null
+    return data as TrackOutline
+  } catch {
+    return null
+  }
 }
 
 export async function fetchReplayFrames(
   sessionKey: number,
   intervalMs = 5000,
+  signal?: AbortSignal,
 ): Promise<ReplayFramesResponse> {
   const params = new URLSearchParams({
     session_key: String(sessionKey),
     interval_ms: String(intervalMs),
   })
-  const res = await fetch(`/api/v1/replay/frames?${params}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+  return apiFetch<ReplayFramesResponse>(`/api/v1/replay/frames?${params}`, {
+    signal,
+    dedupeKey: `replay-frames:${sessionKey}:${intervalMs}`,
+  })
 }
 
-export async function fetchSessions(meetingKey: number, source = 'openf1'): Promise<Session[]> {
-  const res = await fetch(`/api/v1/sessions?meeting_key=${meetingKey}&source=${source}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const sessions = await res.json()
+export async function fetchSessions(
+  meetingKey: number,
+  source = 'openf1',
+  signal?: AbortSignal,
+): Promise<Session[]> {
+  const sessions = await apiFetch<Session[]>(
+    `/api/v1/sessions?meeting_key=${meetingKey}&source=${source}`,
+    { signal, dedupeKey: `sessions:${source}:${meetingKey}` },
+  )
   return Array.isArray(sessions) ? sessions : []
 }
 
-export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
-  const res = await fetch(`/api/v1/weekend?meeting_key=${meetingKey}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+export async function fetchWeekend(meetingKey: number, signal?: AbortSignal): Promise<Weekend> {
+  return apiFetch<Weekend>(`/api/v1/weekend?meeting_key=${meetingKey}`, {
+    signal,
+    dedupeKey: `weekend:${meetingKey}`,
+  })
 }
 
 // fetchWeekendContext consumes the canonical /api/v1/weekend-context endpoint
@@ -121,61 +139,64 @@ export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
 // so the hook can surface an explicit error state; there is no client-side
 // re-derivation of the contract. Race Hub bare-default landing also reads this
 // for `default_analysis_session` (#75).
-export async function fetchWeekendContext(): Promise<WeekendContext> {
-  const res = await fetch('/api/v1/weekend-context')
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+export async function fetchWeekendContext(signal?: AbortSignal): Promise<WeekendContext> {
+  return apiFetch<WeekendContext>('/api/v1/weekend-context', {
+    signal,
+    dedupeKey: 'weekend-context',
+  })
 }
 
-export async function fetchChampionshipHub(year?: number): Promise<ChampionshipHub> {
+export async function fetchChampionshipHub(
+  year?: number,
+  signal?: AbortSignal,
+): Promise<ChampionshipHub> {
   const params = new URLSearchParams({ source: 'auto' })
   if (year) params.set('year', year.toString())
-  const url = `/api/v1/championship/hub?${params.toString()}`
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+  return apiFetch<ChampionshipHub>(`/api/v1/championship/hub?${params.toString()}`, {
+    signal,
+    dedupeKey: `championship-hub:${year ?? 'latest'}`,
+  })
 }
 
 export async function fetchDriverSummary(
   driverNumber: number,
   year?: number,
+  signal?: AbortSignal,
 ): Promise<DriverSummary> {
-  const params = new URLSearchParams({ driver_number: String(driverNumber) })
+  const params = new URLSearchParams({ driver_number: String(driverNumber), source: 'auto' })
   if (year) params.set('year', String(year))
-  const res = await fetch(`/api/v1/driver/summary?${params.toString()}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+  return apiFetch<DriverSummary>(`/api/v1/driver/summary?${params.toString()}`, {
+    signal,
+    dedupeKey: `driver-summary:${driverNumber}:${year ?? 'latest'}`,
+  })
 }
 
-export async function fetchLiveState(): Promise<LiveStateResponse> {
-  const res = await fetch('/api/v1/live/state')
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+export async function fetchLiveState(signal?: AbortSignal): Promise<LiveStateResponse> {
+  return apiFetch<LiveStateResponse>('/api/v1/live/state', {
+    signal,
+    dedupeKey: 'live-state',
+  })
 }
 
 export async function fetchLiveTrackOutline(
   session: LiveSessionMeta,
   year = new Date().getFullYear(),
+  signal?: AbortSignal,
 ): Promise<TrackOutline> {
   const params = new URLSearchParams({ year: year.toString() })
   if (session.MeetingName) params.set('meeting_name', session.MeetingName)
   if (session.CircuitName) params.set('circuit_name', session.CircuitName)
-  const res = await fetch(`/api/v1/track-outline?${params.toString()}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+  return apiFetch<TrackOutline>(`/api/v1/track-outline?${params.toString()}`, {
+    signal,
+    dedupeKey: `live-track-outline:${year}:${session.MeetingName ?? ''}:${session.CircuitName ?? ''}`,
+  })
 }
 
-export async function fetchNews(limit?: number, source?: string): Promise<NewsItem[]> {
+export async function fetchNews(
+  limit?: number,
+  source?: string,
+  signal?: AbortSignal,
+): Promise<NewsItem[]> {
   const params = new URLSearchParams()
   if (limit) params.set('limit', limit.toString())
   if (source) params.set('source', source)
@@ -183,19 +204,20 @@ export async function fetchNews(limit?: number, source?: string): Promise<NewsIt
   const query = params.toString()
   const url = query ? `/api/v1/news?${query}` : '/api/v1/news'
 
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+  return apiFetch<NewsItem[]>(url, {
+    signal,
+    dedupeKey: `news:${limit ?? 'all'}:${source ?? 'all'}`,
+  })
 }
 
-export async function fetchNewsArticle(articleUrl: string): Promise<ArticleContent> {
-  const res = await fetch(`/api/v1/news/article?url=${encodeURIComponent(articleUrl)}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+export async function fetchNewsArticle(
+  articleUrl: string,
+  signal?: AbortSignal,
+): Promise<ArticleContent> {
+  return apiFetch<ArticleContent>(
+    `/api/v1/news/article?url=${encodeURIComponent(articleUrl)}`,
+    { signal },
+  )
 }
 
 export async function markNewsRead(articleUrl: string): Promise<void> {
@@ -209,28 +231,26 @@ export async function markNewsRead(articleUrl: string): Promise<void> {
 export async function fetchTelemetry(
   sessionKey: number,
   driverNumber: number,
+  signal?: AbortSignal,
 ): Promise<CarDataSample[]> {
-  const res = await fetch(
+  const data = await apiFetch<CarDataSample[]>(
     `/api/v1/telemetry?session_key=${sessionKey}&driver_number=${driverNumber}`,
+    { signal, dedupeKey: `telemetry:${sessionKey}:${driverNumber}` },
   )
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  const data = await res.json()
   return Array.isArray(data) ? data : []
 }
 
 export async function fetchLapsComparison(
   sessionKey: number,
   drivers?: number[],
+  signal?: AbortSignal,
 ): Promise<LapsComparisonResponse> {
   const params = new URLSearchParams({ session_key: String(sessionKey) })
   if (drivers?.length) {
     params.set('drivers', drivers.join(','))
   }
-  const res = await fetch(`/api/v1/laps/comparison?${params}`)
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`)
-  }
-  return res.json()
+  return apiFetch<LapsComparisonResponse>(`/api/v1/laps/comparison?${params}`, {
+    signal,
+    dedupeKey: `laps-comparison:${sessionKey}:${drivers?.join(',') ?? 'all'}`,
+  })
 }

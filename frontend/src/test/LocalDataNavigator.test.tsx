@@ -125,7 +125,7 @@ describe('LocalDataNavigator', () => {
 
     expect(await screen.findByTestId('local-nav')).toBeInTheDocument()
     await waitFor(() => {
-      expect(mockFetchLocalMeetings).toHaveBeenCalledWith(2025)
+      expect(mockFetchLocalMeetings).toHaveBeenCalledWith(2025, expect.any(AbortSignal))
     })
     expect(screen.getByText('Monaco')).toBeInTheDocument()
   })

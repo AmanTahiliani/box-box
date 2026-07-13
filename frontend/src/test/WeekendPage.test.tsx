@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   Outlet,
@@ -239,7 +239,39 @@ describe('WeekendPage canonical contract rendering', () => {
     mockContext.mockRejectedValue(new Error('API 500: boom'))
     renderAt('/')
     await waitFor(() => expect(screen.getByTestId('weekend-error')).toBeInTheDocument())
-    expect(screen.getByTestId('weekend-error')).toHaveTextContent('boom')
+    // Sanitized — never leak raw HTTP status/body into the Weekend surface.
+    expect(screen.getByTestId('weekend-error')).not.toHaveTextContent(/API 500|boom/i)
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('retries the canonical read and recovers into a temporal state', async () => {
+    let calls = 0
+    mockContext.mockImplementation(async () => {
+      calls += 1
+      if (calls === 1) throw new Error('API 503: unavailable')
+      return context({ temporal_state: 'between_weekends' })
+    })
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-error')).toBeInTheDocument())
+    const retry = screen.getByRole('button', { name: 'Retry' })
+    fireEvent.click(retry)
+    await waitFor(() => expect(screen.getByTestId('weekend-between-races')).toBeInTheDocument())
+    expect(calls).toBe(2)
+    expect(screen.getByTestId('weekend-page')).toHaveAttribute(
+      'data-temporal-state',
+      'between_weekends',
+    )
+  })
+
+  it('failed canonical read creates zero seasons/meetings/weekend/live-state fanout', async () => {
+    mockContext.mockRejectedValue(new Error('API 503: unavailable'))
+    renderAt('/')
+    await waitFor(() => expect(screen.getByTestId('weekend-error')).toBeInTheDocument())
+    expect(mockSeasons).not.toHaveBeenCalled()
+    expect(mockMeetings).not.toHaveBeenCalled()
+    expect(mockWeekend).not.toHaveBeenCalled()
+    expect(mockHub).not.toHaveBeenCalled()
+    expect(mockNews).not.toHaveBeenCalled()
   })
 
   const stateCases: Array<[TemporalState, string]> = [

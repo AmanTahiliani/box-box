@@ -10,9 +10,14 @@ import (
 )
 
 // --- /api/v1/driver/summary ---
-// Per-driver season summary: championship standing plus per-round race results,
-// aggregated server-side from the same sources as the championship hub. Caching
-// relies on the OpenF1 client's HTTP cache TTLs — no extra layer here.
+// Per-driver season summary: championship standing plus per-round race results.
+// Current-season identity/results are local-first from the domain DB. Optional
+// OpenF1 enrichment (headshot / polished identity) is bounded so it cannot hang
+// the profile when remote data is slow or unavailable.
+
+// driverEnrichmentTimeout bounds optional remote enrichment so a hung OpenF1
+// call never blocks a local-first profile response. Overridable in tests.
+var driverEnrichmentTimeout = 2 * time.Second
 
 type driverSummaryRound struct {
 	MeetingKey  int    `json:"meeting_key"`
@@ -49,6 +54,11 @@ type driverSummaryResponse struct {
 	Cumulative   []float64            `json:"cumulative"`
 	RoundLabels  []string             `json:"round_labels"`
 	Rounds       []driverSummaryRound `json:"rounds"`
+	// Source is "local" when served from the domain DB, else "openf1".
+	Source string `json:"source,omitempty"`
+	// Enrichment is "full" when optional remote identity landed, "limited"
+	// when it timed out/failed, or "none" when no enrichment was attempted.
+	Enrichment string `json:"enrichment,omitempty"`
 }
 
 func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
@@ -61,11 +71,91 @@ func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
 	if year == 0 {
 		year = time.Now().Year()
 	}
+	mode := parseSourceMode(r)
+	// Driver summary is local-first for current-season identity/results. When the
+	// caller omits ?source=, prefer auto (local then OpenF1) rather than the
+	// package default of openf1-only.
+	if r.URL.Query().Get("source") == "" {
+		mode = sourceAuto
+	}
 
-	champ, err := s.client.GetDriverChampionshipForYear(year)
+	if mode == sourceLocal || mode == sourceAuto {
+		resp, sessionKey, ok, lerr := s.localDriverSummary(year, driverNumber)
+		if lerr != nil {
+			writeError(w, lerr, http.StatusInternalServerError, false)
+			return
+		}
+		if ok {
+			if mode != sourceLocal {
+				s.tryEnrichDriverSummary(&resp, sessionKey)
+			}
+			writeJSON(w, resp)
+			return
+		}
+		if mode == sourceLocal {
+			http.Error(w, fmt.Sprintf("driver %d not found in %d championship", driverNumber, year), http.StatusNotFound)
+			return
+		}
+	}
+
+	resp, err := s.openF1DriverSummary(year, driverNumber)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
 		return
+	}
+	if resp == nil {
+		http.Error(w, fmt.Sprintf("driver %d not found in %d championship", driverNumber, year), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, resp)
+}
+
+func (s *Server) localDriverSummary(year, driverNumber int) (driverSummaryResponse, int, bool, error) {
+	if !s.hasLocalQuery() {
+		return driverSummaryResponse{}, 0, false, nil
+	}
+	inputs, err := s.query.GetChampionshipInputs(year)
+	if err != nil {
+		return driverSummaryResponse{}, 0, false, err
+	}
+	if len(inputs.Champ) == 0 {
+		return driverSummaryResponse{}, 0, false, nil
+	}
+
+	races := make([]meetingRace, 0, len(inputs.Races))
+	for _, race := range inputs.Races {
+		races = append(races, meetingRace{
+			Meeting:        race.Meeting,
+			RaceSessionKey: race.RaceSessionKey,
+			Results:        race.Results,
+			Grid:           race.Grid,
+		})
+	}
+
+	resp, ok := aggregateDriverSummary(year, driverNumber, races, inputs.Champ, inputs.DriverMap)
+	if !ok {
+		return driverSummaryResponse{}, 0, false, nil
+	}
+	resp.Source = "local"
+	resp.Enrichment = "none"
+
+	sessionKey := 0
+	for _, c := range inputs.Champ {
+		if c.DriverNumber == driverNumber && c.SessionKey > 0 {
+			sessionKey = c.SessionKey
+			break
+		}
+		if sessionKey == 0 && c.SessionKey > 0 {
+			sessionKey = c.SessionKey
+		}
+	}
+	return resp, sessionKey, true, nil
+}
+
+func (s *Server) openF1DriverSummary(year, driverNumber int) (*driverSummaryResponse, error) {
+	champ, err := s.client.GetDriverChampionshipForYear(year)
+	if err != nil {
+		return nil, err
 	}
 	var entry *models.ChampionshipDriver
 	for i := range champ {
@@ -75,12 +165,12 @@ func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if entry == nil {
-		http.Error(w, fmt.Sprintf("driver %d not found in %d championship", driverNumber, year), http.StatusNotFound)
-		return
+		return nil, nil
 	}
 
 	driverInfo := map[int]models.Driver{}
-	if ds, derr := s.client.GetDriversForSession(champ[0].SessionKey); derr == nil {
+	sessionKey := champ[0].SessionKey
+	if ds, derr := s.client.GetDriversForSession(sessionKey); derr == nil {
 		driverInfo = buildDriverMapFirst(ds)
 	}
 	if d, ok := s.championshipDriverInfo(entry.SessionKey, driverNumber, driverInfo); ok {
@@ -89,16 +179,69 @@ func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
 
 	races, _, err := s.fetchSeasonRaces(year)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
-		return
+		return nil, err
 	}
 
 	resp, ok := aggregateDriverSummary(year, driverNumber, races, champ, driverInfo)
 	if !ok {
-		http.Error(w, fmt.Sprintf("driver %d not found in %d championship", driverNumber, year), http.StatusNotFound)
+		return nil, nil
+	}
+	resp.Source = "openf1"
+	resp.Enrichment = "full"
+	return &resp, nil
+}
+
+// tryEnrichDriverSummary optionally fills headshot / polished identity from
+// OpenF1. It never blocks longer than driverEnrichmentTimeout — on timeout or
+// failure the local profile remains intact with enrichment=limited.
+func (s *Server) tryEnrichDriverSummary(resp *driverSummaryResponse, sessionKey int) {
+	if resp == nil || s.client == nil || sessionKey <= 0 {
+		if resp != nil && resp.Enrichment == "none" {
+			// No session to enrich from — leave as none (local identity only).
+		}
 		return
 	}
-	writeJSON(w, resp)
+
+	type enrichResult struct {
+		driver models.Driver
+		ok     bool
+	}
+
+	done := make(chan enrichResult, 1)
+	go func() {
+		d, ok := s.championshipDriverInfo(sessionKey, resp.DriverNumber, nil)
+		done <- enrichResult{driver: d, ok: ok}
+	}()
+
+	select {
+	case result := <-done:
+		if !result.ok {
+			resp.Enrichment = "limited"
+			return
+		}
+		applyDriverEnrichment(resp, result.driver)
+		resp.Enrichment = "full"
+	case <-time.After(driverEnrichmentTimeout):
+		resp.Enrichment = "limited"
+	}
+}
+
+func applyDriverEnrichment(resp *driverSummaryResponse, d models.Driver) {
+	if d.HeadshotURL != "" {
+		resp.HeadshotURL = d.HeadshotURL
+	}
+	if d.FullName != "" {
+		resp.FullName = d.FullName
+	}
+	if d.NameAcronym != "" {
+		resp.NameAcronym = d.NameAcronym
+	}
+	if d.TeamName != "" {
+		resp.TeamName = d.TeamName
+	}
+	if d.TeamColour != "" {
+		resp.TeamColour = d.TeamColour
+	}
 }
 
 // aggregateDriverSummary is the pure aggregation core (no network) so it can be

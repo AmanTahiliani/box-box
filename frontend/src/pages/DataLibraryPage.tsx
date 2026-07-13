@@ -11,6 +11,7 @@ import {
 import { SourceBadge, weekendStatusLabel } from '../components/SourceBadge'
 import { CliCommands, ingestYearCommands } from '../components/CliCommands'
 import { MeetingDetailPanel } from '../components/MeetingDetailPanel'
+import { RouteState } from '../components/RouteState'
 import type { Meeting, Weekend } from '../types'
 
 function formatMeetingDate(meeting: Meeting): string {
@@ -27,12 +28,12 @@ export function DataLibraryPage() {
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryFn: ({ signal }) => fetchSeasons(signal),
   })
 
   const meetingsQuery = useQuery({
     queryKey: ['meetings', selectedYear],
-    queryFn: () => fetchLocalMeetings(selectedYear!),
+    queryFn: ({ signal }) => fetchLocalMeetings(selectedYear!, signal),
     enabled: selectedYear != null,
   })
 
@@ -41,7 +42,7 @@ export function DataLibraryPage() {
   const weekendQueries = useQueries({
     queries: meetings.map((meeting) => ({
       queryKey: ['weekend', meeting.meeting_key],
-      queryFn: () => fetchWeekend(meeting.meeting_key),
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchWeekend(meeting.meeting_key, signal),
       enabled: meetings.length > 0,
       staleTime: 60_000,
     })),
@@ -78,13 +79,26 @@ export function DataLibraryPage() {
   const weekendsLoading = weekendQueries.some((q) => q.isLoading)
 
   if (seasonsQuery.isLoading) {
-    return <div className="page loading-state">loading local data library…</div>
+    return (
+      <div className="page">
+        <RouteState kind="loading" title="loading local data library…" testId="weekend-loading" />
+      </div>
+    )
   }
 
   if (seasonsQuery.isError) {
     return (
-      <div className="page error-box">
-        {seasonsQuery.error instanceof Error ? seasonsQuery.error.message : 'Failed to load seasons'}
+      <div className="page">
+        <RouteState
+          kind="error"
+          title="Weekend data unavailable"
+          error={seasonsQuery.error}
+          onRetry={() => {
+            if (!seasonsQuery.isFetching) void seasonsQuery.refetch()
+          }}
+          retrying={seasonsQuery.isFetching}
+          testId="weekend-error"
+        />
       </div>
     )
   }
@@ -222,15 +236,20 @@ export function DataLibraryPage() {
           </div>
 
           {meetingsQuery.isLoading && (
-            <div className="loading-state">loading meetings…</div>
+            <RouteState kind="loading" title="loading meetings…" testId="weekend-meetings-loading" />
           )}
 
           {meetingsQuery.isError && (
-            <div className="error-box">
-              {meetingsQuery.error instanceof Error
-                ? meetingsQuery.error.message
-                : 'Failed to load meetings'}
-            </div>
+            <RouteState
+              kind="error"
+              title="Weekend meetings unavailable"
+              error={meetingsQuery.error}
+              onRetry={() => {
+                if (!meetingsQuery.isFetching) void meetingsQuery.refetch()
+              }}
+              retrying={meetingsQuery.isFetching}
+              testId="weekend-error"
+            />
           )}
 
           {!meetingsQuery.isLoading && !meetingsQuery.isError && meetings.length === 0 && (
@@ -316,11 +335,16 @@ export function DataLibraryPage() {
 
               <div className="dl-detail-wrap">
                 {weekendsLoading && selectedWeekend == null && (
-                  <div className="loading-state">loading weekend details…</div>
+                  <RouteState kind="loading" title="loading weekend details…" testId="weekend-detail-loading" />
                 )}
                 {selectedWeekend && <MeetingDetailPanel weekend={selectedWeekend} />}
                 {selectedMeetingKey != null && !weekendsLoading && selectedWeekend == null && (
-                  <div className="missing-notice">Could not load weekend details.</div>
+                  <RouteState
+                    kind="empty"
+                    title="Weekend details missing"
+                    message="Could not load weekend details for this meeting."
+                    testId="weekend-detail-empty"
+                  />
                 )}
               </div>
             </div>

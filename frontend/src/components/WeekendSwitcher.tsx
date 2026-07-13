@@ -27,7 +27,7 @@ export function WeekendSwitcher({
   onClose,
 }: Props) {
   const navigate = useNavigate()
-  const seasonsQuery = useQuery({ queryKey: ['seasons'], queryFn: fetchSeasons })
+  const seasonsQuery = useQuery({ queryKey: ['seasons'], queryFn: ({ signal }) => fetchSeasons(signal) })
   const [year, setYear] = useState<number | null>(null)
   const [openMeetingKey, setOpenMeetingKey] = useState<number | null>(
     currentMeetingKey ?? null,
@@ -36,7 +36,7 @@ export function WeekendSwitcher({
 
   const weekendQuery = useQuery({
     queryKey: ['weekend', openMeetingKey],
-    queryFn: () => fetchWeekend(openMeetingKey!),
+    queryFn: ({ signal }) => fetchWeekend(openMeetingKey!, signal),
     enabled: openMeetingKey != null,
   })
 
@@ -52,7 +52,7 @@ export function WeekendSwitcher({
 
   const meetingsQuery = useQuery({
     queryKey: ['meetings', year],
-    queryFn: () => fetchLocalMeetings(year!),
+    queryFn: ({ signal }) => fetchLocalMeetings(year!, signal),
     enabled: year != null,
   })
 

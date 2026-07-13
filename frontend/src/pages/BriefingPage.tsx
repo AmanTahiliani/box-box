@@ -24,6 +24,7 @@ import {
 } from '../lib/digest'
 import { stripHtml, timeAgo } from '../utils'
 import type { ArticleContent, NewsItem } from '../types'
+import { RouteState } from '../components/RouteState'
 import '../styles/digest.css'
 
 type Category = 'all' | 'official' | 'news' | 'video'
@@ -406,27 +407,27 @@ export function BriefingPage() {
   const queryClient = useQueryClient()
   const now = useMemo(() => new Date(), [])
 
-  const { data: allNews = [], isLoading, isError } = useQuery({
+  const { data: allNews = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['news'],
-    queryFn: () => fetchNews(100),
+    queryFn: ({ signal }) => fetchNews(100, undefined, signal),
     staleTime: 60_000,
   })
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+    queryFn: ({ signal }) => fetchSeasons(signal),
   })
   const latestSeason = seasonsQuery.data?.[0] ?? null
 
   const meetingsQuery = useQuery({
     queryKey: ['season-meetings', latestSeason],
-    queryFn: () => fetchSeasonMeetings(latestSeason!),
+    queryFn: ({ signal }) => fetchSeasonMeetings(latestSeason!, signal),
     enabled: latestSeason != null,
   })
 
   const hubQuery = useQuery({
     queryKey: ['championship-hub', latestSeason],
-    queryFn: () => fetchChampionshipHub(latestSeason!),
+    queryFn: ({ signal }) => fetchChampionshipHub(latestSeason!, signal),
     enabled: latestSeason != null,
   })
 
@@ -524,8 +525,21 @@ export function BriefingPage() {
         </span>
       </div>
 
-      {isLoading && <div className="loading-state">loading briefing…</div>}
-      {isError && <div className="error-box">Failed to load paddock briefing.</div>}
+      {isLoading && (
+        <RouteState kind="loading" title="loading briefing…" testId="briefing-loading" />
+      )}
+      {isError && (
+        <RouteState
+          kind="error"
+          title="Briefing unavailable"
+          error={error}
+          onRetry={() => {
+            if (!isFetching) void refetch()
+          }}
+          retrying={isFetching}
+          testId="briefing-error"
+        />
+      )}
 
       {!isLoading && !isError && (
         <>

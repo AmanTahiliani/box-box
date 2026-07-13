@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { userFacingError } from '../../lib/fetch'
 
 export function WeekendLoading() {
   return (
@@ -9,12 +10,40 @@ export function WeekendLoading() {
   )
 }
 
-export function WeekendError({ message }: { message?: string }) {
+export function WeekendError({
+  error,
+  message,
+  onRetry,
+  retrying = false,
+}: {
+  error?: unknown
+  message?: string
+  onRetry?: () => void
+  retrying?: boolean
+}) {
+  const resolved =
+    message ??
+    (error != null ? userFacingError(error) : 'Something went wrong loading the weekend context.')
+
   return (
     <div className="wk-status wk-status-error" data-testid="weekend-error" role="alert">
       <span className="wk-status-eyebrow mono">box-box · weekend</span>
       <p className="wk-status-title">Weekend unavailable</p>
-      <p className="wk-status-sub">{message ?? 'Something went wrong loading the weekend context.'}</p>
+      <p className="wk-status-sub">{resolved}</p>
+      {typeof onRetry === 'function' && (
+        <div className="wk-status-actions">
+          <button
+            type="button"
+            className="wk-cta wk-cta-primary"
+            onClick={onRetry}
+            disabled={retrying}
+            aria-busy={retrying || undefined}
+            data-testid="weekend-retry"
+          >
+            {retrying ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

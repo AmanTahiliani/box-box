@@ -20,6 +20,7 @@ import {
 } from '../components/PreSessionView'
 import { WeekendSwitcher } from '../components/WeekendSwitcher'
 import { SourceBadge } from '../components/SourceBadge'
+import { RouteState } from '../components/RouteState'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import { sessionTypeAbbrev } from '../lib/coverage'
 import { formatSessionScheduleTime, sortSessionsByStart } from '../lib/schedule'
@@ -55,7 +56,7 @@ export function RaceHubPage({ sessionKey }: Props) {
 
   const contextQuery = useQuery({
     queryKey: ['weekend-context'],
-    queryFn: fetchWeekendContext,
+    queryFn: ({ signal }) => fetchWeekendContext(signal),
     staleTime: 15_000,
     refetchInterval: 30_000,
   })
@@ -73,7 +74,7 @@ export function RaceHubPage({ sessionKey }: Props) {
 
   const raceHubQuery = useQuery({
     queryKey: ['race-hub', sessionKey],
-    queryFn: () => fetchRaceHub(sessionKey),
+    queryFn: ({ signal }) => fetchRaceHub(sessionKey, signal),
     enabled: sessionKey > 0,
     staleTime: 30_000,
   })
@@ -81,7 +82,7 @@ export function RaceHubPage({ sessionKey }: Props) {
   const meetingKey = raceHubQuery.data?.meeting?.meeting_key
   const weekendQuery = useQuery({
     queryKey: ['weekend', meetingKey],
-    queryFn: () => fetchWeekend(meetingKey!),
+    queryFn: ({ signal }) => fetchWeekend(meetingKey!, signal),
     enabled: meetingKey != null && meetingKey > 0,
     staleTime: 60_000,
   })
@@ -102,33 +103,33 @@ export function RaceHubPage({ sessionKey }: Props) {
     if (contextQuery.isLoading) {
       return (
         <div className="rh-page" style={accentStyle}>
-          <div className="loading-state">resolving weekend context…</div>
+          <RouteState
+            kind="loading"
+            title="resolving weekend context…"
+            testId="race-hub-loading"
+          />
         </div>
       )
     }
     if (contextQuery.isError) {
       return (
         <div className="rh-page" data-testid="race-hub-error" style={accentStyle}>
-          <div className="rh-recover">
-            <div className="error-box">
-              {contextQuery.error instanceof Error
-                ? contextQuery.error.message
-                : 'Failed to load weekend context.'}
-            </div>
+          <RouteState
+            kind="error"
+            title="Weekend unavailable"
+            error={contextQuery.error}
+            onRetry={() => {
+              if (!contextQuery.isFetching) void contextQuery.refetch()
+            }}
+            retrying={contextQuery.isFetching}
+            retryTestId="rh-retry"
+          >
             <div className="rh-recover-actions">
-              <button
-                type="button"
-                className="rh-recover-btn primary"
-                onClick={() => contextQuery.refetch()}
-                data-testid="rh-retry"
-              >
-                Retry
-              </button>
               <Link to="/" search={{}} className="rh-recover-btn" data-testid="rh-back-weekend">
                 Back to Weekend
               </Link>
             </div>
-          </div>
+          </RouteState>
         </div>
       )
     }
@@ -170,7 +171,11 @@ export function RaceHubPage({ sessionKey }: Props) {
 
     return (
       <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">resolving weekend context…</div>
+        <RouteState
+          kind="loading"
+          title="resolving weekend context…"
+          testId="race-hub-loading"
+        />
       </div>
     )
   }
@@ -179,7 +184,11 @@ export function RaceHubPage({ sessionKey }: Props) {
   if (raceHubQuery.isLoading) {
     return (
       <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">loading session {sessionKey}…</div>
+        <RouteState
+          kind="loading"
+          title={`loading session ${sessionKey}…`}
+          testId="race-hub-loading"
+        />
       </div>
     )
   }
@@ -191,21 +200,22 @@ export function RaceHubPage({ sessionKey }: Props) {
 
     return (
       <div className="rh-page" data-testid="race-hub-error" style={accentStyle}>
-        <div className="rh-recover">
-          <div className="error-box">
-            {raceHubQuery.error instanceof Error
-              ? raceHubQuery.error.message
-              : `Failed to load session ${sessionKey}.`}
-          </div>
+        <RouteState
+          kind="error"
+          title="Session unavailable"
+          error={raceHubQuery.error}
+          message={
+            raceHubQuery.error
+              ? undefined
+              : `Session ${sessionKey} could not be loaded from local data.`
+          }
+          onRetry={() => {
+            if (!raceHubQuery.isFetching) void raceHubQuery.refetch()
+          }}
+          retrying={raceHubQuery.isFetching}
+          retryTestId="rh-retry"
+        >
           <div className="rh-recover-actions">
-            <button
-              type="button"
-              className="rh-recover-btn primary"
-              onClick={() => raceHubQuery.refetch()}
-              data-testid="rh-retry"
-            >
-              Retry
-            </button>
             <Link
               to="/"
               search={backSearch}
@@ -217,7 +227,7 @@ export function RaceHubPage({ sessionKey }: Props) {
               Back to Weekend
             </Link>
           </div>
-        </div>
+        </RouteState>
       </div>
     )
   }

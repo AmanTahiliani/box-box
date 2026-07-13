@@ -384,7 +384,8 @@ describe('RaceHubPage', () => {
 
     renderRaceHub(0)
 
-    await waitFor(() => expect(mockFetchRaceHub).toHaveBeenCalledWith(9471))
+    await waitFor(() => expect(mockFetchRaceHub).toHaveBeenCalledWith(9471, expect.any(AbortSignal)))
+    expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9600, expect.anything())
     expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9600)
   })
 
