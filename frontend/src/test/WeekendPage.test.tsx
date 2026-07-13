@@ -404,6 +404,9 @@ describe('WeekendPage canonical contract rendering', () => {
     await waitFor(() => expect(screen.getByTestId('preview-page')).toBeInTheDocument())
     expect(screen.getByTestId('preview-page')).toHaveAttribute('data-meeting-key', '2')
     expect(screen.getByTestId('preview-page')).toHaveAttribute('data-embedded', 'true')
+    // Single shell notice — Preview must not stack a second freshness banner.
+    expect(screen.getByTestId('weekend-data-notice')).toHaveTextContent(/Partial/i)
+    expect(screen.queryByTestId('preview-data-notice')).not.toBeInTheDocument()
     // Canonical identity was passed — Preview must not fan out to seasons /
     // current-season meetings selection. Prior-year lookup for "Last year here"
     // remains an intentional supplement.

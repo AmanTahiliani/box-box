@@ -84,8 +84,63 @@ async function stubPreSession(page: Page, opts?: { failSessions?: boolean; recov
         rounds_left: 12,
         last_race: 'British GP',
         round_labels: [],
-        drivers: [],
-        teams: [],
+        drivers: [
+          {
+            driver_number: 1,
+            name_acronym: 'VER',
+            full_name: 'Max Verstappen',
+            team_name: 'Red Bull',
+            team_colour: '3671c6',
+            points: 200,
+            position: 1,
+            wins: 5,
+            podiums: 8,
+            poles: 4,
+            form: [25, 18, 25, 15, 25],
+            cumulative: [25, 43, 68, 83, 108, 200],
+            round_positions: [1, 2, 1, 3, 1, 1],
+            teammate_wins: 9,
+            teammate_losses: 1,
+          },
+          {
+            driver_number: 4,
+            name_acronym: 'NOR',
+            full_name: 'Lando Norris',
+            team_name: 'McLaren',
+            team_colour: 'ff8000',
+            points: 160,
+            position: 2,
+            wins: 3,
+            podiums: 5,
+            poles: 2,
+            form: [18, 25, 18, 25, 18],
+            cumulative: [18, 43, 61, 86, 104, 160],
+            round_positions: [2, 1, 2, 2, 2, 2],
+            teammate_wins: 6,
+            teammate_losses: 4,
+          },
+          {
+            driver_number: 81,
+            name_acronym: 'PIA',
+            full_name: 'Oscar Piastri',
+            team_name: 'McLaren',
+            team_colour: 'ff8000',
+            points: 140,
+            position: 3,
+            wins: 2,
+            podiums: 4,
+            poles: 1,
+            form: [15, 12, 18, 10, 15],
+            cumulative: [15, 27, 45, 55, 70, 140],
+            round_positions: [3, 3, 2, 4, 3, 3],
+            teammate_wins: 4,
+            teammate_losses: 6,
+          },
+        ],
+        teams: [
+          { team_name: 'Red Bull', team_colour: '3671c6', points: 260, position: 1, wins: 6 },
+          { team_name: 'McLaren', team_colour: 'ff8000', points: 300, position: 2, wins: 5 },
+        ],
       }),
     }),
   )
@@ -139,10 +194,23 @@ test.describe('Issue #76 availability / Preview resilience evidence', () => {
     await expect(page.getByTestId('weekend-pre-session')).toBeVisible()
     await expect(page.getByTestId('wk-pre-head')).toContainText('Hungarian Grand Prix')
     await expect(page.getByTestId('weekend-data-notice')).toContainText(/Partial/i)
+    // Weekend shell owns disclosure — embedded Preview must not stack a second notice.
+    await expect(page.getByTestId('preview-data-notice')).toHaveCount(0)
     await expect(page.getByTestId('preview-page')).toBeVisible()
     await expect(page.getByTestId('preview-page')).toHaveAttribute('data-meeting-key', '2')
     // No raw HTTP jargon in the primary Weekend child.
     await expect(page.locator('body')).not.toContainText(/API 500|forced sessions failure/i)
+    // Title fight remains usable from the shared championship supplement.
+    await expect(page.getByTestId('preview-title-fight-card')).toContainText('VER')
+
+    // Recovery: guarded Retry on the shell notice re-runs context; sessions auto-recover
+    // on React Query retry (recover stub). Shell stays usable either way.
+    const retry = page.getByTestId('weekend-data-notice').getByRole('button', { name: 'Retry' })
+    await expect(retry).toBeEnabled()
+    await retry.click()
+    await expect(page.getByTestId('weekend-pre-session')).toBeVisible()
+    await expect(page.getByTestId('preview-page')).toBeVisible()
+    await expect(page.getByTestId('preview-title-fight-card')).toContainText('VER')
 
     await page.screenshot({
       path: path.join(evidenceDir, `weekend-presession-failure-mobile-${testInfo.project.name}.png`),
@@ -154,6 +222,9 @@ test.describe('Issue #76 availability / Preview resilience evidence', () => {
       path: path.join(evidenceDir, `weekend-presession-partial-desktop-${testInfo.project.name}.png`),
       fullPage: true,
     })
+    // Desktop evidence must also keep a single Partial notice vocabulary.
+    await expect(page.getByTestId('weekend-data-notice')).toContainText(/Partial/i)
+    await expect(page.getByTestId('preview-data-notice')).toHaveCount(0)
   })
 
   test('Championship discloses stale metadata above usable standings', async ({ page }, testInfo) => {

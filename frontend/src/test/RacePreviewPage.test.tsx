@@ -298,6 +298,8 @@ describe('RacePreviewPage', () => {
     expect(mockFetchMeetings).not.toHaveBeenCalledWith(2099, expect.anything(), expect.anything())
     expect(mockFetchSessions).toHaveBeenCalledWith(100, 'auto', expect.anything())
     expect(screen.queryByTestId('preview-header')).not.toBeInTheDocument()
+    // Weekend shell owns availability disclosure — no stacked Preview notice.
+    expect(screen.queryByTestId('preview-data-notice')).not.toBeInTheDocument()
   })
 
   it('sanitizes raw HTTP errors and offers a guarded keyboard Retry', async () => {

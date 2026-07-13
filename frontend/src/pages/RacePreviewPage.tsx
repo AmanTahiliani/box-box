@@ -455,7 +455,8 @@ export function RacePreviewPage({
       data-meeting-key={previewMeeting.meeting_key}
       data-embedded={embedded ? 'true' : undefined}
     >
-      {dataNotice && (
+      {/* Weekend shell owns availability disclosure when Preview is embedded. */}
+      {!embedded && dataNotice && (
         <DataNotice
           availability={dataNotice}
           message={noticeMessage(dataNotice)}
