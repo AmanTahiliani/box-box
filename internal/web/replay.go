@@ -61,11 +61,13 @@ func (s *Server) handleReplayFrames(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp, err := assembleReplayFrames(r.Context(), s.client, sessionKey, intervalMS)
+	client := s.client.Scoped()
+	resp, err := assembleReplayFrames(r.Context(), client, sessionKey, intervalMS)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, resp)
 }
 

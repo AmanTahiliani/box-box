@@ -76,6 +76,12 @@ func TestWeekendContextHandlerUsesLiveHubIdentityWithoutOpenF1(t *testing.T) {
 	if got.ActiveSession.Availability.LiveTransport != "connected" || got.ActiveSession.Availability.LiveSession != "active" {
 		t.Fatalf("availability = %+v", got.ActiveSession.Availability)
 	}
+	if got.ActiveSession.Availability.Source != "mixed" || got.ActiveSession.Availability.Freshness != "live" {
+		t.Fatalf("live source/freshness = %+v", got.ActiveSession.Availability)
+	}
+	if rr.Header().Get(dataSourceHeader) != "mixed" || rr.Header().Get(dataFreshnessHeader) != "live" {
+		t.Fatalf("response source/freshness = %q/%q", rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader))
+	}
 }
 
 func TestWeekendContextHandlerUsesTerminalArchiveAsCompletionEvidence(t *testing.T) {
@@ -93,6 +99,12 @@ func TestWeekendContextHandlerUsesTerminalArchiveAsCompletionEvidence(t *testing
 	}
 	if got.PreviousCompletedSession == nil || got.PreviousCompletedSession.Availability.Archive != "available" {
 		t.Fatalf("archive context = %+v", got)
+	}
+	if got.PreviousCompletedSession.Availability.Source != "mixed" || got.PreviousCompletedSession.Availability.Freshness != "archive" {
+		t.Fatalf("archive source/freshness = %+v", got.PreviousCompletedSession.Availability)
+	}
+	if rr.Header().Get(dataSourceHeader) != "mixed" || rr.Header().Get(dataFreshnessHeader) != "archive" {
+		t.Fatalf("archive response source/freshness = %q/%q", rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader))
 	}
 	if got.DefaultAnalysisSession != nil {
 		t.Fatal("archive-only session must not become local default analysis")

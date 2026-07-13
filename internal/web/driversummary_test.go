@@ -250,6 +250,9 @@ func TestHandleDriverSummaryLocalFirstIgnoresHangingEnrichment(t *testing.T) {
 	if resp.Enrichment != "limited" {
 		t.Errorf("enrichment = %q, want limited", resp.Enrichment)
 	}
+	if rec.Header().Get(dataSourceHeader) != "local" || rec.Header().Get(dataFreshnessHeader) != "limited" {
+		t.Errorf("limited metadata = %q/%q", rec.Header().Get(dataSourceHeader), rec.Header().Get(dataFreshnessHeader))
+	}
 	if resp.DriverNumber != 1 || resp.NameAcronym != "VER" || resp.Points != 25 {
 		t.Errorf("local identity/results missing: %+v", resp)
 	}
@@ -289,6 +292,9 @@ func TestHandleDriverSummaryLocalFirstWithFailingEnrichment(t *testing.T) {
 	if resp.Enrichment != "limited" {
 		t.Errorf("enrichment = %q, want limited", resp.Enrichment)
 	}
+	if rec.Header().Get(dataSourceHeader) != "local" || rec.Header().Get(dataFreshnessHeader) != "limited" {
+		t.Errorf("limited metadata = %q/%q", rec.Header().Get(dataSourceHeader), rec.Header().Get(dataFreshnessHeader))
+	}
 	if resp.FullName != "Max Verstappen" {
 		t.Errorf("full_name = %q, want local identity", resp.FullName)
 	}
@@ -312,5 +318,8 @@ func TestHandleDriverSummarySourceLocalOnly(t *testing.T) {
 	srv.handleDriverSummary(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get(dataSourceHeader) != "local" || rec.Header().Get(dataFreshnessHeader) != "local" {
+		t.Fatalf("local metadata = %q/%q", rec.Header().Get(dataSourceHeader), rec.Header().Get(dataFreshnessHeader))
 	}
 }

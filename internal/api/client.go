@@ -56,6 +56,26 @@ type OpenF1Client struct {
 	staleFlag int32
 }
 
+// Scoped returns a lightweight request-scoped view of the client. Network,
+// pacing and cache resources are shared, while the stale fallback indicator is
+// deliberately not shared. Web handlers use this view so a stale fallback in
+// one concurrent HTTP request can never mark an unrelated response as stale.
+//
+// The legacy client-wide stale flag remains available for the TUI, whose loads
+// are intentionally aggregated into one navigation-level notice.
+func (c *OpenF1Client) Scoped() *OpenF1Client {
+	if c == nil {
+		return nil
+	}
+	return &OpenF1Client{
+		url:        c.url,
+		apiKey:     c.apiKey,
+		httpClient: c.httpClient,
+		cache:      c.cache,
+		pacer:      c.pacer,
+	}
+}
+
 func NewOpenF1Client(url string, timeout time.Duration) *OpenF1Client {
 	return &OpenF1Client{
 		url:        url,

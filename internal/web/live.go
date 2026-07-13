@@ -330,7 +330,15 @@ func cloneLivePositions(in map[string]live.LivePositionData) map[string]live.Liv
 
 // handleLiveState returns the current live data snapshot as JSON.
 func (s *Server) handleLiveState(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.hub.State())
+	state := s.hub.State()
+	freshness := "limited"
+	if state.IsLive {
+		freshness = "live"
+	} else if state.LastSnapshot != nil {
+		freshness = "archive"
+	}
+	markDataResponse(w, "fia", freshness)
+	writeJSON(w, state)
 }
 
 // handleSSEStream is the persistent SSE endpoint for live data.

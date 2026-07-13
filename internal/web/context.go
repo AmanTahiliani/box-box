@@ -9,6 +9,7 @@ import (
 )
 
 func (s *Server) handleWeekendContext(w http.ResponseWriter, _ *http.Request) {
+	markLocalResponse(w, false)
 	if !s.hasLocalQuery() {
 		writeJSON(w, query.WeekendContext{TemporalState: query.TemporalNoSeason})
 		return
@@ -28,6 +29,12 @@ func (s *Server) handleWeekendContext(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, false)
 		return
+	}
+	for _, ref := range []*query.ContextSession{context.ActiveSession, context.PreviousCompletedSession, context.DefaultAnalysisSession, context.NextSession} {
+		if ref != nil && ref.Availability.Freshness != "local" {
+			markDataResponse(w, ref.Availability.Source, ref.Availability.Freshness)
+			break
+		}
 	}
 	writeJSON(w, context)
 }
