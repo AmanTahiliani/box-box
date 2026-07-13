@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -212,10 +213,12 @@ func TestHandleDriverSummaryLocalFirstIgnoresHangingEnrichment(t *testing.T) {
 
 	// Enrichment seam: OpenF1 hangs until released. Local summary must still return.
 	release := make(chan struct{})
+	cancelObserved := make(chan struct{})
 	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-release:
 		case <-r.Context().Done():
+			close(cancelObserved)
 		}
 	}))
 	t.Cleanup(func() {
@@ -238,6 +241,11 @@ func TestHandleDriverSummaryLocalFirstIgnoresHangingEnrichment(t *testing.T) {
 	}
 	if elapsed > 500*time.Millisecond {
 		t.Fatalf("handler blocked on enrichment for %v", elapsed)
+	}
+	select {
+	case <-cancelObserved:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed-out enrichment did not cancel its upstream request")
 	}
 
 	var resp driverSummaryResponse
@@ -321,5 +329,44 @@ func TestHandleDriverSummarySourceLocalOnly(t *testing.T) {
 	}
 	if rec.Header().Get(dataSourceHeader) != "local" || rec.Header().Get(dataFreshnessHeader) != "local" {
 		t.Fatalf("local metadata = %q/%q", rec.Header().Get(dataSourceHeader), rec.Header().Get(dataFreshnessHeader))
+	}
+}
+
+func TestHandleRemoteDriverSummaryReportsIdentityAndRoundLimitations(t *testing.T) {
+	tests := []struct {
+		name           string
+		driversOK      bool
+		meetingHasRace bool
+		wantEnrichment string
+	}{
+		{name: "missing identity", driversOK: false, meetingHasRace: true, wantEnrichment: "limited"},
+		{name: "missing race round", driversOK: true, meetingHasRace: false, wantEnrichment: "full"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upstream := championshipTestUpstream(t, tt.driversOK, tt.meetingHasRace)
+			defer upstream.Close()
+			client := api.NewOpenF1Client(upstream.URL, 2*time.Second)
+			defer client.Close()
+			server := NewServer(client, 0, nil)
+			year := time.Now().Year()
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/driver/summary?year=%d&driver_number=1&source=openf1", year), nil)
+
+			server.handleDriverSummary(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+			}
+			var response driverSummaryResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Enrichment != tt.wantEnrichment {
+				t.Fatalf("enrichment = %q, want %q", response.Enrichment, tt.wantEnrichment)
+			}
+			if recorder.Header().Get(dataSourceHeader) != "openf1" || recorder.Header().Get(dataFreshnessHeader) != "partial" {
+				t.Fatalf("remote limitation metadata = %q/%q", recorder.Header().Get(dataSourceHeader), recorder.Header().Get(dataFreshnessHeader))
+			}
+		})
 	}
 }

@@ -18,16 +18,23 @@ func markOpenF1Response(w http.ResponseWriter, client *api.OpenF1Client) {
 }
 
 func markOpenF1AggregateResponse(w http.ResponseWriter, client *api.OpenF1Client, partial bool) {
+	freshness := "fresh"
+	if partial {
+		freshness = "partial"
+	}
+	markOpenF1Availability(w, client, freshness)
+}
+
+func markOpenF1Availability(w http.ResponseWriter, client *api.OpenF1Client, freshness string) {
 	w.Header().Set(dataSourceHeader, "openf1")
 	if client != nil && client.LastResponseWasStale() {
 		w.Header().Set(dataFreshnessHeader, "stale")
 		return
 	}
-	if partial {
-		w.Header().Set(dataFreshnessHeader, "partial")
-		return
+	if freshness == "" {
+		freshness = "fresh"
 	}
-	w.Header().Set(dataFreshnessHeader, "fresh")
+	w.Header().Set(dataFreshnessHeader, freshness)
 }
 
 func markDataResponse(w http.ResponseWriter, source, freshness string) {

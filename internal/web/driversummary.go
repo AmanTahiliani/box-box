@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -89,7 +90,7 @@ func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		if ok {
 			if mode != sourceLocal {
-				tryEnrichDriverSummary(client, &resp, sessionKey)
+				tryEnrichDriverSummary(r.Context(), client, &resp, sessionKey)
 			}
 			switch resp.Enrichment {
 			case "full":
@@ -108,7 +109,7 @@ func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp, err := openF1DriverSummary(client, year, driverNumber)
+	resp, incomplete, err := openF1DriverSummary(client, year, driverNumber)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
@@ -117,7 +118,7 @@ func (s *Server) handleDriverSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("driver %d not found in %d championship", driverNumber, year), http.StatusNotFound)
 		return
 	}
-	markOpenF1Response(w, client)
+	markOpenF1AggregateResponse(w, client, incomplete)
 	writeJSON(w, resp)
 }
 
@@ -163,10 +164,10 @@ func (s *Server) localDriverSummary(year, driverNumber int) (driverSummaryRespon
 	return resp, sessionKey, true, nil
 }
 
-func openF1DriverSummary(client *api.OpenF1Client, year, driverNumber int) (*driverSummaryResponse, error) {
+func openF1DriverSummary(client *api.OpenF1Client, year, driverNumber int) (*driverSummaryResponse, bool, error) {
 	champ, err := client.GetDriverChampionshipForYear(year)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var entry *models.ChampionshipDriver
 	for i := range champ {
@@ -176,7 +177,7 @@ func openF1DriverSummary(client *api.OpenF1Client, year, driverNumber int) (*dri
 		}
 	}
 	if entry == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	driverInfo := map[int]models.Driver{}
@@ -184,28 +185,41 @@ func openF1DriverSummary(client *api.OpenF1Client, year, driverNumber int) (*dri
 	if ds, derr := client.GetDriversForSession(sessionKey); derr == nil {
 		driverInfo = buildDriverMapFirst(ds)
 	}
-	if d, ok := championshipDriverInfo(client, entry.SessionKey, driverNumber, driverInfo); ok {
-		driverInfo[driverNumber] = d
+	d, directErr := client.GetDriver(entry.SessionKey, driverNumber)
+	if directErr == nil && d != nil {
+		driverInfo[driverNumber] = *d
+	} else if fallback, ok := driverInfo[driverNumber]; ok {
+		driverInfo[driverNumber] = fallback
 	}
-
-	races, _, err := fetchSeasonRaces(client, year)
+	identityIncomplete := !hasDriverPresentation(driverInfo[driverNumber])
+	races, racesIncomplete, err := fetchSeasonRaces(client, year)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	resp, ok := aggregateDriverSummary(year, driverNumber, races, champ, driverInfo)
 	if !ok {
-		return nil, nil
+		return nil, false, nil
 	}
+	incomplete := identityIncomplete || racesIncomplete
 	resp.Source = "openf1"
-	resp.Enrichment = "full"
-	return &resp, nil
+	if identityIncomplete {
+		resp.Enrichment = "limited"
+	} else {
+		resp.Enrichment = "full"
+	}
+	return &resp, incomplete, nil
+}
+
+func hasDriverPresentation(driver models.Driver) bool {
+	hasName := driver.FullName != "" || driver.NameAcronym != "" || driver.BroadcastName != ""
+	return hasName && driver.TeamName != "" && driver.TeamColour != ""
 }
 
 // tryEnrichDriverSummary optionally fills headshot / polished identity from
 // OpenF1. It never blocks longer than driverEnrichmentTimeout — on timeout or
 // failure the local profile remains intact with enrichment=limited.
-func tryEnrichDriverSummary(client *api.OpenF1Client, resp *driverSummaryResponse, sessionKey int) {
+func tryEnrichDriverSummary(parent context.Context, client *api.OpenF1Client, resp *driverSummaryResponse, sessionKey int) {
 	if resp == nil || client == nil || sessionKey <= 0 {
 		if resp != nil && resp.Enrichment == "none" {
 			// No session to enrich from — leave as none (local identity only).
@@ -213,28 +227,15 @@ func tryEnrichDriverSummary(client *api.OpenF1Client, resp *driverSummaryRespons
 		return
 	}
 
-	type enrichResult struct {
-		driver models.Driver
-		ok     bool
-	}
-
-	done := make(chan enrichResult, 1)
-	go func() {
-		d, ok := championshipDriverInfo(client, sessionKey, resp.DriverNumber, nil)
-		done <- enrichResult{driver: d, ok: ok}
-	}()
-
-	select {
-	case result := <-done:
-		if !result.ok {
-			resp.Enrichment = "limited"
-			return
-		}
-		applyDriverEnrichment(resp, result.driver)
-		resp.Enrichment = "full"
-	case <-time.After(driverEnrichmentTimeout):
+	ctx, cancel := context.WithTimeout(parent, driverEnrichmentTimeout)
+	defer cancel()
+	driver, err := client.GetDriverContext(ctx, sessionKey, resp.DriverNumber)
+	if err != nil || driver == nil {
 		resp.Enrichment = "limited"
+		return
 	}
+	applyDriverEnrichment(resp, *driver)
+	resp.Enrichment = "full"
 }
 
 func applyDriverEnrichment(resp *driverSummaryResponse, d models.Driver) {

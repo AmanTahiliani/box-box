@@ -9,8 +9,8 @@ import (
 )
 
 func (s *Server) handleWeekendContext(w http.ResponseWriter, _ *http.Request) {
-	markLocalResponse(w, false)
 	if !s.hasLocalQuery() {
+		markDataResponse(w, "none", "limited")
 		writeJSON(w, query.WeekendContext{TemporalState: query.TemporalNoSeason})
 		return
 	}
@@ -30,13 +30,31 @@ func (s *Server) handleWeekendContext(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, err, http.StatusInternalServerError, false)
 		return
 	}
-	for _, ref := range []*query.ContextSession{context.ActiveSession, context.PreviousCompletedSession, context.DefaultAnalysisSession, context.NextSession} {
-		if ref != nil && ref.Availability.Freshness != "local" {
-			markDataResponse(w, ref.Availability.Source, ref.Availability.Freshness)
-			break
-		}
+	if focus := focusedContextSession(context); focus != nil {
+		markDataResponse(w, focus.Availability.Source, focus.Availability.Freshness)
+	} else {
+		markDataResponse(w, "none", "limited")
 	}
 	writeJSON(w, context)
+}
+
+// focusedContextSession selects the session whose state the Weekend shell is
+// presenting. An older terminal/default session must never override an
+// upcoming focus session's metadata.
+func focusedContextSession(context query.WeekendContext) *query.ContextSession {
+	if context.ActiveSession != nil {
+		return context.ActiveSession
+	}
+	if context.FocusMeeting == nil {
+		return nil
+	}
+	focusKey := context.FocusMeeting.MeetingKey
+	for _, ref := range []*query.ContextSession{context.NextSession, context.PreviousCompletedSession, context.DefaultAnalysisSession} {
+		if ref != nil && ref.Meeting != nil && ref.Meeting.MeetingKey == focusKey {
+			return ref
+		}
+	}
+	return nil
 }
 
 func liveEvidence(data *live.LiveStreamData, active, final bool) query.LiveEvidence {

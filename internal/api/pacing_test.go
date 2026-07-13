@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -47,6 +48,28 @@ func TestRequestPacerSpacesConcurrentCallers(t *testing.T) {
 func TestRequestPacerNilSafe(t *testing.T) {
 	var p *requestPacer
 	p.wait() // must not panic
+}
+
+func TestRequestPacerCancellationReturnsUnusedReservation(t *testing.T) {
+	p := &requestPacer{interval: 100 * time.Millisecond}
+	if err := p.waitContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	wantNext := p.next
+	p.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	if err := p.waitContext(ctx); err == nil {
+		t.Fatal("expected paced wait cancellation")
+	}
+	p.mu.Lock()
+	gotNext := p.next
+	p.mu.Unlock()
+	if !gotNext.Equal(wantNext) {
+		t.Fatalf("cancelled reservation left pacing debt: next %v, want %v", gotNext, wantNext)
+	}
 }
 
 func TestGetRetriesOn429(t *testing.T) {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -26,8 +27,12 @@ type requestPacer struct {
 
 // wait blocks until this caller's reserved slot arrives.
 func (p *requestPacer) wait() {
+	_ = p.waitContext(context.Background())
+}
+
+func (p *requestPacer) waitContext(ctx context.Context) error {
 	if p == nil || p.interval <= 0 {
-		return
+		return nil
 	}
 	p.mu.Lock()
 	now := time.Now()
@@ -38,8 +43,20 @@ func (p *requestPacer) wait() {
 	p.next = p.next.Add(p.interval)
 	p.mu.Unlock()
 	if sleep > 0 {
-		time.Sleep(sleep)
+		timer := time.NewTimer(sleep)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			// Return the unused reservation so repeated bounded enrichment
+			// cancellations do not leave pacing debt for later real requests.
+			p.mu.Lock()
+			p.next = p.next.Add(-p.interval)
+			p.mu.Unlock()
+			return ctx.Err()
+		}
 	}
+	return nil
 }
 
 type OpenF1Client struct {

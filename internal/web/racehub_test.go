@@ -86,11 +86,26 @@ func TestHandleRaceHubWithoutStore(t *testing.T) {
 	if hub.Source != query.ResponseSourceNone {
 		t.Fatalf("source = %q, want %q", hub.Source, query.ResponseSourceNone)
 	}
-	if rec.Header().Get(dataSourceHeader) != "local" || rec.Header().Get(dataFreshnessHeader) != "limited" {
+	if rec.Header().Get(dataSourceHeader) != "none" || rec.Header().Get(dataFreshnessHeader) != "limited" {
 		t.Fatalf("missing hub metadata = %q/%q", rec.Header().Get(dataSourceHeader), rec.Header().Get(dataFreshnessHeader))
 	}
 	if hub.Datasets["session"].Status != query.DatasetStatusMissing {
 		t.Fatalf("session dataset = %+v, want missing", hub.Datasets["session"])
+	}
+}
+
+func TestHandleRaceHubUnknownSessionWithStoreReportsLimited(t *testing.T) {
+	st := openTestStore(t)
+	srv := testServer(t, st)
+	rec := httptest.NewRecorder()
+	srv.handleRaceHub(rec, httptest.NewRequest(http.MethodGet, "/api/v1/race-hub?session_key=999999", nil))
+
+	var hub query.RaceHub
+	if err := json.Unmarshal(rec.Body.Bytes(), &hub); err != nil {
+		t.Fatal(err)
+	}
+	if hub.Source != query.ResponseSourceNone || rec.Header().Get(dataSourceHeader) != "none" || rec.Header().Get(dataFreshnessHeader) != "limited" {
+		t.Fatalf("unknown session = source %q, metadata %q/%q", hub.Source, rec.Header().Get(dataSourceHeader), rec.Header().Get(dataFreshnessHeader))
 	}
 }
 

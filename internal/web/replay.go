@@ -62,16 +62,26 @@ func (s *Server) handleReplayFrames(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := s.client.Scoped()
-	resp, err := assembleReplayFrames(r.Context(), client, sessionKey, intervalMS)
+	resp, incomplete, err := assembleReplayFrames(r.Context(), client, sessionKey, intervalMS)
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
-	markOpenF1Response(w, client)
+	markOpenF1Availability(w, client, replayResponseFreshness(resp, incomplete))
 	writeJSON(w, resp)
 }
 
-func assembleReplayFrames(ctx context.Context, client replayDataClient, sessionKey, intervalMS int) (replayFramesResponse, error) {
+func replayResponseFreshness(resp replayFramesResponse, incomplete bool) string {
+	if !incomplete {
+		return "fresh"
+	}
+	if len(resp.Frames) == 0 {
+		return "limited"
+	}
+	return "partial"
+}
+
+func assembleReplayFrames(ctx context.Context, client replayDataClient, sessionKey, intervalMS int) (replayFramesResponse, bool, error) {
 	if intervalMS < defaultReplayIntervalMS {
 		intervalMS = defaultReplayIntervalMS
 	}
@@ -84,26 +94,26 @@ func assembleReplayFrames(ctx context.Context, client replayDataClient, sessionK
 
 	drivers, err := client.GetDriversForSession(sessionKey)
 	if err != nil {
-		return resp, err
+		return resp, false, err
 	}
 
 	driverNumbers := uniqueDriverNumbers(drivers)
 	if len(driverNumbers) == 0 {
-		return resp, nil
+		return resp, true, nil
 	}
 
 	series, err := fetchReplayLocationSeries(ctx, client, sessionKey, driverNumbers)
 	if err != nil && len(series) == 0 {
-		return resp, err
+		return resp, false, err
 	}
 
 	start, ok := earliestReplayLocationTime(series)
 	if !ok {
-		return resp, nil
+		return resp, true, nil
 	}
 	resp.StartTime = start.Format(time.RFC3339Nano)
 	resp.Frames = snapReplayFrames(series, start, intervalMS)
-	return resp, nil
+	return resp, err != nil || len(resp.Frames) == 0, nil
 }
 
 func uniqueDriverNumbers(drivers []models.Driver) []int {
