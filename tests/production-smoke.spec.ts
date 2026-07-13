@@ -18,8 +18,15 @@ test.describe('Production serving (Go + built React)', () => {
     await expect(page.getByTestId(`rh-session-${FULL_SESSION}`)).toBeVisible()
 
     await page.getByRole('tab', { name: 'Race Story' }).click()
-    await expect(page.getByText('Final Classification')).toBeVisible()
-    await expect(page.locator('.drv-code', { hasText: 'VER' })).toBeVisible()
+
+    const outcome = page.getByRole('region', { name: 'Final running order' })
+    await expect(outcome).toBeVisible()
+    await expect(outcome).toHaveAttribute('data-testid', 'race-story-outcome')
+
+    const verRow = page.locator('.rs-driver-row', {
+      has: page.locator('.rs-driver-name', { hasText: 'VER' }),
+    })
+    await expect(verRow.locator('.rs-pos-col')).toHaveText('1')
   })
 
   test('serves admin / data health route', async ({ page }) => {
