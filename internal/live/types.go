@@ -186,6 +186,19 @@ func SessionStatusIsActive(status string) bool {
 	}
 }
 
+// SessionStatusIsTerminal reports whether a raw F1 live timing SessionStatus
+// value represents a session that has ended and will not resume. A temporarily
+// inactive session (e.g. a red-flag pause reported as "Inactive") is neither
+// active nor terminal.
+func SessionStatusIsTerminal(status string) bool {
+	switch normalizeSessionStatus(status) {
+	case "finished", "finalised", "finalized", "ends", "aborted":
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeSessionStatus(status string) string {
 	out := make([]rune, 0, len(status))
 	for _, r := range status {

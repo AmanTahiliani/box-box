@@ -51,6 +51,101 @@ func TestSSEHubArchivesTerminalSessionSnapshot(t *testing.T) {
 	}
 }
 
+func TestSnapshotIsLive(t *testing.T) {
+	redFlag := live.LiveStreamData{
+		SessionStatus: "Inactive",
+		TrackStatus:   "2",
+		Clock:         "00:03:27",
+		Session:       live.LiveSessionMeta{MeetingName: "Belgian Grand Prix", SessionName: "Practice 2", SessionType: "Practice"},
+	}
+	tests := []struct {
+		name string
+		data live.LiveStreamData
+		want bool
+	}{
+		{"started", live.LiveStreamData{SessionStatus: "Started"}, true},
+		{"resumed", live.LiveStreamData{SessionStatus: "Resumed"}, true},
+		{"red flag inactive with clock and session", redFlag, true},
+		{"terminal finished with clock", func() live.LiveStreamData {
+			d := redFlag
+			d.SessionStatus = "Finished"
+			return d
+		}(), false},
+		{"inactive spent clock", func() live.LiveStreamData {
+			d := redFlag
+			d.Clock = "00:00:00"
+			return d
+		}(), false},
+		{"inactive no clock", func() live.LiveStreamData {
+			d := redFlag
+			d.Clock = ""
+			return d
+		}(), false},
+		{"inactive no session metadata", func() live.LiveStreamData {
+			d := redFlag
+			d.Session = live.LiveSessionMeta{}
+			return d
+		}(), false},
+	}
+	for _, tt := range tests {
+		if got := snapshotIsLive(tt.data); got != tt.want {
+			t.Errorf("%s: snapshotIsLive = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestSSEHubKeepsRedFlagSessionLive(t *testing.T) {
+	hub := newSSEHub()
+	now := time.Date(2026, 7, 26, 14, 0, 0, 0, time.UTC)
+
+	redFlag := live.LiveStreamData{
+		SessionStatus:   "Inactive",
+		TrackStatus:     "2",
+		Clock:           "00:03:27",
+		Session:         live.LiveSessionMeta{MeetingName: "Belgian Grand Prix", SessionName: "Practice 2", SessionType: "Practice"},
+		SnapshotUpdated: true,
+	}
+	state := hub.applySnapshot(redFlag, now)
+
+	if !state.IsLive {
+		t.Fatal("red-flag paused session should report is_live=true")
+	}
+	if state.Data == nil {
+		t.Fatal("red-flag paused session must still send the active snapshot")
+	}
+	if state.Data.TrackStatus != "2" {
+		t.Fatalf("track status = %q, want the paused state \"2\"", state.Data.TrackStatus)
+	}
+	if state.LastSnapshot != nil {
+		t.Fatalf("red-flag session should not be archived: %+v", state.LastSnapshot)
+	}
+}
+
+func TestSSEHubStaleInactiveSnapshotNotLive(t *testing.T) {
+	hub := newSSEHub()
+	now := time.Date(2026, 7, 26, 14, 0, 0, 0, time.UTC)
+
+	// Inactive snapshot with session metadata but no remaining clock: this is a
+	// stale/no-live-evidence snapshot and must not be surfaced as live.
+	stale := live.LiveStreamData{
+		SessionStatus:   "Inactive",
+		Clock:           "00:00:00",
+		Session:         live.LiveSessionMeta{MeetingName: "Belgian Grand Prix", SessionName: "Practice 2"},
+		SnapshotUpdated: true,
+	}
+	state := hub.applySnapshot(stale, now)
+
+	if state.IsLive {
+		t.Fatal("stale inactive snapshot should report is_live=false")
+	}
+	if state.Data != nil {
+		t.Fatalf("stale inactive snapshot leaked into active data: %+v", state.Data)
+	}
+	if state.LastSnapshot == nil {
+		t.Fatal("stale inactive snapshot with metadata should be archived")
+	}
+}
+
 func TestHandleLiveStateKeepsArchiveOutOfActiveData(t *testing.T) {
 	hub := newSSEHub()
 	now := time.Date(2026, 7, 4, 14, 0, 0, 0, time.UTC)
