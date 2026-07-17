@@ -38,9 +38,11 @@ export function SessionBanner({ isLive, isArchive = false, snapshot, rows, conne
           <div className="live-banner-meta">
             {display.advanceCount && <span>{display.advanceCount} advance</span>}
             {atRiskLabel && <span>{atRiskLabel}</span>}
-            <span>
-              L<strong>{snapshot.CurrentLap || '-'}</strong>/<strong>{snapshot.TotalLaps || '-'}</strong>
-            </span>
+            {display.isRace && (
+              <span data-testid="live-lap-counter">
+                L<strong>{snapshot.CurrentLap || '-'}</strong>/<strong>{snapshot.TotalLaps || '-'}</strong>
+              </span>
+            )}
             <span className={isLive ? 'live-state live-state-on' : 'live-state'}>{stateLabel}</span>
           </div>
         </div>

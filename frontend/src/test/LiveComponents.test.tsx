@@ -209,6 +209,32 @@ describe('TimingTower', () => {
     expect(screen.getByText('DRS range')).toBeInTheDocument()
   })
 
+  it('derives a gap to P1 from best laps when the practice feed omits GapToLeader', () => {
+    const practiceRows = [
+      makeRow('1', 1, 'VER', { BestLapTime: '1:45.944', GapToLeader: '' }),
+      makeRow('4', 2, 'NOR', { BestLapTime: '1:46.134', GapToLeader: '' }),
+      makeRow('16', 3, 'LEC', { BestLapTime: '', GapToLeader: '' }),
+    ]
+    render(
+      <TimingTower
+        rows={practiceRows}
+        session={{
+          MeetingName: 'Belgian Grand Prix',
+          CircuitName: 'Spa',
+          SessionType: 'Practice',
+          SessionName: 'Practice 2',
+          Path: '',
+        }}
+      />,
+    )
+    // Leader shows a clear leader marker, not a fabricated gap.
+    expect(screen.getByText('VER').closest('tr')).toHaveTextContent('—')
+    expect(screen.getByText('+0.190')).toBeInTheDocument()
+    // A driver without a valid best lap gets no invented gap.
+    const lecRow = screen.getByText('LEC').closest('tr')!
+    expect(lecRow).not.toHaveTextContent('+')
+  })
+
   it('renders the SQ1 cutoff after P17 and marks rows below as at risk', () => {
     const sprintRows = Array.from({ length: 22 }, (_, index) =>
       makeRow(String(index + 1), index + 1, `D${index + 1}`),

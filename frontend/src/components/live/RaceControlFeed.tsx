@@ -80,7 +80,9 @@ export function RaceControlFeed({ messages, driverInfo }: Props) {
     <section className="live-rc panel-glass">
       <div className="sec-header sticky-header">
         <span className="sec-title">Race Control</span>
-        {messages.length > 0 && <span className="sec-meta">{messages.length} messages</span>}
+        <span className="sec-meta" data-testid="rc-timezone">
+          {messages.length > 0 ? `${messages.length} messages · ` : ''}times UTC
+        </span>
       </div>
       {latest.length === 0 ? (
         <div className="missing-notice">No race control messages in the current live snapshot.</div>
@@ -102,7 +104,7 @@ export function RaceControlFeed({ messages, driverInfo }: Props) {
 
             return (
               <div className={`live-rc-row${flashClass}`} key={key}>
-                <span className="rc-time">{message.Time || '--:--'}</span>
+                <span className="rc-time" title="UTC">{message.Time || '--:--'}</span>
                 {message.Lap > 0 && <span className="rc-lap">L{message.Lap}</span>}
                 {message.Flag
                   ? <span className={`rc-flag ${rcFlagClass(message.Flag)}`}>{message.Flag}</span>

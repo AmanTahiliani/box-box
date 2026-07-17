@@ -268,6 +268,63 @@ export function driverCode(row: LiveTimingRow): string {
   return row.Info?.Tla || row.RacingNumber
 }
 
+/**
+ * Parse an F1 lap-time string ("1:45.944", "45.944") into total seconds.
+ * Returns null for empty/invalid values so callers never invent a gap.
+ */
+export function parseLapTimeSeconds(value: string | null | undefined): number | null {
+  if (!value) return null
+  const match = value.trim().match(/^(?:(\d+):)?([0-5]?\d(?:\.\d+)?)$/)
+  if (!match) return null
+  const minutes = match[1] ? Number(match[1]) : 0
+  const seconds = Number(match[2])
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null
+  return minutes * 60 + seconds
+}
+
+export interface BestLapGap {
+  isLeader: boolean
+  gap: string
+}
+
+/**
+ * Display-only gap-to-P1 for practice/qualifying, derived from each driver's
+ * valid best lap. Only drivers with a parseable best lap get an entry, and the
+ * fastest is flagged as the leader. Never fabricates a gap from a missing or
+ * invalid lap — the upstream interval remains the source of truth for races.
+ */
+export function bestLapGaps(rows: ReadonlyArray<LiveTimingRow>): Record<string, BestLapGap> {
+  let leaderNumber = ''
+  let best = Infinity
+  for (const row of rows) {
+    const seconds = parseLapTimeSeconds(row.Driver.BestLapTime)
+    if (seconds === null) continue
+    if (seconds < best) {
+      best = seconds
+      leaderNumber = row.RacingNumber
+    }
+  }
+
+  const out: Record<string, BestLapGap> = {}
+  if (!Number.isFinite(best)) return out
+  for (const row of rows) {
+    const seconds = parseLapTimeSeconds(row.Driver.BestLapTime)
+    if (seconds === null) continue
+    out[row.RacingNumber] =
+      row.RacingNumber === leaderNumber
+        ? { isLeader: true, gap: '' }
+        : { isLeader: false, gap: `+${(seconds - best).toFixed(3)}` }
+  }
+  return out
+}
+
+/** True when the live feed reports an in-progress session with timing data. */
+export function isLiveSessionActive(
+  state: { is_live?: boolean; data?: unknown } | null | undefined,
+): boolean {
+  return Boolean(state?.is_live && state.data)
+}
+
 export function trackStatusLabel(status: string): string {
   return TRACK_STATUS_LABELS[status] || status || 'UNKNOWN'
 }
