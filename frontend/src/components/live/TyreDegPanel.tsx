@@ -52,7 +52,10 @@ function StintSparkline({ seconds }: { seconds: number[] }) {
 }
 
 export function TyreDegPanel({ rows, sessionType, pinned }: Props) {
-  const [collapsed, setCollapsed] = useState(false)
+  const isRace = isRaceSession(sessionType)
+  // In practice/qualifying deg trends are secondary — collapse by default so
+  // the Timing Tower stays above the fold. Races keep it open.
+  const [collapsed, setCollapsed] = useState(!isRace)
   const [stints, setStints] = useState<StintHistoryMap>({})
 
   // One lap-history update per received snapshot (rows is rebuilt per snapshot).
@@ -60,8 +63,6 @@ export function TyreDegPanel({ rows, sessionType, pinned }: Props) {
     if (rows.length === 0) return
     setStints((prev) => recordStintSamples(prev, rows.map(stintInputFromRow)))
   }, [rows])
-
-  const isRace = isRaceSession(sessionType)
 
   const visible = useMemo(
     () =>

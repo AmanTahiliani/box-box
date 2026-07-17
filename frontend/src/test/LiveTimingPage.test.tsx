@@ -153,6 +153,29 @@ describe('LiveTimingPage archive mode', () => {
     expect(screen.queryByRole('button', { name: /view last session/i })).not.toBeInTheDocument()
   })
 
+  it('renders the live session for a red-flag paused snapshot instead of the inactive empty state', async () => {
+    renderPage({
+      is_live: true,
+      data: {
+        ...archivedSnapshot,
+        SessionStatus: 'Inactive',
+        TrackStatus: '2',
+        Clock: '00:03:27',
+        Session: {
+          MeetingName: 'Belgian Grand Prix',
+          CircuitName: 'Spa-Francorchamps',
+          SessionType: 'Practice',
+          SessionName: 'Practice 2',
+          Path: '',
+        },
+      },
+    })
+
+    expect(await screen.findByText('Timing Tower')).toBeInTheDocument()
+    expect(screen.queryByTestId('live-empty')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('live-archive-strip')).not.toBeInTheDocument()
+  })
+
   it('temporarily omits the track map while live GPS is unavailable', async () => {
     renderPage({
       is_live: true,

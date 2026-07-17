@@ -134,7 +134,7 @@ func (h *SSEHub) applySnapshot(data live.LiveStreamData, now time.Time) liveStat
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if live.SessionStatusIsActive(data.SessionStatus) {
+	if snapshotIsLive(data) {
 		h.isLive = true
 		h.activeSnapshot = &data
 		if data.PositionUpdated && len(data.Positions) > 0 {
@@ -206,6 +206,40 @@ func (h *SSEHub) stateLocked() liveStatePayload {
 		}
 	}
 	return payload
+}
+
+// snapshotIsLive reports whether the current live-timing snapshot represents an
+// ongoing session that should be surfaced as live.
+//
+// An actively running session (Started/Resumed) is always live. A non-terminal
+// but temporarily inactive session — e.g. a red-flag pause where SessionStatus
+// drops to "Inactive" while the session is still in progress — is also live when
+// the snapshot itself carries live evidence: a session clock with time remaining
+// plus session metadata. This keeps the paused track state visible instead of
+// collapsing to the inactive empty state.
+//
+// Terminal sessions (Finished/Finalised/Ends/Aborted) are never live. A generic
+// inactive/no-session stale snapshot is not live either: the predicate keys off
+// the current snapshot's clock and session, so old metadata alone is not enough.
+func snapshotIsLive(data live.LiveStreamData) bool {
+	if live.SessionStatusIsActive(data.SessionStatus) {
+		return true
+	}
+	if live.SessionStatusIsTerminal(data.SessionStatus) {
+		return false
+	}
+	return clockHasTimeRemaining(data.Clock) && data.Session.SessionName != ""
+}
+
+// clockHasTimeRemaining reports whether an "HH:MM:SS" session clock has any time
+// left. Empty or all-zero clocks (a spent or absent session) return false.
+func clockHasTimeRemaining(clock string) bool {
+	for _, r := range clock {
+		if r >= '1' && r <= '9' {
+			return true
+		}
+	}
+	return false
 }
 
 func hasLiveSnapshotData(data live.LiveStreamData) bool {

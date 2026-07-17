@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bestLapGaps,
   compoundClass,
   compoundLetter,
   extrapolateClock,
+  isLiveSessionActive,
   latestRaceControl,
   liveSessionDisplay,
   loadPinnedDrivers,
   mergeVisibleSectors,
+  parseLapTimeSeconds,
   positionDeltaClass,
   parseLiveStateEvent,
   rcFlagClass,
@@ -276,6 +279,43 @@ describe('live qualifying display', () => {
         rows(10),
       ).cutoffPosition,
     ).toBeNull()
+  })
+})
+
+describe('practice/qualifying computed gaps', () => {
+  it('parses lap-time strings into seconds and rejects invalid input', () => {
+    expect(parseLapTimeSeconds('1:45.944')).toBeCloseTo(105.944, 3)
+    expect(parseLapTimeSeconds('45.944')).toBeCloseTo(45.944, 3)
+    expect(parseLapTimeSeconds('')).toBeNull()
+    expect(parseLapTimeSeconds(undefined)).toBeNull()
+    expect(parseLapTimeSeconds('-')).toBeNull()
+    expect(parseLapTimeSeconds('nope')).toBeNull()
+  })
+
+  it('derives a gap to P1 from valid best laps only, flagging the leader', () => {
+    const gaps = bestLapGaps([
+      timingRow('1', 1, { BestLapTime: '1:45.944' }),
+      timingRow('4', 2, { BestLapTime: '1:46.134' }),
+      timingRow('16', 3, { BestLapTime: '' }),
+    ])
+    expect(gaps['1']).toEqual({ isLeader: true, gap: '' })
+    expect(gaps['4']).toEqual({ isLeader: false, gap: '+0.190' })
+    // No valid best lap → no fabricated gap.
+    expect(gaps['16']).toBeUndefined()
+  })
+
+  it('returns no gaps when nobody has set a lap', () => {
+    expect(bestLapGaps([timingRow('1', 1, { BestLapTime: '' })])).toEqual({})
+  })
+})
+
+describe('live session activity', () => {
+  it('is active only when the feed reports a live session with data', () => {
+    expect(isLiveSessionActive({ is_live: true, data: snapshot })).toBe(true)
+    expect(isLiveSessionActive({ is_live: true, data: null })).toBe(false)
+    expect(isLiveSessionActive({ is_live: false, data: snapshot })).toBe(false)
+    expect(isLiveSessionActive(null)).toBe(false)
+    expect(isLiveSessionActive(undefined)).toBe(false)
   })
 })
 

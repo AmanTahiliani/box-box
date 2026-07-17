@@ -81,14 +81,20 @@ describe('TyreDegPanel', () => {
     expect(panel).toHaveTextContent('→ ~P2')
   })
 
-  it('hides the rejoin estimate outside race sessions and collapses on toggle', () => {
+  it('collapses by default outside race sessions and hides the rejoin estimate when expanded', () => {
     render(<TyreDegPanel rows={snapshotRows(3, '1:30.000')} sessionType="Qualifying" pinned={[]} />)
     const panel = screen.getByTestId('tyredeg-panel')
-    expect(panel).not.toHaveTextContent('~P')
 
-    expect(screen.getAllByTestId('tyredeg-row')).toHaveLength(2)
-    fireEvent.click(screen.getByRole('button', { name: /tyre deg/i }))
+    // Practice/qualifying starts collapsed so the Timing Tower stays above the fold.
     expect(screen.queryAllByTestId('tyredeg-row')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: /tyre deg/i }))
+    expect(screen.getAllByTestId('tyredeg-row')).toHaveLength(2)
+    expect(panel).not.toHaveTextContent('~P')
+  })
+
+  it('starts expanded during a race', () => {
+    render(<TyreDegPanel rows={snapshotRows(3, '1:30.000')} sessionType="Race" pinned={[]} />)
+    expect(screen.getAllByTestId('tyredeg-row')).toHaveLength(2)
   })
 
   it('limits rows to the top ten plus pinned drivers', () => {

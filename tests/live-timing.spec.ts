@@ -147,6 +147,58 @@ const sprintQualifyingSnapshot = {
   },
 }
 
+// Practice: the feed sets best laps but no GapToLeader/Interval, and there is
+// no race lap-total concept. Exercises computed gaps, the non-race banner, the
+// collapsed-by-default tyre panel, and the 390px core-field layout.
+const practiceSnapshot = {
+  is_live: true,
+  data: {
+    ...raceSnapshot.data,
+    Drivers: Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => {
+        const num = String(index + 1)
+        return [
+          num,
+          driver(num, index + 1, '', '', {
+            // Distinct, increasing best laps; P1 fastest, +0.200s per position.
+            BestLapTime: `1:${(45.9 + index * 0.2).toFixed(3).padStart(6, '0')}`,
+            LastLapTime: '1:46.500',
+            NumberOfLaps: 12,
+            Sectors: index === 0
+              ? [
+                  { Value: '28.500', PersonalFastest: true, OverallFastest: false },
+                  { Value: '52.100', PersonalFastest: false, OverallFastest: false },
+                  { Value: '25.344', PersonalFastest: false, OverallFastest: false },
+                ]
+              : [],
+          }),
+        ]
+      }),
+    ),
+    DriverInfo: Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => {
+        const num = String(index + 1)
+        return [num, info(num, `D${index + 1}`, 'Driver', String(index + 1), 'Test Team', index % 2 ? 'FF8000' : '27F4D2')]
+      }),
+    ),
+    Tyres: Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => [String(index + 1), { Compound: 'SOFT', New: false, Age: index % 4 }]),
+    ),
+    Session: {
+      MeetingName: 'Belgian Grand Prix',
+      CircuitName: 'Spa-Francorchamps',
+      SessionType: 'Practice',
+      SessionName: 'Practice 2',
+    },
+    TrackStatus: '1',
+    CurrentLap: 0,
+    TotalLaps: 0,
+    Clock: '00:45:00',
+    ClockRefTime: '2026-07-17T13:00:00Z',
+    ClockExtrapolating: false,
+  },
+}
+
 test.describe('Live Timing (mocked snapshot)', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/v1/live/state', (route) =>
@@ -230,6 +282,94 @@ test.describe('Live Timing (mocked Sprint Qualifying)', () => {
     await expect(page.getByTestId('qualifying-cutoff')).toContainText('P18-P22 at risk')
     await expect(page.locator('.live-tower tbody tr', { hasText: 'D18' })).toHaveClass(/danger-row/)
     await expect(page.locator('.live-tower tbody tr', { hasText: 'D8' })).toHaveClass(/flying-row/)
+  })
+})
+
+test.describe('Live Timing (mocked Practice)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/v1/live/state', (route) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(practiceSnapshot) }),
+    )
+    await page.route('**/api/v1/live/stream', (route) =>
+      route.fulfill({ contentType: 'text/event-stream', body: 'event: heartbeat\ndata: {}\n\n' }),
+    )
+    await page.goto('/live')
+  })
+
+  test('derives a gap to P1 from best laps and marks the leader', async ({ page }) => {
+    const tower = page.locator('.live-tower')
+    await expect(tower).toBeVisible()
+    // P1 shows a leader marker, not a fabricated gap.
+    await expect(tower.locator('tbody tr').first()).toContainText('—')
+    // P2 shows the computed +0.200 delta.
+    await expect(tower).toContainText('+0.200')
+  })
+
+  test('omits the race lap counter and keeps the session clock for practice', async ({ page }) => {
+    await expect(page.getByTestId('live-lap-counter')).toHaveCount(0)
+    await expect(page.getByTestId('live-clock')).toContainText('00:45:00')
+    await expect(page.locator('.live-banner')).not.toContainText('L-/-')
+  })
+
+  test('collapses the tyre panel by default so the tower is above the fold', async ({ page }) => {
+    await expect(page.getByTestId('tyredeg-panel')).toBeVisible()
+    await expect(page.getByTestId('tyredeg-row')).toHaveCount(0)
+    await expect(page.locator('.live-tower')).toBeVisible()
+  })
+
+  test('labels Race Control times as UTC', async ({ page }) => {
+    await expect(page.getByTestId('rc-timezone')).toContainText('UTC')
+  })
+
+  test('marks Live as active in the primary navigation', async ({ page }) => {
+    await expect(page.getByTestId('nav-live')).toHaveAttribute('data-live-active', 'true')
+    await expect(page.getByTestId('nav-live').locator('.nav-live-dot')).toBeVisible()
+  })
+})
+
+test.describe('Live Timing (390px practice viewport)', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/v1/live/state', (route) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(practiceSnapshot) }),
+    )
+    await page.route('**/api/v1/live/stream', (route) =>
+      route.fulfill({ contentType: 'text/event-stream', body: 'event: heartbeat\ndata: {}\n\n' }),
+    )
+    await page.goto('/live')
+  })
+
+  test('shows the five core fields with no horizontal overflow', async ({ page }) => {
+    const tower = page.locator('.live-tower')
+    await expect(tower).toBeVisible()
+
+    // Core comparison fields are present in the header.
+    await expect(tower.locator('thead')).toContainText('Pos')
+    await expect(tower.locator('thead')).toContainText('Driver')
+    await expect(tower.locator('thead')).toContainText('Tyre')
+    await expect(tower.locator('thead')).toContainText('Best')
+    await expect(tower.locator('thead')).toContainText('Gap to P1')
+
+    // Sectors are hidden from the initial mobile tower (reachable via expand).
+    const firstSector = tower.locator('thead th', { hasText: 'S1' })
+    await expect(firstSector).toBeHidden()
+
+    // The document must not scroll horizontally.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow).toBeLessThanOrEqual(0)
+  })
+
+  test('exposes sectors through the row detail interaction', async ({ page }) => {
+    // Sector columns are not in the initial mobile tower...
+    await expect(page.locator('.live-tower thead th', { hasText: 'S1' })).toBeHidden()
+    // ...but the P1 row's sectors are reachable by expanding the row.
+    await page.locator('.live-tower tbody tr', { hasText: 'D1' }).first().click()
+    const sectors = page.getByTestId('expanded-sectors')
+    await expect(sectors).toBeVisible()
+    await expect(sectors).toContainText('28.500')
   })
 })
 

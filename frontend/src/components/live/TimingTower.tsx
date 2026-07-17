@@ -1,9 +1,10 @@
-import { useState, Fragment } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { teamColor } from '../../utils'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
 import type { LiveSessionMeta, LiveStintData } from '../../types'
 import type { LiveTimingRow } from '../../lib/live'
 import {
+  bestLapGaps,
   driverCode,
   liveSessionDisplay,
   positionDelta,
@@ -62,6 +63,10 @@ export function TimingTower({
   const isQuali = sessionDisplay.isQualifying || !isRace
   const columnCount = 7 + (isRace ? 3 : 0) + (isQuali ? 3 : 0)
 
+  // Practice/qualifying: derive a display-only gap to P1 from valid best laps
+  // when the upstream feed omits GapToLeader. Empty for races (feed is truth).
+  const practiceGaps = useMemo(() => bestLapGaps(isRace ? [] : rows), [isRace, rows])
+
   return (
     <div className="scroll-x">
       <table className="data-table live-tower" style={{ minWidth: 760 }}>
@@ -71,9 +76,9 @@ export function TimingTower({
             {isRace && <th>Δ</th>}
             <th>Driver</th>
             <th>Tyre</th>
-            <th>Last Lap</th>
-            <th 
-              className="interactive" 
+            <th className={isRace ? undefined : 'hide-mobile'}>Last Lap</th>
+            <th
+              className="interactive"
               onClick={() => setGapMode(g => g === 'interval' ? 'leader' : 'interval')}
               title="Click to toggle Gap vs Interval"
               style={{ cursor: 'pointer', textDecoration: 'underline' }}
@@ -81,10 +86,10 @@ export function TimingTower({
               {gapMode === 'interval' && isRace ? 'Interval' : 'Gap to P1'}
             </th>
             {isRace && <th>Trend</th>}
-            {isQuali && <th>S1</th>}
-            {isQuali && <th>S2</th>}
-            {isQuali && <th>S3</th>}
-            <th className="hide-mobile">Best</th>
+            {isQuali && <th className="hide-mobile">S1</th>}
+            {isQuali && <th className="hide-mobile">S2</th>}
+            {isQuali && <th className="hide-mobile">S3</th>}
+            <th className={isRace ? 'hide-mobile' : undefined}>Best</th>
             {isRace && <th className="hide-mobile r">Laps</th>}
             <th className="r"></th>
           </tr>
@@ -102,7 +107,15 @@ export function TimingTower({
               driver.Cutoff
             const showCutoffAfter = row.Position === sessionDisplay.cutoffPosition
 
-            const gapText = gapMode === 'interval' && isRace ? (driver.Interval || driver.GapToLeader) : driver.GapToLeader
+            let gapText: string
+            if (isRace) {
+              gapText = gapMode === 'interval' ? (driver.Interval || driver.GapToLeader) : driver.GapToLeader
+            } else if (driver.GapToLeader) {
+              gapText = driver.GapToLeader
+            } else {
+              const computed = practiceGaps[row.RacingNumber]
+              gapText = computed ? (computed.isLeader ? '—' : computed.gap) : ''
+            }
             const intervalAnnotation =
               gapMode === 'interval' && isRace && row.Position > 1
                 ? intervalMeaning(parseIntervalSeconds(gapText))
@@ -153,7 +166,10 @@ export function TimingTower({
                   <td>
                     <span className={`tyre-badge ${tyreClass(row.Tyre)}`}>{tyreLabel(row.Tyre)}</span>
                   </td>
-                  <td className={driver.LastLapOB ? 'mono lap-ob' : driver.LastLapPB ? 'mono lap-pb' : 'mono'}>
+                  <td className={[
+                    isRace ? '' : 'hide-mobile',
+                    driver.LastLapOB ? 'mono lap-ob' : driver.LastLapPB ? 'mono lap-pb' : 'mono',
+                  ].filter(Boolean).join(' ')}>
                     {driver.LastLapTime || '-'}
                   </td>
                   <td className="mono">
@@ -171,11 +187,14 @@ export function TimingTower({
                     </td>
                   )}
 
-                  {isQuali && <td>{renderSector(0)}</td>}
-                  {isQuali && <td>{renderSector(1)}</td>}
-                  {isQuali && <td>{renderSector(2)}</td>}
+                  {isQuali && <td className="hide-mobile">{renderSector(0)}</td>}
+                  {isQuali && <td className="hide-mobile">{renderSector(1)}</td>}
+                  {isQuali && <td className="hide-mobile">{renderSector(2)}</td>}
 
-                  <td className={`hide-mobile ${driver.BestLapOB ? 'mono lap-ob' : 'mono'}`}>
+                  <td className={[
+                    isRace ? 'hide-mobile' : '',
+                    driver.BestLapOB ? 'mono lap-ob' : 'mono',
+                  ].filter(Boolean).join(' ')}>
                     {driver.BestLapTime || '-'}
                   </td>
                   
@@ -206,6 +225,16 @@ export function TimingTower({
                               <div>
                                  <div className="mono" style={{ color: 'var(--text-3)', fontSize: '10px', marginBottom: '4px' }}>LAPS</div>
                                  <div className="mono">{driver.NumberOfLaps || 0}</div>
+                              </div>
+                            )}
+                            {!isRace && driver.Sectors?.some((sec) => sec?.Value) && (
+                              <div data-testid="expanded-sectors">
+                                 <div className="mono" style={{ color: 'var(--text-3)', fontSize: '10px', marginBottom: '4px' }}>SECTORS</div>
+                                 <div className="mono" style={{ display: 'flex', gap: '10px' }}>
+                                    {renderSector(0)}
+                                    {renderSector(1)}
+                                    {renderSector(2)}
+                                 </div>
                               </div>
                             )}
                             {driver.SpeedTrap && (

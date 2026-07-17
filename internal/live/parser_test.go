@@ -307,6 +307,28 @@ func TestSessionStatusIsActive(t *testing.T) {
 	}
 }
 
+func TestSessionStatusIsTerminal(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		{"Finished", true},
+		{"Finalised", true},
+		{"Finalized", true},
+		{"Ends", true},
+		{"Aborted", true},
+		{"Started", false},
+		{"Resumed", false},
+		{"Inactive", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if got := live.SessionStatusIsTerminal(tt.status); got != tt.want {
+			t.Errorf("SessionStatusIsTerminal(%q) = %v, want %v", tt.status, got, tt.want)
+		}
+	}
+}
+
 func TestProcessTopicRaceControlMessages(t *testing.T) {
 	state := live.NewState()
 	data := json.RawMessage(`{
