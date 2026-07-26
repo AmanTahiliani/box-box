@@ -89,6 +89,16 @@ a { color: inherit; text-decoration: none; }
 }
 .app-nav::-webkit-scrollbar { display: none; }
 
+/* The nav scrolls horizontally with its scrollbar hidden. Below the width
+   where the links stop fitting, fade the trailing edge so the cut-off item
+   reads as "scroll for more" instead of as a clipping bug. */
+@media (max-width: 560px) {
+  .app-nav {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent 100%);
+  }
+}
+
 .nav-logo {
   font-family: var(--f-mono);
   font-size: 15px;

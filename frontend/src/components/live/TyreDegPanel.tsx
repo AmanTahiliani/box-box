@@ -53,9 +53,8 @@ function StintSparkline({ seconds }: { seconds: number[] }) {
 
 export function TyreDegPanel({ rows, sessionType, pinned }: Props) {
   const isRace = isRaceSession(sessionType)
-  // In practice/qualifying deg trends are secondary — collapse by default so
-  // the Timing Tower stays above the fold. Races keep it open.
-  const [collapsed, setCollapsed] = useState(!isRace)
+  const [collapsed, setCollapsed] = useState(true)
+  const [readerChose, setReaderChose] = useState(false)
   const [stints, setStints] = useState<StintHistoryMap>({})
 
   // One lap-history update per received snapshot (rows is rebuilt per snapshot).
@@ -75,6 +74,30 @@ export function TyreDegPanel({ rows, sessionType, pinned }: Props) {
     [rows, pinned],
   )
 
+  // One linear fit per driver per snapshot, shared by the readiness check and
+  // the rows below. degradationModel is O(laps) and this runs at feed rate.
+  const models = useMemo(() => {
+    const out: Record<string, ReturnType<typeof degradationModel>> = {}
+    for (const row of visible) {
+      out[row.RacingNumber] = degradationModel(stints[row.RacingNumber]?.samples ?? [])
+    }
+    return out
+  }, [visible, stints])
+
+  // Before any stint has enough clean laps to fit, every row reads "warming
+  // up" — a full-height panel of placeholders that pushed the Timing Tower off
+  // the fold for the first third of a race. Stay collapsed until there is
+  // something to say, then open. A reader who has toggled it keeps their choice.
+  const hasSignal = useMemo(
+    () => visible.some((row) => models[row.RacingNumber] != null),
+    [visible, models],
+  )
+
+  useEffect(() => {
+    if (readerChose) return
+    setCollapsed(!(isRace && hasSignal))
+  }, [isRace, hasSignal, readerChose])
+
   if (visible.length === 0) return null
 
   return (
@@ -82,18 +105,25 @@ export function TyreDegPanel({ rows, sessionType, pinned }: Props) {
       <button
         type="button"
         className="sec-header tyredeg-toggle"
-        onClick={() => setCollapsed((prev) => !prev)}
+        onClick={() => {
+          setReaderChose(true)
+          setCollapsed((prev) => !prev)
+        }}
         aria-expanded={!collapsed}
       >
         <span className="sec-title">Tyre Deg &amp; Pit Window</span>
-        {isRace && <span className="sec-meta">rejoin assumes ~{PIT_LOSS_SECONDS}s pit loss</span>}
+        {!hasSignal ? (
+          <span className="sec-meta">collecting clean laps</span>
+        ) : (
+          isRace && <span className="sec-meta">rejoin assumes ~{PIT_LOSS_SECONDS}s pit loss</span>
+        )}
         <span className="tyredeg-chevron" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
       </button>
 
       {!collapsed && (
         <div className="tyredeg-rows">
           {visible.map((row) => {
-            const model = degradationModel(stints[row.RacingNumber]?.samples ?? [])
+            const model = models[row.RacingNumber]
             const rejoin = isRace ? estimatePitRejoin(rows, row.RacingNumber) : null
             const ageAnnotation = tyreAgeMeaning(row.Tyre?.Compound, row.Tyre?.Age)
             return (

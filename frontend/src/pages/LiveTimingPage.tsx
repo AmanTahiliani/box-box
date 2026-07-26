@@ -289,14 +289,16 @@ export function LiveTimingPage() {
                 session={snapshot.Session}
               />
             </div>
+            {/* Rail runs most-synthesized to most-raw: a reader arriving
+                mid-session wants "what did I miss" before the regulatory log. */}
             <div className="live-rc-col">
+              <EventRail events={events} driverInfo={snapshot.DriverInfo} />
               <TeamRadioTicker
                 captures={snapshot.TeamRadio ?? []}
                 driverInfo={snapshot.DriverInfo}
                 session={snapshot.Session}
               />
               <RaceControlFeed messages={snapshot.RCMessages ?? []} driverInfo={snapshot.DriverInfo} />
-              <EventRail events={events} driverInfo={snapshot.DriverInfo} />
             </div>
           </div>
         </>
