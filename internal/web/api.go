@@ -16,6 +16,7 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 
+	"github.com/AmanTahiliani/box-box/internal/api"
 	"github.com/AmanTahiliani/box-box/internal/models"
 	"github.com/AmanTahiliani/box-box/internal/query"
 )
@@ -43,6 +44,7 @@ func (s *Server) handleMeetings(w http.ResponseWriter, r *http.Request) {
 
 	switch parseSourceMode(r) {
 	case sourceLocal:
+		markLocalResponse(w, false)
 		if !s.hasLocalQuery() {
 			writeJSON(w, []models.Meeting{})
 			return
@@ -62,17 +64,20 @@ func (s *Server) handleMeetings(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if len(meetings) > 0 {
+				markLocalResponse(w, false)
 				writeJSON(w, meetings)
 				return
 			}
 		}
 	}
 
-	meetings, err := s.client.GetMeetingsForYear(year)
+	client := s.client.Scoped()
+	meetings, err := client.GetMeetingsForYear(year)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, meetings)
 }
 
@@ -87,6 +92,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 
 	switch parseSourceMode(r) {
 	case sourceLocal:
+		markLocalResponse(w, false)
 		if !s.hasLocalQuery() {
 			writeJSON(w, []models.Session{})
 			return
@@ -106,23 +112,27 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if len(sessions) > 0 {
+				markLocalResponse(w, false)
 				writeJSON(w, sessions)
 				return
 			}
 		}
 	}
 
-	sessions, err := s.client.GetSessionsForMeeting(meetingKey)
+	client := s.client.Scoped()
+	sessions, err := client.GetSessionsForMeeting(meetingKey)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, sessions)
 }
 
 // --- /api/v1/news ---
 
 func (s *Server) handleNews(w http.ResponseWriter, r *http.Request) {
+	markLocalResponse(w, false)
 	if !s.hasLocalQuery() {
 		writeJSON(w, []query.NewsItem{})
 		return
@@ -223,6 +233,7 @@ func (s *Server) handleDrivers(w http.ResponseWriter, r *http.Request) {
 
 	switch parseSourceMode(r) {
 	case sourceLocal:
+		markLocalResponse(w, false)
 		if !s.hasLocalQuery() {
 			writeJSON(w, []models.Driver{})
 			return
@@ -242,6 +253,7 @@ func (s *Server) handleDrivers(w http.ResponseWriter, r *http.Request) {
 		if s.hasLocalQuery() {
 			drivers, err := s.query.ListDrivers(sessionKey)
 			if err == nil && len(drivers) > 0 {
+				markLocalResponse(w, false)
 				writeJSON(w, drivers)
 				return
 			}
@@ -252,11 +264,13 @@ func (s *Server) handleDrivers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	drivers, err := s.client.GetDriversForSession(sessionKey)
+	client := s.client.Scoped()
+	drivers, err := client.GetDriversForSession(sessionKey)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, drivers)
 }
 
@@ -279,6 +293,7 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 
 	switch parseSourceMode(r) {
 	case sourceLocal:
+		markLocalResponse(w, false)
 		if !s.hasLocalQuery() {
 			writeJSON(w, []resultWithDriver{})
 			return
@@ -294,6 +309,7 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 		if s.hasLocalQuery() {
 			results, err := s.query.ListResults(sessionKey)
 			if err == nil && len(results) > 0 {
+				markLocalResponse(w, false)
 				writeJSON(w, enrichedResultsToAPI(results))
 				return
 			}
@@ -308,30 +324,42 @@ func (s *Server) handleResults(w http.ResponseWriter, r *http.Request) {
 		results    []models.SessionResult
 		drivers    []models.Driver
 		resultsErr error
+		driversErr error
 		wg         sync.WaitGroup
 	)
+	client := s.client.Scoped()
 	wg.Add(2)
-	go func() { defer wg.Done(); results, resultsErr = s.client.GetSessionResult(sessionKey) }()
-	go func() { defer wg.Done(); drivers, _ = s.client.GetDriversForSession(sessionKey) }()
+	go func() { defer wg.Done(); results, resultsErr = client.GetSessionResult(sessionKey) }()
+	go func() { defer wg.Done(); drivers, driversErr = client.GetDriversForSession(sessionKey) }()
 	wg.Wait()
 
 	if resultsErr != nil {
-		writeError(w, resultsErr, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, resultsErr, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
 
 	driverMap := buildDriverMap(drivers)
+	incomplete := driversErr != nil
 	enriched := make([]resultWithDriver, 0, len(results))
 	for _, res := range results {
 		e := resultWithDriver{SessionResult: res}
-		if d, ok := driverMap[res.DriverNumber]; ok {
+		if d, ok := driverMap[res.DriverNumber]; ok && hasDriverPresentation(d) {
 			e.NameAcronym = d.NameAcronym
 			e.FullName = d.FullName
 			e.TeamName = d.TeamName
 			e.TeamColour = d.TeamColour
+		} else {
+			incomplete = true
 		}
 		enriched = append(enriched, e)
 	}
+	resultsFreshness := "fresh"
+	if len(results) == 0 {
+		resultsFreshness = "limited"
+	} else if incomplete {
+		resultsFreshness = "partial"
+	}
+	markOpenF1Availability(w, client, resultsFreshness)
 	writeJSON(w, enriched)
 }
 
@@ -354,6 +382,7 @@ func (s *Server) handleGrid(w http.ResponseWriter, r *http.Request) {
 
 	switch parseSourceMode(r) {
 	case sourceLocal:
+		markLocalResponse(w, false)
 		if !s.hasLocalQuery() {
 			writeJSON(w, []gridWithDriver{})
 			return
@@ -369,6 +398,7 @@ func (s *Server) handleGrid(w http.ResponseWriter, r *http.Request) {
 		if s.hasLocalQuery() {
 			grid, err := s.query.ListStartingGrid(sessionKey)
 			if err == nil && len(grid) > 0 {
+				markLocalResponse(w, false)
 				writeJSON(w, enrichedGridToAPI(grid))
 				return
 			}
@@ -380,33 +410,45 @@ func (s *Server) handleGrid(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		grid    []models.StartingGrid
-		drivers []models.Driver
-		gridErr error
-		wg      sync.WaitGroup
+		grid       []models.StartingGrid
+		drivers    []models.Driver
+		gridErr    error
+		driversErr error
+		wg         sync.WaitGroup
 	)
+	client := s.client.Scoped()
 	wg.Add(2)
-	go func() { defer wg.Done(); grid, gridErr = s.client.GetStartingGrid(sessionKey) }()
-	go func() { defer wg.Done(); drivers, _ = s.client.GetDriversForSession(sessionKey) }()
+	go func() { defer wg.Done(); grid, gridErr = client.GetStartingGrid(sessionKey) }()
+	go func() { defer wg.Done(); drivers, driversErr = client.GetDriversForSession(sessionKey) }()
 	wg.Wait()
 
 	if gridErr != nil {
-		writeError(w, gridErr, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, gridErr, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
 
 	driverMap := buildDriverMap(drivers)
+	incomplete := driversErr != nil
 	enriched := make([]gridWithDriver, 0, len(grid))
 	for _, g := range grid {
 		e := gridWithDriver{StartingGrid: g}
-		if d, ok := driverMap[g.DriverNumber]; ok {
+		if d, ok := driverMap[g.DriverNumber]; ok && hasDriverPresentation(d) {
 			e.NameAcronym = d.NameAcronym
 			e.FullName = d.FullName
 			e.TeamName = d.TeamName
 			e.TeamColour = d.TeamColour
+		} else {
+			incomplete = true
 		}
 		enriched = append(enriched, e)
 	}
+	gridFreshness := "fresh"
+	if len(grid) == 0 {
+		gridFreshness = "limited"
+	} else if incomplete {
+		gridFreshness = "partial"
+	}
+	markOpenF1Availability(w, client, gridFreshness)
 	writeJSON(w, enriched)
 }
 
@@ -419,26 +461,29 @@ func (s *Server) handleLaps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client := s.client.Scoped()
 	if dnStr := r.URL.Query().Get("driver_number"); dnStr != "" {
 		driverNumber, err := strconv.Atoi(dnStr)
 		if err != nil || driverNumber == 0 {
 			http.Error(w, "invalid driver_number", http.StatusBadRequest)
 			return
 		}
-		laps, err := s.client.GetLapsForDriver(sessionKey, driverNumber)
+		laps, err := client.GetLapsForDriver(sessionKey, driverNumber)
 		if err != nil {
-			writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+			writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 			return
 		}
+		markOpenF1Response(w, client)
 		writeJSON(w, laps)
 		return
 	}
 
-	laps, err := s.client.GetLapsForSession(sessionKey)
+	laps, err := client.GetLapsForSession(sessionKey)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, laps)
 }
 
@@ -450,11 +495,13 @@ func (s *Server) handleWeather(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session_key required", http.StatusBadRequest)
 		return
 	}
-	weather, err := s.client.GetWeather(sessionKey)
+	client := s.client.Scoped()
+	weather, err := client.GetWeather(sessionKey)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, weather)
 }
 
@@ -466,11 +513,13 @@ func (s *Server) handleRaceControl(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session_key required", http.StatusBadRequest)
 		return
 	}
-	rc, err := s.client.GetRaceControl(sessionKey)
+	client := s.client.Scoped()
+	rc, err := client.GetRaceControl(sessionKey)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, rc)
 }
 
@@ -487,11 +536,13 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "driver_number required", http.StatusBadRequest)
 		return
 	}
-	carData, err := s.client.GetCarData(sessionKey, driverNumber)
+	client := s.client.Scoped()
+	carData, err := client.GetCarData(sessionKey, driverNumber)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, carData)
 }
 
@@ -503,11 +554,13 @@ func (s *Server) handleOvertakes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session_key required", http.StatusBadRequest)
 		return
 	}
-	overtakes, err := s.client.GetOvertakesForSession(sessionKey)
+	client := s.client.Scoped()
+	overtakes, err := client.GetOvertakesForSession(sessionKey)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, overtakes)
 }
 
@@ -524,11 +577,13 @@ func (s *Server) handleTeamRadio(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "driver_number required", http.StatusBadRequest)
 		return
 	}
-	radios, err := s.client.GetTeamRadio(sessionKey, driverNumber)
+	client := s.client.Scoped()
+	radios, err := client.GetTeamRadio(sessionKey, driverNumber)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
+	markOpenF1Response(w, client)
 	writeJSON(w, radios)
 }
 
@@ -547,36 +602,42 @@ func (s *Server) handleChampionshipDrivers(w http.ResponseWriter, r *http.Reques
 	if year == 0 {
 		year = time.Now().Year()
 	}
-	champ, err := s.client.GetDriverChampionshipForYear(year)
+	client := s.client.Scoped()
+	champ, err := client.GetDriverChampionshipForYear(year)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
 	if len(champ) == 0 {
+		markOpenF1Availability(w, client, "limited")
 		writeJSON(w, []any{})
 		return
 	}
 
-	drivers, _ := s.client.GetDriversForSession(champ[0].SessionKey)
+	drivers, driversErr := client.GetDriversForSession(champ[0].SessionKey)
 	driverMap := buildDriverMapFirst(drivers)
+	incomplete := driversErr != nil
 
 	enriched := make([]champDriverWithInfo, 0, len(champ))
 	for _, c := range champ {
 		e := champDriverWithInfo{ChampionshipDriver: c}
-		d, ok := s.championshipDriverInfo(c.SessionKey, c.DriverNumber, driverMap)
-		if ok {
+		d, ok := championshipDriverInfo(client, c.SessionKey, c.DriverNumber, driverMap)
+		if ok && hasDriverPresentation(d) {
 			e.NameAcronym = d.NameAcronym
 			e.FullName = d.FullName
 			e.TeamName = d.TeamName
 			e.TeamColour = d.TeamColour
+		} else {
+			incomplete = true
 		}
 		enriched = append(enriched, e)
 	}
+	markOpenF1AggregateResponse(w, client, incomplete)
 	writeJSON(w, enriched)
 }
 
-func (s *Server) championshipDriverInfo(sessionKey, driverNumber int, fallback map[int]models.Driver) (models.Driver, bool) {
-	if d, err := s.client.GetDriver(sessionKey, driverNumber); err == nil && d != nil {
+func championshipDriverInfo(client *api.OpenF1Client, sessionKey, driverNumber int, fallback map[int]models.Driver) (models.Driver, bool) {
+	if d, err := client.GetDriver(sessionKey, driverNumber); err == nil && d != nil {
 		return *d, true
 	}
 	d, ok := fallback[driverNumber]
@@ -590,10 +651,16 @@ func (s *Server) handleChampionshipTeams(w http.ResponseWriter, r *http.Request)
 	if year == 0 {
 		year = time.Now().Year()
 	}
-	teams, err := s.client.GetTeamChampionshipForYear(year)
+	client := s.client.Scoped()
+	teams, err := client.GetTeamChampionshipForYear(year)
 	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
+	}
+	if len(teams) == 0 {
+		markOpenF1Availability(w, client, "limited")
+	} else {
+		markOpenF1Response(w, client)
 	}
 	writeJSON(w, teams)
 }
@@ -671,8 +738,10 @@ func champHubTTL(year int, now time.Time) time.Duration {
 }
 
 type champHubEntry struct {
-	resp    champHubResponse
-	expires time.Time
+	resp      champHubResponse
+	source    string
+	freshness string
+	expires   time.Time
 }
 
 // champHubCache is an in-memory cache of aggregated hub responses keyed by
@@ -693,12 +762,26 @@ func (c *champHubCache) get(year int, now time.Time) (champHubResponse, bool) {
 }
 
 func (c *champHubCache) put(year int, resp champHubResponse, now time.Time, ttl time.Duration) {
+	c.putWithMetadata(year, resp, "local", "local", now, ttl)
+}
+
+func (c *champHubCache) getWithMetadata(year int, now time.Time) (champHubResponse, string, string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[year]
+	if !ok || now.After(e.expires) {
+		return champHubResponse{}, "", "", false
+	}
+	return e.resp, e.source, e.freshness, true
+}
+
+func (c *champHubCache) putWithMetadata(year int, resp champHubResponse, source, freshness string, now time.Time, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.entries == nil {
 		c.entries = map[int]champHubEntry{}
 	}
-	c.entries[year] = champHubEntry{resp: resp, expires: now.Add(ttl)}
+	c.entries[year] = champHubEntry{resp: resp, source: source, freshness: freshness, expires: now.Add(ttl)}
 }
 
 // fetchMeetingRaces fans fetch out across meetings with bounded concurrency.
@@ -740,13 +823,6 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 	}
 	mode := parseSourceMode(r)
 
-	if mode != sourceLocal {
-		if resp, ok := s.hubCache.get(year, time.Now()); ok {
-			writeJSON(w, resp)
-			return
-		}
-	}
-
 	if mode == sourceLocal || mode == sourceAuto {
 		resp, ok, err := s.localChampionshipHub(year)
 		if err != nil {
@@ -754,21 +830,33 @@ func (s *Server) handleChampionshipHub(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
-			s.hubCache.put(year, resp, time.Now(), champHubTTL(year, time.Now()))
+			s.hubCache.putWithMetadata(year, resp, "local", "local", time.Now(), champHubTTL(year, time.Now()))
+			markLocalResponse(w, false)
 			writeJSON(w, resp)
 			return
 		}
 		if mode == sourceLocal {
+			markDataResponse(w, "none", "limited")
 			writeJSON(w, resp)
 			return
 		}
 	}
 
-	resp, err := s.openF1ChampionshipHub(year)
-	if err != nil {
-		writeError(w, err, http.StatusInternalServerError, s.client.LastResponseWasStale())
+	// At this point an auto request has no usable domain aggregate and an
+	// explicit OpenF1 request must not be satisfied by a local cache entry.
+	if resp, source, freshness, ok := s.hubCache.getWithMetadata(year, time.Now()); ok && source == "openf1" {
+		markDataResponse(w, source, freshness)
+		writeJSON(w, resp)
 		return
 	}
+
+	client := s.client.Scoped()
+	resp, incomplete, err := s.openF1ChampionshipHub(client, year)
+	if err != nil {
+		writeError(w, err, http.StatusInternalServerError, client.LastResponseWasStale())
+		return
+	}
+	markOpenF1AggregateResponse(w, client, incomplete)
 	writeJSON(w, resp)
 }
 
@@ -797,25 +885,35 @@ func (s *Server) localChampionshipHub(year int) (champHubResponse, bool, error) 
 	return aggregateChampionshipHub(year, races, inputs.Champ, inputs.Teams, inputs.DriverMap), true, nil
 }
 
-func (s *Server) openF1ChampionshipHub(year int) (champHubResponse, error) {
-	champ, err := s.client.GetDriverChampionshipForYear(year)
+func (s *Server) openF1ChampionshipHub(client *api.OpenF1Client, year int) (champHubResponse, bool, error) {
+	champ, err := client.GetDriverChampionshipForYear(year)
 	if err != nil {
-		return champHubResponse{}, err
+		return champHubResponse{}, false, err
 	}
 	if len(champ) == 0 {
-		return champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}}, nil
+		return champHubResponse{Season: year, RoundLabels: []string{}, Drivers: []champHubDriver{}, Teams: []champHubTeam{}}, true, nil
 	}
-	teams, _ := s.client.GetTeamChampionshipForYear(year)
+	teams, teamsErr := client.GetTeamChampionshipForYear(year)
 
 	driverInfo := map[int]models.Driver{}
-	if ds, derr := s.client.GetDriversForSession(champ[0].SessionKey); derr == nil {
+	driversIncomplete := false
+	if ds, derr := client.GetDriversForSession(champ[0].SessionKey); derr == nil {
 		driverInfo = buildDriverMapFirst(ds)
+	} else {
+		driversIncomplete = true
+	}
+	for _, standing := range champ {
+		if !hasDriverPresentation(driverInfo[standing.DriverNumber]) {
+			driversIncomplete = true
+			break
+		}
 	}
 
-	races, incomplete, err := s.fetchSeasonRaces(year)
+	races, incomplete, err := fetchSeasonRaces(client, year)
 	if err != nil {
-		return champHubResponse{}, err
+		return champHubResponse{}, false, err
 	}
+	incomplete = incomplete || teamsErr != nil || driversIncomplete
 
 	resp := aggregateChampionshipHub(year, races, champ, teams, driverInfo)
 	ttl := champHubTTL(year, time.Now())
@@ -825,16 +923,22 @@ func (s *Server) openF1ChampionshipHub(year int) (champHubResponse, error) {
 		// so a partial view of the season doesn't stick around for the full TTL.
 		ttl = champHubIncompleteTTL
 	}
-	s.hubCache.put(year, resp, time.Now(), ttl)
-	return resp, nil
+	freshness := "fresh"
+	if client.LastResponseWasStale() {
+		freshness = "stale"
+	} else if incomplete {
+		freshness = "partial"
+	}
+	s.hubCache.putWithMetadata(year, resp, "openf1", freshness, time.Now(), ttl)
+	return resp, incomplete, nil
 }
 
 // fetchSeasonRaces returns a season's GP meetings in date order, each bundled
 // with its race results and starting grid fetched from OpenF1. incomplete
 // reports whether any per-meeting fetch failed, so callers can avoid caching a
 // partial view of the season for long.
-func (s *Server) fetchSeasonRaces(year int) (races []meetingRace, incomplete bool, err error) {
-	meetings, err := s.client.GetMeetingsForYear(year)
+func fetchSeasonRaces(client *api.OpenF1Client, year int) (races []meetingRace, incomplete bool, err error) {
+	meetings, err := client.GetMeetingsForYear(year)
 	if err != nil {
 		return nil, false, err
 	}
@@ -842,7 +946,7 @@ func (s *Server) fetchSeasonRaces(year int) (races []meetingRace, incomplete boo
 
 	var failed atomic.Bool
 	races = fetchMeetingRaces(meetings, champHubWorkers, func(m models.Meeting) (meetingRace, bool) {
-		sessions, serr := s.client.GetSessionsForMeeting(int(m.MeetingKey))
+		sessions, serr := client.GetSessionsForMeeting(int(m.MeetingKey))
 		if serr != nil {
 			failed.Store(true)
 			return meetingRace{}, false
@@ -855,16 +959,46 @@ func (s *Server) fetchSeasonRaces(year int) (races []meetingRace, incomplete boo
 			}
 		}
 		if raceKey == 0 {
-			return meetingRace{}, false // not a GP meeting (e.g. pre-season testing)
+			if isKnownNonChampionshipMeeting(m, sessions) {
+				return meetingRace{}, false
+			}
+			failed.Store(true)
+			// The meeting list does not identify non-championship events. Skipping
+			// a meeting without a Race may be expected (testing), but the aggregate
+			// is not proven complete and must be labelled partial.
+			return meetingRace{}, false
 		}
-		results, rerr := s.client.GetSessionResult(raceKey)
-		grid, gerr := s.client.GetStartingGrid(raceKey)
+		results, rerr := client.GetSessionResult(raceKey)
+		grid, gerr := client.GetStartingGrid(raceKey)
 		if rerr != nil || gerr != nil {
 			failed.Store(true)
 		}
 		return meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}, true
 	})
 	return races, failed.Load(), nil
+}
+
+func isKnownNonChampionshipMeeting(meeting models.Meeting, sessions []models.Session) bool {
+	if hasTestingToken(meeting.MeetingName + " " + meeting.MeetingOfficialName) {
+		return true
+	}
+	for _, session := range sessions {
+		if hasTestingToken(session.SessionName + " " + session.SessionType) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTestingToken(value string) bool {
+	for _, token := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}) {
+		if token == "test" || token == "tests" || token == "testing" {
+			return true
+		}
+	}
+	return false
 }
 
 // aggregateChampionshipHub is the pure aggregation core (no network) so it can be
@@ -1077,6 +1211,7 @@ type trackOutlineResponse struct {
 }
 
 func (s *Server) handleTrackOutline(w http.ResponseWriter, r *http.Request) {
+	markLocalResponse(w, false)
 	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
 	if year == 0 {
 		year = time.Now().Year()
@@ -1273,22 +1408,25 @@ func (s *Server) handleStrategy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		stints    []models.Stint
-		pits      []models.Pit
-		results   []models.SessionResult
-		drivers   []models.Driver
-		rc        []models.RaceControl
-		stintsErr error
-		pitsErr   error
-		resErr    error
-		wg        sync.WaitGroup
+		stints     []models.Stint
+		pits       []models.Pit
+		results    []models.SessionResult
+		drivers    []models.Driver
+		rc         []models.RaceControl
+		stintsErr  error
+		pitsErr    error
+		resErr     error
+		driversErr error
+		rcErr      error
+		wg         sync.WaitGroup
 	)
+	client := s.client.Scoped()
 	wg.Add(5)
-	go func() { defer wg.Done(); stints, stintsErr = s.client.GetStintsForSession(sessionKey) }()
-	go func() { defer wg.Done(); pits, pitsErr = s.client.GetPitStopsForSession(sessionKey) }()
-	go func() { defer wg.Done(); results, resErr = s.client.GetSessionResult(sessionKey) }()
-	go func() { defer wg.Done(); drivers, _ = s.client.GetDriversForSession(sessionKey) }()
-	go func() { defer wg.Done(); rc, _ = s.client.GetRaceControl(sessionKey) }()
+	go func() { defer wg.Done(); stints, stintsErr = client.GetStintsForSession(sessionKey) }()
+	go func() { defer wg.Done(); pits, pitsErr = client.GetPitStopsForSession(sessionKey) }()
+	go func() { defer wg.Done(); results, resErr = client.GetSessionResult(sessionKey) }()
+	go func() { defer wg.Done(); drivers, driversErr = client.GetDriversForSession(sessionKey) }()
+	go func() { defer wg.Done(); rc, rcErr = client.GetRaceControl(sessionKey) }()
 	wg.Wait()
 
 	if stintsErr != nil || pitsErr != nil || resErr != nil {
@@ -1299,17 +1437,21 @@ func (s *Server) handleStrategy(w http.ResponseWriter, r *http.Request) {
 		if e == nil {
 			e = resErr
 		}
-		writeError(w, e, http.StatusInternalServerError, s.client.LastResponseWasStale())
+		writeError(w, e, http.StatusInternalServerError, client.LastResponseWasStale())
 		return
 	}
 
-	// Non-race sessions have no stints.
+	// Empty strategy data may mean a non-race session or a race still settling.
 	if len(stints) == 0 {
+		// Without session-type evidence, an empty primary strategy dataset is
+		// not enough to prove "not applicable" (it may still be settling).
+		markOpenF1Availability(w, client, "limited")
 		writeJSON(w, map[string]any{"note": "Not applicable", "drivers": []any{}})
 		return
 	}
 
 	driverMap := buildDriverMap(drivers)
+	incomplete := driversErr != nil || rcErr != nil
 
 	resultMap := make(map[int]models.SessionResult, len(results))
 	totalLaps := 0
@@ -1342,6 +1484,9 @@ func (s *Server) handleStrategy(w http.ResponseWriter, r *http.Request) {
 	stratDrivers := make([]strategyDriver, 0, len(seenDrivers))
 	for dn := range seenDrivers {
 		d := driverMap[dn]
+		if !hasDriverPresentation(d) {
+			incomplete = true
+		}
 		res := resultMap[dn]
 
 		sd := strategyDriver{
@@ -1396,6 +1541,7 @@ func (s *Server) handleStrategy(w http.ResponseWriter, r *http.Request) {
 		return pi < pj
 	})
 
+	markOpenF1AggregateResponse(w, client, incomplete)
 	writeJSON(w, strategyResponse{
 		SessionKey: sessionKey,
 		TotalLaps:  totalLaps,
@@ -1491,21 +1637,31 @@ func (s *Server) handleLapsComparison(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		allLaps []models.Lap
-		stints  []models.Stint
-		pits    []models.Pit
-		rc      []models.RaceControl
-		wg      sync.WaitGroup
+		allLaps   []models.Lap
+		stints    []models.Stint
+		pits      []models.Pit
+		rc        []models.RaceControl
+		lapsErr   error
+		stintsErr error
+		pitsErr   error
+		rcErr     error
+		wg        sync.WaitGroup
 	)
+	client := s.client.Scoped()
 	wg.Add(4)
-	go func() { defer wg.Done(); allLaps, _ = s.client.GetLapsForSession(sessionKey) }()
-	go func() { defer wg.Done(); stints, _ = s.client.GetStintsForSession(sessionKey) }()
-	go func() { defer wg.Done(); pits, _ = s.client.GetPitStopsForSession(sessionKey) }()
-	go func() { defer wg.Done(); rc, _ = s.client.GetRaceControl(sessionKey) }()
+	go func() { defer wg.Done(); allLaps, lapsErr = client.GetLapsForSession(sessionKey) }()
+	go func() { defer wg.Done(); stints, stintsErr = client.GetStintsForSession(sessionKey) }()
+	go func() { defer wg.Done(); pits, pitsErr = client.GetPitStopsForSession(sessionKey) }()
+	go func() { defer wg.Done(); rc, rcErr = client.GetRaceControl(sessionKey) }()
 	wg.Wait()
+	if lapsErr != nil {
+		writeError(w, lapsErr, http.StatusInternalServerError, client.LastResponseWasStale())
+		return
+	}
 
-	allDrivers, _ := s.client.GetDriversForSession(sessionKey)
+	allDrivers, driversErr := client.GetDriversForSession(sessionKey)
 	driverMap := buildDriverMap(allDrivers)
+	incomplete := stintsErr != nil || pitsErr != nil || rcErr != nil || driversErr != nil
 
 	// If no filter, default to first 3 unique driver numbers from lap data.
 	if len(requestedDrivers) == 0 {
@@ -1543,6 +1699,9 @@ func (s *Server) handleLapsComparison(w http.ResponseWriter, r *http.Request) {
 	compDrivers := make([]comparisonDriver, 0, len(requestedDrivers))
 	for _, dn := range requestedDrivers {
 		d := driverMap[dn]
+		if !hasDriverPresentation(d) {
+			incomplete = true
+		}
 		cd := comparisonDriver{
 			DriverNumber: dn,
 			NameAcronym:  d.NameAcronym,
@@ -1558,6 +1717,13 @@ func (s *Server) handleLapsComparison(w http.ResponseWriter, r *http.Request) {
 		compDrivers = append(compDrivers, cd)
 	}
 
+	freshness := "fresh"
+	if len(allLaps) == 0 {
+		freshness = "limited"
+	} else if incomplete {
+		freshness = "partial"
+	}
+	markOpenF1Availability(w, client, freshness)
 	writeJSON(w, lapsComparisonResponse{
 		SessionKey: sessionKey,
 		SCPeriods:  extractSCPeriods(rc),

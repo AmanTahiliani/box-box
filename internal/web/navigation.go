@@ -9,6 +9,7 @@ import (
 )
 
 func (s *Server) handleSeasons(w http.ResponseWriter, r *http.Request) {
+	markLocalResponse(w, false)
 	if !s.hasLocalQuery() {
 		writeJSON(w, []int{})
 		return
@@ -26,6 +27,7 @@ func (s *Server) handleSeasons(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWeekend(w http.ResponseWriter, r *http.Request) {
+	markLocalResponse(w, false)
 	meetingKey, err := strconv.Atoi(r.URL.Query().Get("meeting_key"))
 	if err != nil || meetingKey == 0 {
 		http.Error(w, "meeting_key required", http.StatusBadRequest)
@@ -46,5 +48,6 @@ func (s *Server) handleWeekend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, http.StatusInternalServerError, false)
 		return
 	}
+	markLocalResponse(w, weekend.Source == query.ResponseSourcePartial)
 	writeJSON(w, weekend)
 }
