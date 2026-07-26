@@ -175,6 +175,38 @@ func TestResolveWeekendContextNeverUsesFutureAnalysis(t *testing.T) {
 	}
 }
 
+// Regression for the v0.4.0 release blocker (#90). Production held a run
+// British race (11326) and an unrun Belgian race (11334) two weekends apart.
+// Analysis must resolve to the race that actually happened, even when the
+// later meeting carries preloaded rows.
+func TestResolveWeekendContextPrefersRunRaceOverLaterUnrunRace(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2026-07-13T12:00:00Z")
+	svc := contextService(t, now)
+	addContextMeeting(t, svc, 1289, "British Grand Prix", "2026-07-03T11:30:00Z", "2026-07-05T16:00:00Z", false)
+	addContextSession(t, svc, 11326, 1289, "Race", "2026-07-05T14:00:00Z", "2026-07-05T16:00:00Z", false)
+	completeContextSession(t, svc, 11326, 1289)
+	addContextMeeting(t, svc, 1290, "Belgian Grand Prix", "2026-07-17T11:30:00Z", "2026-07-19T15:00:00Z", false)
+	addContextSession(t, svc, 11334, 1290, "Race", "2026-07-19T13:00:00Z", "2026-07-19T15:00:00Z", false)
+	completeContextSession(t, svc, 11334, 1290)
+
+	got, err := svc.ResolveWeekendContext(LiveEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DefaultAnalysisSession == nil {
+		t.Fatal("no analysis session resolved")
+	}
+	if key := got.DefaultAnalysisSession.Session.SessionKey; key != 11326 {
+		t.Fatalf("analysis session = %d, want 11326 (British); 11334 is the unrun Belgian race", key)
+	}
+	if got.PreviousCompletedSession == nil || got.PreviousCompletedSession.Session.SessionKey != 11326 {
+		t.Fatalf("previous completed = %+v, want 11326", got.PreviousCompletedSession)
+	}
+	if got.NextSession == nil || got.NextSession.Session.SessionKey != 11334 {
+		t.Fatalf("next session = %+v, want 11334", got.NextSession)
+	}
+}
+
 func TestResolveWeekendContextSprintWeekendHandoff(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, "2026-07-04T12:00:00Z")
 	svc := contextService(t, now)
