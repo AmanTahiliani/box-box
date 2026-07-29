@@ -2,6 +2,42 @@ import { test, expect } from '@playwright/test'
 
 const FULL_SESSION = 9472
 const CORE_ONLY_SESSION = 9000
+const CONTEXT_MEETING = {
+  meeting_key: 1229,
+  meeting_name: 'Monaco',
+  country_code: 'MON',
+}
+const CONTEXT_AVAILABILITY = {
+  source: 'local', schedule: 'available', live_transport: 'unknown', live_session: 'inactive',
+  archive: 'unavailable', local_analysis: 'complete', freshness: 'local', limitations: [],
+}
+
+function completedContext(refreshAt?: string) {
+  return {
+    temporal_state: 'between_weekends',
+    race_hub_default_session: {
+      session: { session_key: FULL_SESSION }, meeting: CONTEXT_MEETING, availability: CONTEXT_AVAILABILITY,
+    },
+    race_hub_pre_session: false,
+    race_hub_refresh_at: refreshAt,
+  }
+}
+
+function pendingContext(refreshAt: string) {
+  return {
+    temporal_state: 'pre_session',
+    race_hub_default_session: {
+      session: {
+        session_key: 9473, meeting_key: 1229, session_name: 'Practice 1', session_type: 'Practice',
+        date_start: '2030-01-01T00:00:01Z', date_end: '2030-01-01T01:00:01Z', gmt_offset: '00:00:00',
+      },
+      meeting: CONTEXT_MEETING,
+      availability: { ...CONTEXT_AVAILABILITY, local_analysis: 'not_applicable' },
+    },
+    race_hub_pre_session: true,
+    race_hub_refresh_at: refreshAt,
+  }
+}
 
 test.describe('Race Hub Weekend Workspace', () => {
   test('lands on the Overview tab with workspace identity', async ({ page }) => {
@@ -102,9 +138,65 @@ test.describe('Race Hub Weekend Workspace', () => {
     )
   })
 
-  test('bare /race-hub redirects to the focus session', async ({ page }) => {
+  test('bare /race-hub shows server-selected completed analysis without changing the URL', async ({ page }) => {
+    await page.route('**/api/v1/weekend-context', (route) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(completedContext()) }),
+    )
     await page.goto('/race-hub')
-    await expect(page).toHaveURL(/session_key=\d+/)
+    await expect(page).toHaveURL(/\/race-hub$/)
     await expect(page.getByTestId('race-hub')).toBeVisible()
+  })
+
+  test('bare /race-hub hands off to pending pre-session state at the refresh deadline', async ({ page }) => {
+    await page.clock.install({ time: new Date('2030-01-01T00:00:00Z') })
+    let requests = 0
+    const raceHubRequests: number[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname === '/api/v1/race-hub') {
+        raceHubRequests.push(Number(url.searchParams.get('session_key')))
+      }
+    })
+    await page.route('**/api/v1/weekend-context', (route) => {
+      requests += 1
+      const body = requests === 1
+        ? completedContext('2030-01-01T00:00:01Z')
+        : pendingContext('2030-01-01T00:00:16Z')
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
+    })
+
+    await page.goto('/race-hub')
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await page.clock.fastForward(1_000)
+
+    await expect(page.getByTestId('race-hub-pre-session')).toBeVisible()
+    await expect(page).toHaveURL(/\/race-hub$/)
+    expect(raceHubRequests).toContain(FULL_SESSION)
+    expect(raceHubRequests).not.toContain(9473)
+  })
+
+  test('bare /race-hub recovers when no completed local analysis exists', async ({ page }) => {
+    await page.route('**/api/v1/weekend-context', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ temporal_state: 'between_weekends', race_hub_pre_session: false }),
+      }),
+    )
+
+    await page.goto('/race-hub')
+    await expect(page.getByTestId('race-hub-empty')).toContainText('No completed local analysis yet')
+  })
+
+  test('an explicit session URL remains stable when canonical context would refresh', async ({ page }) => {
+    let contextRequested = false
+    await page.route('**/api/v1/weekend-context', (route) => {
+      contextRequested = true
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(pendingContext('2030-01-01T00:00:01Z')) })
+    })
+
+    await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`session_key=${FULL_SESSION}`))
+    expect(contextRequested).toBe(false)
   })
 })

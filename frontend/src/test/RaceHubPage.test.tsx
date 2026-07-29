@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   Outlet,
@@ -215,24 +215,28 @@ function renderRaceHub(sessionKey: number) {
       return <RaceHubPage sessionKey={session_key ?? 0} />
     },
   })
+  window.history.pushState({}, '', sessionKey ? `/race-hub?session_key=${sessionKey}` : '/race-hub')
   const router = createRouter({
     routeTree: rootRoute.addChildren([raceHubRoute]),
     history: undefined,
   })
 
-  // Navigate to the URL before mounting
-  router.navigate({ to: '/race-hub', search: sessionKey ? { session_key: sessionKey } : {} })
-  return render(<RouterProvider router={router} />)
+  return { queryClient, ...render(<RouterProvider router={router} />) }
 }
 
 describe('RaceHubPage', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     mockFetchSeasons.mockResolvedValue([2025])
     mockFetchLocalMeetings.mockResolvedValue([meeting])
     mockFetchWeekend.mockResolvedValue(weekend)
     mockFetchRaceHub.mockResolvedValue(raceHub)
     mockFetchWeekendContext.mockResolvedValue(analysisContext)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders the workspace identity band, session rail, and overview for a known session', async () => {
@@ -280,7 +284,7 @@ describe('RaceHubPage', () => {
     expect(await screen.findByTestId('rh-switcher')).toBeInTheDocument()
   })
 
-  it('uses the server-selected completed analysis session for bare Race Hub', async () => {
+  it('uses the server-selected completed analysis session for bare Race Hub without changing the URL', async () => {
     renderRaceHub(0)
 
     await waitFor(() => expect(mockFetchRaceHub).toHaveBeenCalledWith(9472))
@@ -318,5 +322,43 @@ describe('RaceHubPage', () => {
 
     expect(await screen.findByTestId('race-hub-empty')).toHaveTextContent('No completed local analysis yet')
     expect(mockFetchRaceHub).not.toHaveBeenCalled()
+  })
+
+  it('hands a bare route from completed analysis to pre-session at the supplied refresh boundary', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const handoff = new Date(Date.now() + 10_000).toISOString()
+    const pendingContext: WeekendContext = {
+      ...analysisContext,
+      race_hub_default_session: {
+        session: { ...raceSession, session_key: 9473, session_name: 'Practice 1', session_type: 'Practice', date_start: handoff },
+        meeting,
+        availability,
+      },
+      race_hub_pre_session: true,
+      race_hub_refresh_at: new Date(Date.now() + 16_000).toISOString(),
+    }
+    mockFetchWeekendContext
+      .mockResolvedValueOnce({ ...analysisContext, race_hub_refresh_at: handoff })
+      .mockResolvedValueOnce(pendingContext)
+
+    renderRaceHub(0)
+    await screen.findByTestId('race-hub')
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+
+    expect(await screen.findByTestId('race-hub-pre-session')).toBeInTheDocument()
+    expect(mockFetchWeekendContext).toHaveBeenCalledTimes(2)
+    expect(mockFetchRaceHub).toHaveBeenCalledWith(9472)
+    expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9473)
+  })
+
+  it('keeps an explicit session URL stable across the canonical refresh boundary', async () => {
+    vi.useFakeTimers()
+    renderRaceHub(9472)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+
+    expect(mockFetchWeekendContext).not.toHaveBeenCalled()
+    expect(mockFetchRaceHub).toHaveBeenCalledWith(9472)
+    expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9473)
   })
 })

@@ -55,14 +55,6 @@ export function RaceHubPage({ sessionKey }: Props) {
 
   useEffect(() => {
     if (sessionKey !== 0) return
-    const target = context?.race_hub_default_session?.session.session_key
-    if (target && !context?.race_hub_pre_session) {
-      navigate({ to: '/race-hub', search: { session_key: target }, replace: true })
-    }
-  }, [sessionKey, context, navigate])
-
-  useEffect(() => {
-    if (sessionKey !== 0) return
     const delay = refreshDeadlineDelay(context?.race_hub_refresh_at)
     if (delay == null) return
     const timer = window.setTimeout(() => { void refetchContext() }, delay)
@@ -75,11 +67,15 @@ export function RaceHubPage({ sessionKey }: Props) {
     return () => window.clearInterval(timer)
   }, [preSession])
 
+  // A bare route retains canonical context ownership while rendering its
+  // completed analysis selection. Explicit URLs remain user-owned.
+  const selectedSessionKey = sessionKey || context?.race_hub_default_session?.session.session_key || 0
+
   // ─── Active session payload ───
   const raceHubQuery = useQuery({
-    queryKey: ['race-hub', sessionKey],
-    queryFn: () => fetchRaceHub(sessionKey),
-    enabled: sessionKey > 0,
+    queryKey: ['race-hub', selectedSessionKey],
+    queryFn: () => fetchRaceHub(selectedSessionKey),
+    enabled: selectedSessionKey > 0 && (sessionKey > 0 || !preSession),
     staleTime: 30_000,
   })
 
@@ -108,7 +104,7 @@ export function RaceHubPage({ sessionKey }: Props) {
     if (preSession && preSessionRef) {
       return <RaceHubPreSession session={preSessionRef} weekend={preSessionWeekendQuery.data} now={now} />
     }
-    if (!context?.race_hub_default_session) {
+    if (!selectedSessionKey) {
       return (
         <div className="rh-page rh-empty" data-testid="race-hub-empty" style={accentStyle}>
           <div className="rh-empty-band">
@@ -126,18 +122,13 @@ export function RaceHubPage({ sessionKey }: Props) {
         </div>
       )
     }
-    return (
-      <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">resolving latest local weekend…</div>
-      </div>
-    )
   }
 
-  // ─── Loading / error for the requested session_key ───
+  // ─── Loading / error for the selected session ───
   if (raceHubQuery.isLoading) {
     return (
       <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">loading session {sessionKey}…</div>
+        <div className="loading-state">loading session {selectedSessionKey}…</div>
       </div>
     )
   }
@@ -147,7 +138,7 @@ export function RaceHubPage({ sessionKey }: Props) {
         <div className="error-box">
           {raceHubQuery.error instanceof Error
             ? raceHubQuery.error.message
-            : `Failed to load session ${sessionKey}.`}
+            : `Failed to load session ${selectedSessionKey}.`}
         </div>
       </div>
     )
@@ -158,7 +149,7 @@ export function RaceHubPage({ sessionKey }: Props) {
   const sessionMeta = weekend
     ? Object.fromEntries(weekend.sessions.map((w) => [w.session.session_key, w]))
     : {}
-  const activeSessionMeta = sessionMeta[sessionKey]
+  const activeSessionMeta = sessionMeta[selectedSessionKey]
 
   return (
     <div className="rh-page" data-testid="race-hub" style={accentStyle}>
@@ -184,7 +175,7 @@ export function RaceHubPage({ sessionKey }: Props) {
       {switcherOpen && (
         <WeekendSwitcher
           currentMeetingKey={meetingKey}
-          currentSessionKey={sessionKey}
+          currentSessionKey={selectedSessionKey}
           onClose={() => setSwitcherOpen(false)}
         />
       )}
@@ -215,7 +206,7 @@ export function RaceHubPage({ sessionKey }: Props) {
         <nav className="rh-session-rail" aria-label="Weekend sessions" data-testid="rh-session-rail">
           {sessions.map((session) => {
             const meta = sessionMeta[session.session_key]
-            const active = session.session_key === sessionKey
+            const active = session.session_key === selectedSessionKey
             return (
               <button
                 key={session.session_key}
@@ -268,7 +259,7 @@ export function RaceHubPage({ sessionKey }: Props) {
               {formatCoverageHint(activeSessionMeta.datasets)} datasets local
             </span>
           )}
-          <span className="rh-active-key mono">key {sessionKey}</span>
+          <span className="rh-active-key mono">key {selectedSessionKey}</span>
         </div>
       )}
 
@@ -304,7 +295,7 @@ export function RaceHubPage({ sessionKey }: Props) {
             <span className="sec-title">Driver Compare</span>
           </div>
           <CompareView
-            sessionKey={sessionKey}
+            sessionKey={selectedSessionKey}
             results={data.results}
             drivers={data.drivers}
           />
@@ -364,6 +355,7 @@ function RaceHubPreSession({ session, weekend, now }: { session: ContextSession;
   const sessions = sortSessionsByStart((weekend?.sessions ?? []).map((entry) => entry.session))
   const target = new Date(session.session.date_start)
   const accent = countryAccent(meeting ?? null)
+  const pendingLiveEvidence = target.getTime() <= now
 
   return (
     <div className="rh-page rh-empty" data-testid="race-hub-pre-session" style={{ '--gp-accent': accent } as React.CSSProperties}>
@@ -371,7 +363,9 @@ function RaceHubPreSession({ session, weekend, now }: { session: ContextSession;
         <span className="rh-empty-eyebrow mono">box-box · race hub</span>
         <h1 className="rh-empty-title">{meeting?.meeting_name ?? 'Next race weekend'}</h1>
         <p className="rh-empty-sub">
-          {session.session.session_name} begins in <span className="mono">{formatCountdown(target, new Date(now))}</span>
+          {pendingLiveEvidence
+            ? `${session.session.session_name} is scheduled; awaiting live timing.`
+            : <>{session.session.session_name} begins in <span className="mono">{formatCountdown(target, new Date(now))}</span></>}
         </p>
         {sessions.length > 0 && (
           <div className="preview-schedule" data-testid="rh-pre-session-schedule">

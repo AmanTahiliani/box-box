@@ -441,6 +441,22 @@ func TestResolveWeekendContextRaceHubDefault(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps the scheduled session pending after its start without live evidence", func(t *testing.T) {
+		now, _ := time.Parse(time.RFC3339, "2026-07-17T09:00:00Z")
+		svc := contextService(t, now)
+		seed(t, svc)
+		got, err := svc.ResolveWeekendContext(LiveEvidence{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.RaceHubDefaultSession == nil || got.RaceHubDefaultSession.Session.SessionKey != 21 || !got.RaceHubPreSession {
+			t.Fatalf("scheduled race hub default = %+v, pre-session = %t", got.RaceHubDefaultSession, got.RaceHubPreSession)
+		}
+		if got.RaceHubRefreshAt != "2026-07-17T09:00:15Z" {
+			t.Fatalf("refresh = %q", got.RaceHubRefreshAt)
+		}
+	})
+
 	t.Run("active live session wins", func(t *testing.T) {
 		now, _ := time.Parse(time.RFC3339, "2026-07-17T08:30:00Z")
 		svc := contextService(t, now)
