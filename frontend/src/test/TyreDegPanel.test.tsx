@@ -47,8 +47,19 @@ function snapshotRows(lap: number, lastLapTime: string): LiveTimingRow[] {
 }
 
 describe('TyreDegPanel', () => {
-  it('shows a warming-up placeholder until enough clean laps accumulate', () => {
+  it('stays collapsed while every stint is still warming up', () => {
     render(<TyreDegPanel rows={snapshotRows(3, '1:30.000')} sessionType="Race" pinned={[]} />)
+    const panel = screen.getByTestId('tyredeg-panel')
+
+    // A panel of "warming up" placeholders carries no information and used to
+    // push the Timing Tower off the fold for the first third of a race.
+    expect(screen.queryAllByTestId('tyredeg-row')).toHaveLength(0)
+    expect(panel).toHaveTextContent('collecting clean laps')
+  })
+
+  it('shows a warming-up placeholder on each row once expanded', () => {
+    render(<TyreDegPanel rows={snapshotRows(3, '1:30.000')} sessionType="Race" pinned={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: /tyre deg/i }))
     const panel = screen.getByTestId('tyredeg-panel')
     expect(panel).toHaveTextContent('VER')
     expect(panel).toHaveTextContent('M +5')
@@ -61,6 +72,7 @@ describe('TyreDegPanel', () => {
       makeRow('1', 1, 'VER', { NumberOfLaps: 10, LastLapTime: '1:30.000' }, { Compound: 'MEDIUM', Age: 12 }),
     ]
     render(<TyreDegPanel rows={rows} sessionType="Race" pinned={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: /tyre deg/i }))
     expect(screen.getByText('mid-life')).toBeInTheDocument()
   })
 
@@ -92,9 +104,36 @@ describe('TyreDegPanel', () => {
     expect(panel).not.toHaveTextContent('~P')
   })
 
-  it('starts expanded during a race', () => {
-    render(<TyreDegPanel rows={snapshotRows(3, '1:30.000')} sessionType="Race" pinned={[]} />)
+  it('opens itself during a race as soon as a stint has signal', () => {
+    const { rerender } = render(
+      <TyreDegPanel rows={snapshotRows(1, '1:30.000')} sessionType="Race" pinned={[]} />,
+    )
+    expect(screen.queryAllByTestId('tyredeg-row')).toHaveLength(0)
+
+    for (let lap = 2; lap <= 6; lap++) {
+      const time = `1:30.${String((lap - 1) * 100).padStart(3, '0')}`
+      rerender(<TyreDegPanel rows={snapshotRows(lap, time)} sessionType="Race" pinned={[]} />)
+    }
+
     expect(screen.getAllByTestId('tyredeg-row')).toHaveLength(2)
+  })
+
+  it('keeps the reader\'s own collapse choice when signal arrives', () => {
+    const { rerender } = render(
+      <TyreDegPanel rows={snapshotRows(1, '1:30.000')} sessionType="Race" pinned={[]} />,
+    )
+    // Reader opens it early, then closes it again — that decision must stick
+    // even once the panel would otherwise auto-open.
+    const toggle = screen.getByRole('button', { name: /tyre deg/i })
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+
+    for (let lap = 2; lap <= 6; lap++) {
+      const time = `1:30.${String((lap - 1) * 100).padStart(3, '0')}`
+      rerender(<TyreDegPanel rows={snapshotRows(lap, time)} sessionType="Race" pinned={[]} />)
+    }
+
+    expect(screen.queryAllByTestId('tyredeg-row')).toHaveLength(0)
   })
 
   it('limits rows to the top ten plus pinned drivers', () => {
@@ -102,6 +141,7 @@ describe('TyreDegPanel', () => {
       makeRow(String(index + 1), index + 1, `D${index + 1}`),
     )
     render(<TyreDegPanel rows={rows} sessionType="Race" pinned={['14']} />)
+    fireEvent.click(screen.getByRole('button', { name: /tyre deg/i }))
     expect(screen.getAllByTestId('tyredeg-row')).toHaveLength(11)
     expect(screen.getByText('D14')).toBeInTheDocument()
     expect(screen.queryByText('D12')).not.toBeInTheDocument()
