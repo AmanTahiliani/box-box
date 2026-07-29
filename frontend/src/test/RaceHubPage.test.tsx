@@ -9,6 +9,7 @@ import {
   createRoute,
 } from '@tanstack/react-router'
 import { RaceHubPage } from '../pages/RaceHubPage'
+import { MAX_BROWSER_TIMEOUT } from '../lib/schedule'
 import type { ContextAvailability, DatasetInfo, Meeting, RaceHub, Session, Weekend, WeekendContext } from '../types'
 
 vi.mock('../api', () => ({
@@ -373,6 +374,22 @@ describe('RaceHubPage', () => {
     expect(mockFetchWeekendContext).toHaveBeenCalledTimes(2)
     expect(mockFetchRaceHub).toHaveBeenCalledWith(9472)
     expect(mockFetchRaceHub).not.toHaveBeenCalledWith(9473)
+  })
+
+  it('re-arms a bare route refresh after a capped browser timer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockFetchWeekendContext.mockResolvedValue({
+      ...analysisContext,
+      race_hub_refresh_at: new Date(Date.now() + MAX_BROWSER_TIMEOUT + 1_000).toISOString(),
+    })
+
+    renderRaceHub(0)
+    await screen.findByTestId('race-hub')
+    await act(async () => { await vi.advanceTimersByTimeAsync(MAX_BROWSER_TIMEOUT) })
+
+    await waitFor(() => expect(mockFetchWeekendContext).toHaveBeenCalledTimes(2))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    await waitFor(() => expect(mockFetchWeekendContext).toHaveBeenCalledTimes(3))
   })
 
   it('keeps an explicit session URL stable across the canonical refresh boundary', async () => {

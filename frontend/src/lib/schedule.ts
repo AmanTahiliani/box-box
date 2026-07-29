@@ -145,11 +145,13 @@ export function formatSessionScheduleTime(value: string): string {
   })
 }
 
+export const MAX_BROWSER_TIMEOUT = 2_147_483_647
+
 export function refreshDeadlineDelay(refreshAt: string | undefined, now = Date.now()): number | null {
   if (!refreshAt) return null
   const deadline = Date.parse(refreshAt)
   if (Number.isNaN(deadline)) return null
-  return Math.min(Math.max(0, deadline - now), 2_147_483_647)
+  return Math.min(Math.max(0, deadline - now), MAX_BROWSER_TIMEOUT)
 }
 
 export type FocusMeetingKind = 'current' | 'next' | 'recent' | 'fallback'

@@ -17,6 +17,7 @@ import { SourceBadge } from '../components/SourceBadge'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import { formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
 import {
+  MAX_BROWSER_TIMEOUT,
   formatCountdown,
   formatSessionScheduleTime,
   refreshDeadlineDelay,
@@ -33,6 +34,7 @@ export function RaceHubPage({ sessionKey }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+  const [refreshGeneration, setRefreshGeneration] = useState(0)
 
   // The server owns bare Race Hub selection so every open tab crosses the
   // one-hour handoff at the same instant.
@@ -57,9 +59,14 @@ export function RaceHubPage({ sessionKey }: Props) {
     if (sessionKey !== 0) return
     const delay = refreshDeadlineDelay(context?.race_hub_refresh_at)
     if (delay == null) return
-    const timer = window.setTimeout(() => { void refetchContext() }, delay)
+    const rearmAfterRefetch = delay === MAX_BROWSER_TIMEOUT
+    const timer = window.setTimeout(() => {
+      void refetchContext().finally(() => {
+        if (rearmAfterRefetch) setRefreshGeneration((generation) => generation + 1)
+      })
+    }, delay)
     return () => window.clearTimeout(timer)
-  }, [sessionKey, context?.race_hub_refresh_at, refetchContext])
+  }, [sessionKey, context?.race_hub_refresh_at, refetchContext, refreshGeneration])
 
   useEffect(() => {
     if (!preSession) return
