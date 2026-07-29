@@ -7,6 +7,7 @@ import {
   formatCountdown,
   nextUpcomingMeeting,
   pickFocusMeeting,
+  refreshDeadlineDelay,
 } from '../lib/schedule'
 import type { Meeting, Session } from '../types'
 
@@ -77,5 +78,10 @@ describe('schedule helpers', () => {
     const now = new Date('2025-05-25T12:00:00+00:00')
     const target = new Date('2025-05-25T13:00:00+00:00')
     expect(formatCountdown(target, now)).toBe('0d 01h 00m 00s')
+  })
+
+  it('uses the server refresh deadline without local timezone conversion', () => {
+    expect(refreshDeadlineDelay('2025-05-25T13:00:00Z', Date.parse('2025-05-25T12:59:30Z'))).toBe(30_000)
+    expect(refreshDeadlineDelay(undefined)).toBeNull()
   })
 })

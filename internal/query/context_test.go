@@ -399,3 +399,72 @@ func TestResolveWeekendContextMissingScheduleDoesNotClaimSeasonComplete(t *testi
 		t.Fatalf("total rounds = %d, want scheduled round retained", got.TotalChampionshipRounds)
 	}
 }
+
+func TestResolveWeekendContextRaceHubDefault(t *testing.T) {
+	seed := func(t *testing.T, svc *Service) {
+		addContextMeeting(t, svc, 1, "British Grand Prix", "2026-07-03T09:00:00Z", "2026-07-05T16:00:00Z", false)
+		addContextSession(t, svc, 11, 1, "Race", "2026-07-05T14:00:00Z", "2026-07-05T16:00:00Z", false)
+		completeContextSession(t, svc, 11, 1)
+		addContextMeeting(t, svc, 2, "Belgian Grand Prix", "2026-07-17T09:00:00Z", "2026-07-19T16:00:00Z", false)
+		addContextSession(t, svc, 21, 2, "Practice 1", "2026-07-17T09:00:00Z", "2026-07-17T10:00:00Z", false)
+	}
+
+	t.Run("keeps completed analysis before handoff", func(t *testing.T) {
+		now, _ := time.Parse(time.RFC3339, "2026-07-16T07:59:59Z")
+		svc := contextService(t, now)
+		seed(t, svc)
+		got, err := svc.ResolveWeekendContext(LiveEvidence{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.RaceHubDefaultSession == nil || got.RaceHubDefaultSession.Session.SessionKey != 11 || got.RaceHubPreSession {
+			t.Fatalf("race hub default = %+v, pre-session = %t", got.RaceHubDefaultSession, got.RaceHubPreSession)
+		}
+		if got.RaceHubRefreshAt != "2026-07-17T08:00:00Z" {
+			t.Fatalf("refresh = %q", got.RaceHubRefreshAt)
+		}
+	})
+
+	t.Run("hands off exactly one hour before first session", func(t *testing.T) {
+		now, _ := time.Parse(time.RFC3339, "2026-07-17T08:00:00Z")
+		svc := contextService(t, now)
+		seed(t, svc)
+		got, err := svc.ResolveWeekendContext(LiveEvidence{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.RaceHubDefaultSession == nil || got.RaceHubDefaultSession.Session.SessionKey != 21 || !got.RaceHubPreSession {
+			t.Fatalf("race hub handoff = %+v, pre-session = %t", got.RaceHubDefaultSession, got.RaceHubPreSession)
+		}
+		if got.RaceHubRefreshAt != "2026-07-17T09:00:00Z" {
+			t.Fatalf("refresh = %q", got.RaceHubRefreshAt)
+		}
+	})
+
+	t.Run("active live session wins", func(t *testing.T) {
+		now, _ := time.Parse(time.RFC3339, "2026-07-17T08:30:00Z")
+		svc := contextService(t, now)
+		seed(t, svc)
+		got, err := svc.ResolveWeekendContext(LiveEvidence{Active: true, MeetingName: "Belgian Grand Prix", SessionName: "Practice 1", SessionType: "Practice 1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.RaceHubDefaultSession == nil || got.RaceHubDefaultSession.Session.SessionKey != 21 || got.RaceHubPreSession {
+			t.Fatalf("live default = %+v, pre-session = %t", got.RaceHubDefaultSession, got.RaceHubPreSession)
+		}
+	})
+
+	t.Run("does not select an empty future session before handoff", func(t *testing.T) {
+		now, _ := time.Parse(time.RFC3339, "2026-07-16T12:00:00Z")
+		svc := contextService(t, now)
+		addContextMeeting(t, svc, 2, "Belgian Grand Prix", "2026-07-17T09:00:00Z", "2026-07-19T16:00:00Z", false)
+		addContextSession(t, svc, 21, 2, "Practice 1", "2026-07-17T09:00:00Z", "2026-07-17T10:00:00Z", false)
+		got, err := svc.ResolveWeekendContext(LiveEvidence{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.RaceHubDefaultSession != nil || got.RaceHubPreSession {
+			t.Fatalf("unexpected empty future default: %+v", got)
+		}
+	})
+}

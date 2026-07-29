@@ -9,21 +9,23 @@ import {
   createRoute,
 } from '@tanstack/react-router'
 import { RaceHubPage } from '../pages/RaceHubPage'
-import type { DatasetInfo, Meeting, RaceHub, Session, Weekend } from '../types'
+import type { ContextAvailability, DatasetInfo, Meeting, RaceHub, Session, Weekend, WeekendContext } from '../types'
 
 vi.mock('../api', () => ({
   fetchRaceHub: vi.fn(),
   fetchSeasons: vi.fn(),
   fetchLocalMeetings: vi.fn(),
   fetchWeekend: vi.fn(),
+  fetchWeekendContext: vi.fn(),
 }))
 
-import { fetchRaceHub, fetchSeasons, fetchLocalMeetings, fetchWeekend } from '../api'
+import { fetchLocalMeetings, fetchRaceHub, fetchSeasons, fetchWeekend, fetchWeekendContext } from '../api'
 
 const mockFetchRaceHub = vi.mocked(fetchRaceHub)
 const mockFetchSeasons = vi.mocked(fetchSeasons)
 const mockFetchLocalMeetings = vi.mocked(fetchLocalMeetings)
 const mockFetchWeekend = vi.mocked(fetchWeekend)
+const mockFetchWeekendContext = vi.mocked(fetchWeekendContext)
 
 const meeting: Meeting = {
   meeting_key: 1229,
@@ -169,6 +171,26 @@ const weekend: Weekend = {
   ],
 }
 
+const availability: ContextAvailability = {
+  source: 'local',
+  schedule: 'available',
+  live_transport: 'unknown',
+  live_session: 'inactive',
+  archive: 'unavailable',
+  local_analysis: 'complete',
+  freshness: 'local',
+  limitations: [],
+}
+
+const analysisContext: WeekendContext = {
+  temporal_state: 'between_weekends',
+  default_analysis_session: { session: raceSession, meeting, availability },
+  race_hub_default_session: { session: raceSession, meeting, availability },
+  race_hub_pre_session: false,
+  championship_round: 1,
+  total_championship_rounds: 24,
+}
+
 function renderRaceHub(sessionKey: number) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -210,6 +232,7 @@ describe('RaceHubPage', () => {
     mockFetchLocalMeetings.mockResolvedValue([meeting])
     mockFetchWeekend.mockResolvedValue(weekend)
     mockFetchRaceHub.mockResolvedValue(raceHub)
+    mockFetchWeekendContext.mockResolvedValue(analysisContext)
   })
 
   it('renders the workspace identity band, session rail, and overview for a known session', async () => {
@@ -255,5 +278,45 @@ describe('RaceHubPage', () => {
 
     fireEvent.click(screen.getByTestId('rh-switch-weekend'))
     expect(await screen.findByTestId('rh-switcher')).toBeInTheDocument()
+  })
+
+  it('uses the server-selected completed analysis session for bare Race Hub', async () => {
+    renderRaceHub(0)
+
+    await waitFor(() => expect(mockFetchRaceHub).toHaveBeenCalledWith(9472))
+    expect(mockFetchWeekendContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the intentional pre-session state without analysis cards', async () => {
+    mockFetchWeekendContext.mockResolvedValue({
+      ...analysisContext,
+      race_hub_default_session: {
+        session: { ...raceSession, session_key: 9473, session_name: 'Practice 1', session_type: 'Practice', date_start: '2099-05-23T13:00:00Z' },
+        meeting,
+        availability,
+      },
+      race_hub_pre_session: true,
+      race_hub_refresh_at: '2099-05-23T13:00:00Z',
+    })
+
+    renderRaceHub(0)
+
+    expect(await screen.findByTestId('race-hub-pre-session')).toBeInTheDocument()
+    expect(screen.getByTestId('rh-pre-session-schedule')).toBeInTheDocument()
+    expect(screen.queryByText('Winner')).not.toBeInTheDocument()
+    expect(mockFetchRaceHub).not.toHaveBeenCalled()
+  })
+
+  it('shows recovery instead of selecting an empty future session', async () => {
+    mockFetchWeekendContext.mockResolvedValue({
+      ...analysisContext,
+      race_hub_default_session: undefined,
+      race_hub_pre_session: false,
+    })
+
+    renderRaceHub(0)
+
+    expect(await screen.findByTestId('race-hub-empty')).toHaveTextContent('No completed local analysis yet')
+    expect(mockFetchRaceHub).not.toHaveBeenCalled()
   })
 })

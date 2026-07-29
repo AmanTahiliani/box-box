@@ -69,6 +69,9 @@ type WeekendContext struct {
 	ActiveSession            *ContextSession `json:"active_session,omitempty"`
 	NextSession              *ContextSession `json:"next_session,omitempty"`
 	DefaultAnalysisSession   *ContextSession `json:"default_analysis_session,omitempty"`
+	RaceHubDefaultSession    *ContextSession `json:"race_hub_default_session,omitempty"`
+	RaceHubPreSession        bool            `json:"race_hub_pre_session"`
+	RaceHubRefreshAt         string          `json:"race_hub_refresh_at,omitempty"`
 	ChampionshipRound        int             `json:"championship_round"`
 	TotalChampionshipRounds  int             `json:"total_championship_rounds"`
 }
@@ -188,7 +191,32 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 	if out.FocusMeeting != nil {
 		out.ChampionshipRound = championshipRound(champMeetings, int(out.FocusMeeting.MeetingKey))
 	}
+	applyRaceHubDefault(&out, active, defaultAnalysis, next, now)
 	return out, nil
+}
+
+// applyRaceHubDefault is deliberately distinct from TemporalPreSession. Other
+// weekend surfaces begin preparation 48 hours ahead; Race Hub remains an
+// analysis destination until the one-hour handoff before the next session.
+func applyRaceHubDefault(out *WeekendContext, active, analysis, next *contextCandidate, now time.Time) {
+	if active != nil {
+		out.RaceHubDefaultSession = out.ActiveSession
+		return
+	}
+	if next != nil {
+		handoff := next.start.Add(-time.Hour)
+		if now.Before(handoff) {
+			out.RaceHubRefreshAt = handoff.Format(time.RFC3339)
+		} else if now.Before(next.start) {
+			out.RaceHubDefaultSession = out.NextSession
+			out.RaceHubPreSession = true
+			out.RaceHubRefreshAt = next.start.Format(time.RFC3339)
+			return
+		}
+	}
+	if analysis != nil {
+		out.RaceHubDefaultSession = out.DefaultAnalysisSession
+	}
 }
 
 func currentLocalSeason(years []int, current int) int {

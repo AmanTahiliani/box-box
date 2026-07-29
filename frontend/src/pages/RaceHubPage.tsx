@@ -1,12 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  fetchLocalMeetings,
-  fetchRaceHub,
-  fetchSeasons,
-  fetchWeekend,
-} from '../api'
+import { fetchRaceHub, fetchWeekend, fetchWeekendContext } from '../api'
 import { DatasetStrip } from '../components/DatasetStrip'
 import { RaceStoryCanvas } from '../components/RaceStoryCanvas'
 import { TabBar, type Tab } from '../components/TabBar'
@@ -22,70 +17,63 @@ import { SourceBadge } from '../components/SourceBadge'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import { formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
 import {
+  formatCountdown,
   formatSessionScheduleTime,
-  pickFocusMeeting,
+  refreshDeadlineDelay,
   sortSessionsByStart,
 } from '../lib/schedule'
-import type { Weekend, WeekendSession } from '../types'
+import type { ContextSession, Weekend } from '../types'
 
 interface Props {
   sessionKey: number
-}
-
-function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | undefined {
-  if (!weekend) return undefined
-  const local = weekend.sessions.filter((s) => s.source === 'local')
-  const partial = weekend.sessions.filter((s) => s.source === 'partial')
-  const pool = local.length > 0 ? local : partial.length > 0 ? partial : weekend.sessions
-  const race = pool.find((s) => s.session.session_type?.toLowerCase().includes('race'))
-  if (race) return race
-  const qual = pool.find((s) => s.session.session_type?.toLowerCase().includes('qualifying'))
-  if (qual) return qual
-  return pool[0]
 }
 
 export function RaceHubPage({ sessionKey }: Props) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
 
-  // ─── Auto-redirect when no session_key is supplied ───
-  const seasonsQuery = useQuery({
-    queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+  // The server owns bare Race Hub selection so every open tab crosses the
+  // one-hour handoff at the same instant.
+  const contextQuery = useQuery({
+    queryKey: ['weekend-context'],
+    queryFn: fetchWeekendContext,
     enabled: sessionKey === 0,
   })
+  const { refetch: refetchContext } = contextQuery
 
-  const latestSeason = seasonsQuery.data?.[0] ?? null
-
-  const meetingsQuery = useQuery({
-    queryKey: ['meetings', latestSeason],
-    queryFn: () => fetchLocalMeetings(latestSeason!),
-    enabled: sessionKey === 0 && latestSeason != null,
-  })
-
-  const focusMeeting = useMemo(() => {
-    if (sessionKey !== 0 || !meetingsQuery.data) return null
-    return pickFocusMeeting(meetingsQuery.data, new Date())
-  }, [sessionKey, meetingsQuery.data])
-
-  const fallbackWeekendQuery = useQuery({
-    queryKey: ['weekend', focusMeeting?.meeting_key],
-    queryFn: () => fetchWeekend(focusMeeting!.meeting_key),
-    enabled: sessionKey === 0 && focusMeeting != null,
+  const context = contextQuery.data
+  const preSession = sessionKey === 0 && context?.race_hub_pre_session === true
+  const preSessionRef = context?.race_hub_default_session
+  const preSessionMeetingKey = preSessionRef?.meeting?.meeting_key
+  const preSessionWeekendQuery = useQuery({
+    queryKey: ['weekend', preSessionMeetingKey],
+    queryFn: () => fetchWeekend(preSessionMeetingKey!),
+    enabled: preSession && preSessionMeetingKey != null && preSessionMeetingKey > 0,
   })
 
   useEffect(() => {
     if (sessionKey !== 0) return
-    const weekend = fallbackWeekendQuery.data
-    if (!weekend) return
-    const target = pickAnalysisSession(weekend)?.session.session_key
-      ?? weekend.default_session_key
-      ?? weekend.sessions[0]?.session.session_key
-    if (target) {
+    const target = context?.race_hub_default_session?.session.session_key
+    if (target && !context?.race_hub_pre_session) {
       navigate({ to: '/race-hub', search: { session_key: target }, replace: true })
     }
-  }, [sessionKey, fallbackWeekendQuery.data, navigate])
+  }, [sessionKey, context, navigate])
+
+  useEffect(() => {
+    if (sessionKey !== 0) return
+    const delay = refreshDeadlineDelay(context?.race_hub_refresh_at)
+    if (delay == null) return
+    const timer = window.setTimeout(() => { void refetchContext() }, delay)
+    return () => window.clearTimeout(timer)
+  }, [sessionKey, context?.race_hub_refresh_at, refetchContext])
+
+  useEffect(() => {
+    if (!preSession) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [preSession])
 
   // ─── Active session payload ───
   const raceHubQuery = useQuery({
@@ -108,25 +96,27 @@ export function RaceHubPage({ sessionKey }: Props) {
   const accent = countryAccent(data?.meeting ?? null)
   const accentStyle = { '--gp-accent': accent } as React.CSSProperties
 
-  // ─── No session_key: show resolving state, fall back to switcher if no local data ───
+  // ─── No session_key: resolve exclusively through canonical Weekend Context ───
   if (sessionKey === 0) {
-    if (seasonsQuery.isLoading || meetingsQuery.isLoading || fallbackWeekendQuery.isLoading) {
+    if (contextQuery.isLoading || (preSession && preSessionWeekendQuery.isLoading)) {
       return (
         <div className="rh-page" style={accentStyle}>
           <div className="loading-state">resolving latest local weekend…</div>
         </div>
       )
     }
-    const seasons = seasonsQuery.data ?? []
-    if (seasons.length === 0) {
+    if (preSession && preSessionRef) {
+      return <RaceHubPreSession session={preSessionRef} weekend={preSessionWeekendQuery.data} now={now} />
+    }
+    if (!context?.race_hub_default_session) {
       return (
         <div className="rh-page rh-empty" data-testid="race-hub-empty" style={accentStyle}>
           <div className="rh-empty-band">
             <span className="rh-empty-eyebrow mono">box-box · race hub</span>
-            <h1 className="rh-empty-title">No local sessions yet</h1>
+            <h1 className="rh-empty-title">No completed local analysis yet</h1>
             <p className="rh-empty-sub">
-              The Race Hub reads from local ingest only. Once a weekend is ingested
-              it will open here automatically.
+              Race Hub opens completed local analysis between weekends. Check Data Health
+              to ingest a completed session.
             </p>
             <div className="rh-empty-actions">
               <a href="/admin" className="rh-empty-action">Open Admin · Data Health</a>
@@ -365,6 +355,35 @@ export function RaceHubPage({ sessionKey }: Props) {
           <DatasetStatusView datasets={data.datasets} />
         </div>
       )}
+    </div>
+  )
+}
+
+function RaceHubPreSession({ session, weekend, now }: { session: ContextSession; weekend?: Weekend; now: number }) {
+  const meeting = session.meeting
+  const sessions = sortSessionsByStart((weekend?.sessions ?? []).map((entry) => entry.session))
+  const target = new Date(session.session.date_start)
+  const accent = countryAccent(meeting ?? null)
+
+  return (
+    <div className="rh-page rh-empty" data-testid="race-hub-pre-session" style={{ '--gp-accent': accent } as React.CSSProperties}>
+      <section className="rh-empty-band">
+        <span className="rh-empty-eyebrow mono">box-box · race hub</span>
+        <h1 className="rh-empty-title">{meeting?.meeting_name ?? 'Next race weekend'}</h1>
+        <p className="rh-empty-sub">
+          {session.session.session_name} begins in <span className="mono">{formatCountdown(target, new Date(now))}</span>
+        </p>
+        {sessions.length > 0 && (
+          <div className="preview-schedule" data-testid="rh-pre-session-schedule">
+            {sessions.map((scheduled) => (
+              <div key={scheduled.session_key} className="preview-schedule-item">
+                <span className="preview-schedule-name">{scheduled.session_name}</span>
+                <span className="preview-schedule-time">{formatSessionScheduleTime(scheduled.date_start)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

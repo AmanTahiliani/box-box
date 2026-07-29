@@ -167,3 +167,30 @@ func TestTerminalSessionStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestWeekendContextHandlerSerializesRaceHubRefreshDeadline(t *testing.T) {
+	st := openContextStore(t)
+	seedContextHandler(t, st)
+	if err := st.UpsertSessionResult(store.SessionResult{SessionKey: 11, MeetingKey: 1, DriverNumber: 1, Position: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertMeeting(store.Meeting{MeetingKey: 2, MeetingName: "Belgian Grand Prix", CircuitShortName: "Spa", Year: 2026, DateStart: "2026-07-17T09:00:00Z", DateEnd: "2026-07-19T16:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertSession(store.Session{SessionKey: 21, MeetingKey: 2, SessionName: "Practice 1", SessionType: "Practice", DateStart: "2026-07-17T09:00:00Z", DateEnd: "2026-07-17T10:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	s := NewServer(nil, 0, st)
+	s.query = query.NewServiceWithClock(st, func() time.Time {
+		return time.Date(2026, 7, 17, 8, 0, 0, 0, time.UTC)
+	})
+	rr := httptest.NewRecorder()
+	s.handleWeekendContext(rr, httptest.NewRequest(http.MethodGet, "/api/v1/weekend-context", nil))
+	var got query.WeekendContext
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.RaceHubPreSession || got.RaceHubRefreshAt != "2026-07-17T09:00:00Z" || got.RaceHubDefaultSession == nil || got.RaceHubDefaultSession.Session.SessionKey != 21 {
+		t.Fatalf("race hub context = %+v", got)
+	}
+}
