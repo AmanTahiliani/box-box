@@ -102,7 +102,16 @@ export function RaceHubPage({ sessionKey }: Props) {
       )
     }
     if (preSession && preSessionRef) {
-      return <RaceHubPreSession session={preSessionRef} weekend={preSessionWeekendQuery.data} now={now} />
+      return (
+        <RaceHubPreSession
+          session={preSessionRef}
+          weekend={preSessionWeekendQuery.data}
+          now={now}
+          switcherOpen={switcherOpen}
+          onToggleSwitcher={() => setSwitcherOpen((open) => !open)}
+          onCloseSwitcher={() => setSwitcherOpen(false)}
+        />
+      )
     }
     if (!selectedSessionKey) {
       return (
@@ -350,7 +359,21 @@ export function RaceHubPage({ sessionKey }: Props) {
   )
 }
 
-function RaceHubPreSession({ session, weekend, now }: { session: ContextSession; weekend?: Weekend; now: number }) {
+function RaceHubPreSession({
+  session,
+  weekend,
+  now,
+  switcherOpen,
+  onToggleSwitcher,
+  onCloseSwitcher,
+}: {
+  session: ContextSession
+  weekend?: Weekend
+  now: number
+  switcherOpen: boolean
+  onToggleSwitcher: () => void
+  onCloseSwitcher: () => void
+}) {
   const meeting = session.meeting
   const sessions = sortSessionsByStart((weekend?.sessions ?? []).map((entry) => entry.session))
   const target = new Date(session.session.date_start)
@@ -359,6 +382,29 @@ function RaceHubPreSession({ session, weekend, now }: { session: ContextSession;
 
   return (
     <div className="rh-page rh-empty" data-testid="race-hub-pre-session" style={{ '--gp-accent': accent } as React.CSSProperties}>
+      <div className="rh-topbar">
+        <span className="rh-topbar-label mono">box-box · race hub</span>
+        <span className="rh-topbar-spacer" />
+        <button
+          type="button"
+          className={`rh-switcher-toggle${switcherOpen ? ' active' : ''}`}
+          onClick={onToggleSwitcher}
+          aria-expanded={switcherOpen}
+          aria-controls="rh-weekend-switcher"
+          data-testid="rh-switch-weekend"
+        >
+          {switcherOpen ? 'Close' : 'Switch Weekend'}
+        </button>
+      </div>
+
+      {switcherOpen && (
+        <WeekendSwitcher
+          currentMeetingKey={meeting?.meeting_key}
+          currentSessionKey={session.session.session_key}
+          onClose={onCloseSwitcher}
+        />
+      )}
+
       <section className="rh-empty-band">
         <span className="rh-empty-eyebrow mono">box-box · race hub</span>
         <h1 className="rh-empty-title">{meeting?.meeting_name ?? 'Next race weekend'}</h1>

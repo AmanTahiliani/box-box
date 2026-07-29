@@ -175,6 +175,28 @@ test.describe('Race Hub Weekend Workspace', () => {
     expect(raceHubRequests).not.toContain(9473)
   })
 
+  test('pre-session state opens the weekend switcher and navigates to an explicit session', async ({ page }) => {
+    await page.route('**/api/v1/weekend-context', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(pendingContext('2030-01-01T00:00:16Z')),
+      }),
+    )
+
+    await page.goto('/race-hub')
+    await expect(page.getByTestId('race-hub-pre-session')).toBeVisible()
+
+    const switchWeekend = page.getByTestId('rh-switch-weekend')
+    await expect(switchWeekend).toHaveAttribute('aria-expanded', 'false')
+    await switchWeekend.click()
+    await expect(page.getByTestId('rh-switcher')).toBeVisible()
+    await expect(switchWeekend).toHaveAttribute('aria-expanded', 'true')
+
+    await page.getByTestId(`rh-switcher-session-${FULL_SESSION}`).click()
+    await expect(page).toHaveURL(new RegExp(`/race-hub\\?session_key=${FULL_SESSION}`))
+    await expect(page.getByTestId('race-hub')).toBeVisible()
+  })
+
   test('bare /race-hub recovers when no completed local analysis exists', async ({ page }) => {
     await page.route('**/api/v1/weekend-context', (route) =>
       route.fulfill({

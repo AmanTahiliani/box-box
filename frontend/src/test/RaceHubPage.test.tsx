@@ -311,6 +311,30 @@ describe('RaceHubPage', () => {
     expect(mockFetchRaceHub).not.toHaveBeenCalled()
   })
 
+  it('opens the weekend switcher from pre-session and navigates to the selected explicit session', async () => {
+    mockFetchWeekendContext.mockResolvedValue({
+      ...analysisContext,
+      race_hub_default_session: {
+        session: { ...raceSession, session_key: 9473, session_name: 'Practice 1', session_type: 'Practice', date_start: '2099-05-23T13:00:00Z' },
+        meeting,
+        availability,
+      },
+      race_hub_pre_session: true,
+      race_hub_refresh_at: '2099-05-23T13:00:00Z',
+    })
+
+    renderRaceHub(0)
+
+    const switchWeekend = await screen.findByTestId('rh-switch-weekend')
+    expect(switchWeekend).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(switchWeekend)
+    expect(await screen.findByTestId('rh-switcher')).toBeInTheDocument()
+    expect(switchWeekend).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(await screen.findByTestId('rh-switcher-session-9471'))
+    await waitFor(() => expect(window.location.search).toBe('?session_key=9471'))
+  })
+
   it('shows recovery instead of selecting an empty future session', async () => {
     mockFetchWeekendContext.mockResolvedValue({
       ...analysisContext,
