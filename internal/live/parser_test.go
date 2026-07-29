@@ -472,6 +472,62 @@ func TestProcessTopicTimingAppData(t *testing.T) {
 	}
 }
 
+// The feed sends stints as sparse deltas keyed by stint index. Replacing the
+// slice on each delta collapsed pit history to one entry and pinned tyre age
+// near zero — observed live at lap 49 of a 70-lap race, where every driver
+// reported a single stint of age 0 despite having pitted.
+func TestProcessTopicTimingAppDataMergesSparseStintDeltas(t *testing.T) {
+	state := live.NewState()
+	state.ProcessTopic("TimingAppData", json.RawMessage(`{
+		"Lines": {"4": {"Stints": {"0": {"Compound": "MEDIUM", "New": "true", "TotalLaps": 0}}}}
+	}`))
+	// Stint 0 runs to 18 laps, then the driver pits onto a new hard.
+	state.ProcessTopic("TimingAppData", json.RawMessage(`{
+		"Lines": {"4": {"Stints": {"0": {"TotalLaps": 18}}}}
+	}`))
+	state.ProcessTopic("TimingAppData", json.RawMessage(`{
+		"Lines": {"4": {"Stints": {"1": {"Compound": "HARD", "New": "true", "TotalLaps": 0}}}}
+	}`))
+	state.ProcessTopic("TimingAppData", json.RawMessage(`{
+		"Lines": {"4": {"Stints": {"1": {"TotalLaps": 12}}}}
+	}`))
+
+	snap := state.Snapshot()
+	stints := snap.Stints["4"]
+	if len(stints) != 2 {
+		t.Fatalf("expected 2 stints after a pit stop, got %d: %+v", len(stints), stints)
+	}
+	if stints[0].Compound != "MEDIUM" || stints[0].Laps != 18 {
+		t.Errorf("first stint lost across deltas: %+v", stints[0])
+	}
+	if stints[1].Compound != "HARD" || stints[1].Laps != 12 {
+		t.Errorf("second stint = %+v", stints[1])
+	}
+	if tyre := snap.Tyres["4"]; tyre.Compound != "HARD" || tyre.Age != 12 {
+		t.Errorf("current tyre should track the latest stint, got %+v", tyre)
+	}
+}
+
+func TestProcessTopicTimingAppDataIgnoresNonNumericStintKeys(t *testing.T) {
+	state := live.NewState()
+	state.ProcessTopic("TimingAppData", json.RawMessage(`{
+		"Lines": {"4": {"Stints": {"0": {"Compound": "SOFT", "New": "true", "TotalLaps": 9}}}}
+	}`))
+	// "_kf" is a feed key-frame marker, not a stint index. Parsing it as 0
+	// would overwrite the real first stint.
+	state.ProcessTopic("TimingAppData", json.RawMessage(`{
+		"Lines": {"4": {"Stints": {"_kf": {"Compound": "HARD", "TotalLaps": 99}}}}
+	}`))
+
+	stints := state.Snapshot().Stints["4"]
+	if len(stints) != 1 {
+		t.Fatalf("expected 1 stint, got %d: %+v", len(stints), stints)
+	}
+	if stints[0].Compound != "SOFT" || stints[0].Laps != 9 {
+		t.Errorf("key-frame marker corrupted stint 0: %+v", stints[0])
+	}
+}
+
 func TestProcessTopicTimingStats(t *testing.T) {
 	state := live.NewState()
 	state.Drivers["55"] = live.LiveDriverData{RacingNumber: "55"}

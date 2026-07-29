@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -404,22 +405,42 @@ func (s *State) ProcessTopic(topic string, data json.RawMessage) bool {
 					Stints json.RawMessage `json:"Stints"`
 				}
 				if json.Unmarshal(lineRaw, &line) == nil && line.Stints != nil {
-					var driverStints []LiveStintData
+					// The feed sends stints as sparse deltas keyed by stint index:
+					// a mid-stint update is just {"1": {"TotalLaps": 14}}. Merge
+					// each entry into the stint it addresses. Replacing the slice
+					// wholesale discarded every earlier stint, so pit history
+					// collapsed to one entry and tyre age stuck near zero for the
+					// whole race.
+					driverStints := append([]LiveStintData(nil), s.Stints[num]...)
+					changed := false
 					for _, sRaw := range indexedRawValues(line.Stints) {
 						var st struct {
-							Compound  string `json:"Compound"`
-							New       string `json:"New"`
-							TotalLaps int    `json:"TotalLaps"`
+							Compound  *string `json:"Compound"`
+							New       *string `json:"New"`
+							TotalLaps *int    `json:"TotalLaps"`
 						}
-						if json.Unmarshal(sRaw.Raw, &st) == nil && st.Compound != "" {
-							driverStints = append(driverStints, LiveStintData{
-								Compound: st.Compound,
-								New:      st.New == "true" || st.New == "True",
-								Laps:     st.TotalLaps,
-							})
+						if json.Unmarshal(sRaw.Raw, &st) != nil {
+							continue
 						}
+						if st.Compound == nil && st.New == nil && st.TotalLaps == nil {
+							continue
+						}
+						for len(driverStints) <= sRaw.Index {
+							driverStints = append(driverStints, LiveStintData{})
+						}
+						entry := &driverStints[sRaw.Index]
+						if st.Compound != nil && *st.Compound != "" {
+							entry.Compound = *st.Compound
+						}
+						if st.New != nil {
+							entry.New = *st.New == "true" || *st.New == "True"
+						}
+						if st.TotalLaps != nil {
+							entry.Laps = *st.TotalLaps
+						}
+						changed = true
 					}
-					if len(driverStints) > 0 {
+					if changed {
 						s.Stints[num] = driverStints
 						lastStint := driverStints[len(driverStints)-1]
 						t := s.Tyres[num]
@@ -874,8 +895,13 @@ func indexedRawValues(raw json.RawMessage) []indexedRaw {
 	if err := json.Unmarshal(raw, &obj); err == nil {
 		values := make([]indexedRaw, 0, len(obj))
 		for k, v := range obj {
-			i := 0
-			fmt.Sscanf(k, "%d", &i)
+			// Keys are array indices in the feed's delta form. Non-numeric keys
+			// are feed metadata — "_kf" (key frame) is the common one — and must
+			// not be folded in as index 0, which would clobber the first entry.
+			i, err := strconv.Atoi(k)
+			if err != nil || i < 0 {
+				continue
+			}
 			values = append(values, indexedRaw{Index: i, Raw: v})
 		}
 		sort.Slice(values, func(i, j int) bool {
