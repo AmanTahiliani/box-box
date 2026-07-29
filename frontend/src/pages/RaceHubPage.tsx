@@ -1,12 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  fetchLocalMeetings,
-  fetchRaceHub,
-  fetchSeasons,
-  fetchWeekend,
-} from '../api'
+import { fetchRaceHub, fetchWeekend, fetchWeekendContext } from '../api'
 import { DatasetStrip } from '../components/DatasetStrip'
 import { RaceStoryCanvas } from '../components/RaceStoryCanvas'
 import { TabBar, type Tab } from '../components/TabBar'
@@ -22,76 +17,72 @@ import { SourceBadge } from '../components/SourceBadge'
 import { countryAccent, countryDecal, formatGpDateRange } from '../lib/gpIdentity'
 import { formatCoverageHint, sessionTypeAbbrev } from '../lib/coverage'
 import {
+  MAX_BROWSER_TIMEOUT,
+  formatCountdown,
   formatSessionScheduleTime,
-  pickFocusMeeting,
+  refreshDeadlineDelay,
   sortSessionsByStart,
 } from '../lib/schedule'
-import type { Weekend, WeekendSession } from '../types'
+import type { ContextSession, Weekend } from '../types'
 
 interface Props {
   sessionKey: number
-}
-
-function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | undefined {
-  if (!weekend) return undefined
-  const local = weekend.sessions.filter((s) => s.source === 'local')
-  const partial = weekend.sessions.filter((s) => s.source === 'partial')
-  const pool = local.length > 0 ? local : partial.length > 0 ? partial : weekend.sessions
-  const race = pool.find((s) => s.session.session_type?.toLowerCase().includes('race'))
-  if (race) return race
-  const qual = pool.find((s) => s.session.session_type?.toLowerCase().includes('qualifying'))
-  if (qual) return qual
-  return pool[0]
 }
 
 export function RaceHubPage({ sessionKey }: Props) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  const [refreshGeneration, setRefreshGeneration] = useState(0)
 
-  // ─── Auto-redirect when no session_key is supplied ───
-  const seasonsQuery = useQuery({
-    queryKey: ['seasons'],
-    queryFn: fetchSeasons,
+  // The server owns bare Race Hub selection so every open tab crosses the
+  // one-hour handoff at the same instant.
+  const contextQuery = useQuery({
+    queryKey: ['weekend-context'],
+    queryFn: fetchWeekendContext,
     enabled: sessionKey === 0,
   })
+  const { refetch: refetchContext } = contextQuery
 
-  const latestSeason = seasonsQuery.data?.[0] ?? null
-
-  const meetingsQuery = useQuery({
-    queryKey: ['meetings', latestSeason],
-    queryFn: () => fetchLocalMeetings(latestSeason!),
-    enabled: sessionKey === 0 && latestSeason != null,
-  })
-
-  const focusMeeting = useMemo(() => {
-    if (sessionKey !== 0 || !meetingsQuery.data) return null
-    return pickFocusMeeting(meetingsQuery.data, new Date())
-  }, [sessionKey, meetingsQuery.data])
-
-  const fallbackWeekendQuery = useQuery({
-    queryKey: ['weekend', focusMeeting?.meeting_key],
-    queryFn: () => fetchWeekend(focusMeeting!.meeting_key),
-    enabled: sessionKey === 0 && focusMeeting != null,
+  const context = contextQuery.data
+  const preSession = sessionKey === 0 && context?.race_hub_pre_session === true
+  const preSessionRef = context?.race_hub_default_session
+  const preSessionMeetingKey = preSessionRef?.meeting?.meeting_key
+  const preSessionWeekendQuery = useQuery({
+    queryKey: ['weekend', preSessionMeetingKey],
+    queryFn: () => fetchWeekend(preSessionMeetingKey!),
+    enabled: preSession && preSessionMeetingKey != null && preSessionMeetingKey > 0,
   })
 
   useEffect(() => {
     if (sessionKey !== 0) return
-    const weekend = fallbackWeekendQuery.data
-    if (!weekend) return
-    const target = pickAnalysisSession(weekend)?.session.session_key
-      ?? weekend.default_session_key
-      ?? weekend.sessions[0]?.session.session_key
-    if (target) {
-      navigate({ to: '/race-hub', search: { session_key: target }, replace: true })
-    }
-  }, [sessionKey, fallbackWeekendQuery.data, navigate])
+    const delay = refreshDeadlineDelay(context?.race_hub_refresh_at)
+    if (delay == null) return
+    const rearmAfterRefetch = delay === MAX_BROWSER_TIMEOUT
+    const timer = window.setTimeout(() => {
+      void refetchContext().finally(() => {
+        if (rearmAfterRefetch) setRefreshGeneration((generation) => generation + 1)
+      })
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [sessionKey, context?.race_hub_refresh_at, refetchContext, refreshGeneration])
+
+  useEffect(() => {
+    if (!preSession) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [preSession])
+
+  // A bare route retains canonical context ownership while rendering its
+  // completed analysis selection. Explicit URLs remain user-owned.
+  const selectedSessionKey = sessionKey || context?.race_hub_default_session?.session.session_key || 0
 
   // ─── Active session payload ───
   const raceHubQuery = useQuery({
-    queryKey: ['race-hub', sessionKey],
-    queryFn: () => fetchRaceHub(sessionKey),
-    enabled: sessionKey > 0,
+    queryKey: ['race-hub', selectedSessionKey],
+    queryFn: () => fetchRaceHub(selectedSessionKey),
+    enabled: selectedSessionKey > 0 && (sessionKey > 0 || !preSession),
     staleTime: 30_000,
   })
 
@@ -108,25 +99,36 @@ export function RaceHubPage({ sessionKey }: Props) {
   const accent = countryAccent(data?.meeting ?? null)
   const accentStyle = { '--gp-accent': accent } as React.CSSProperties
 
-  // ─── No session_key: show resolving state, fall back to switcher if no local data ───
+  // ─── No session_key: resolve exclusively through canonical Weekend Context ───
   if (sessionKey === 0) {
-    if (seasonsQuery.isLoading || meetingsQuery.isLoading || fallbackWeekendQuery.isLoading) {
+    if (contextQuery.isLoading || (preSession && preSessionWeekendQuery.isLoading)) {
       return (
         <div className="rh-page" style={accentStyle}>
           <div className="loading-state">resolving latest local weekend…</div>
         </div>
       )
     }
-    const seasons = seasonsQuery.data ?? []
-    if (seasons.length === 0) {
+    if (preSession && preSessionRef) {
+      return (
+        <RaceHubPreSession
+          session={preSessionRef}
+          weekend={preSessionWeekendQuery.data}
+          now={now}
+          switcherOpen={switcherOpen}
+          onToggleSwitcher={() => setSwitcherOpen((open) => !open)}
+          onCloseSwitcher={() => setSwitcherOpen(false)}
+        />
+      )
+    }
+    if (!selectedSessionKey) {
       return (
         <div className="rh-page rh-empty" data-testid="race-hub-empty" style={accentStyle}>
           <div className="rh-empty-band">
             <span className="rh-empty-eyebrow mono">box-box · race hub</span>
-            <h1 className="rh-empty-title">No local sessions yet</h1>
+            <h1 className="rh-empty-title">No completed local analysis yet</h1>
             <p className="rh-empty-sub">
-              The Race Hub reads from local ingest only. Once a weekend is ingested
-              it will open here automatically.
+              Race Hub opens completed local analysis between weekends. Check Data Health
+              to ingest a completed session.
             </p>
             <div className="rh-empty-actions">
               <a href="/admin" className="rh-empty-action">Open Admin · Data Health</a>
@@ -136,18 +138,13 @@ export function RaceHubPage({ sessionKey }: Props) {
         </div>
       )
     }
-    return (
-      <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">resolving latest local weekend…</div>
-      </div>
-    )
   }
 
-  // ─── Loading / error for the requested session_key ───
+  // ─── Loading / error for the selected session ───
   if (raceHubQuery.isLoading) {
     return (
       <div className="rh-page" style={accentStyle}>
-        <div className="loading-state">loading session {sessionKey}…</div>
+        <div className="loading-state">loading session {selectedSessionKey}…</div>
       </div>
     )
   }
@@ -157,7 +154,7 @@ export function RaceHubPage({ sessionKey }: Props) {
         <div className="error-box">
           {raceHubQuery.error instanceof Error
             ? raceHubQuery.error.message
-            : `Failed to load session ${sessionKey}.`}
+            : `Failed to load session ${selectedSessionKey}.`}
         </div>
       </div>
     )
@@ -168,7 +165,7 @@ export function RaceHubPage({ sessionKey }: Props) {
   const sessionMeta = weekend
     ? Object.fromEntries(weekend.sessions.map((w) => [w.session.session_key, w]))
     : {}
-  const activeSessionMeta = sessionMeta[sessionKey]
+  const activeSessionMeta = sessionMeta[selectedSessionKey]
 
   return (
     <div className="rh-page" data-testid="race-hub" style={accentStyle}>
@@ -194,7 +191,7 @@ export function RaceHubPage({ sessionKey }: Props) {
       {switcherOpen && (
         <WeekendSwitcher
           currentMeetingKey={meetingKey}
-          currentSessionKey={sessionKey}
+          currentSessionKey={selectedSessionKey}
           onClose={() => setSwitcherOpen(false)}
         />
       )}
@@ -225,7 +222,7 @@ export function RaceHubPage({ sessionKey }: Props) {
         <nav className="rh-session-rail" aria-label="Weekend sessions" data-testid="rh-session-rail">
           {sessions.map((session) => {
             const meta = sessionMeta[session.session_key]
-            const active = session.session_key === sessionKey
+            const active = session.session_key === selectedSessionKey
             return (
               <button
                 key={session.session_key}
@@ -278,7 +275,7 @@ export function RaceHubPage({ sessionKey }: Props) {
               {formatCoverageHint(activeSessionMeta.datasets)} datasets local
             </span>
           )}
-          <span className="rh-active-key mono">key {sessionKey}</span>
+          <span className="rh-active-key mono">key {selectedSessionKey}</span>
         </div>
       )}
 
@@ -314,7 +311,7 @@ export function RaceHubPage({ sessionKey }: Props) {
             <span className="sec-title">Driver Compare</span>
           </div>
           <CompareView
-            sessionKey={sessionKey}
+            sessionKey={selectedSessionKey}
             results={data.results}
             drivers={data.drivers}
           />
@@ -365,6 +362,75 @@ export function RaceHubPage({ sessionKey }: Props) {
           <DatasetStatusView datasets={data.datasets} />
         </div>
       )}
+    </div>
+  )
+}
+
+function RaceHubPreSession({
+  session,
+  weekend,
+  now,
+  switcherOpen,
+  onToggleSwitcher,
+  onCloseSwitcher,
+}: {
+  session: ContextSession
+  weekend?: Weekend
+  now: number
+  switcherOpen: boolean
+  onToggleSwitcher: () => void
+  onCloseSwitcher: () => void
+}) {
+  const meeting = session.meeting
+  const sessions = sortSessionsByStart((weekend?.sessions ?? []).map((entry) => entry.session))
+  const target = new Date(session.session.date_start)
+  const accent = countryAccent(meeting ?? null)
+  const pendingLiveEvidence = target.getTime() <= now
+
+  return (
+    <div className="rh-page rh-empty" data-testid="race-hub-pre-session" style={{ '--gp-accent': accent } as React.CSSProperties}>
+      <div className="rh-topbar">
+        <span className="rh-topbar-label mono">box-box · race hub</span>
+        <span className="rh-topbar-spacer" />
+        <button
+          type="button"
+          className={`rh-switcher-toggle${switcherOpen ? ' active' : ''}`}
+          onClick={onToggleSwitcher}
+          aria-expanded={switcherOpen}
+          aria-controls="rh-weekend-switcher"
+          data-testid="rh-switch-weekend"
+        >
+          {switcherOpen ? 'Close' : 'Switch Weekend'}
+        </button>
+      </div>
+
+      {switcherOpen && (
+        <WeekendSwitcher
+          currentMeetingKey={meeting?.meeting_key}
+          currentSessionKey={session.session.session_key}
+          onClose={onCloseSwitcher}
+        />
+      )}
+
+      <section className="rh-empty-band">
+        <span className="rh-empty-eyebrow mono">box-box · race hub</span>
+        <h1 className="rh-empty-title">{meeting?.meeting_name ?? 'Next race weekend'}</h1>
+        <p className="rh-empty-sub">
+          {pendingLiveEvidence
+            ? `${session.session.session_name} is scheduled; awaiting live timing.`
+            : <>{session.session.session_name} begins in <span className="mono">{formatCountdown(target, new Date(now))}</span></>}
+        </p>
+        {sessions.length > 0 && (
+          <div className="preview-schedule" data-testid="rh-pre-session-schedule">
+            {sessions.map((scheduled) => (
+              <div key={scheduled.session_key} className="preview-schedule-item">
+                <span className="preview-schedule-name">{scheduled.session_name}</span>
+                <span className="preview-schedule-time">{formatSessionScheduleTime(scheduled.date_start)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

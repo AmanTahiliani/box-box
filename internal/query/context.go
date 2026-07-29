@@ -24,6 +24,7 @@ const (
 
 	preSessionWindow  = 48 * time.Hour
 	postWeekendWindow = 48 * time.Hour
+	raceHubPendingPollInterval = 15 * time.Second
 )
 
 // LiveEvidence is the small, transport-independent subset of FIA state needed
@@ -69,6 +70,9 @@ type WeekendContext struct {
 	ActiveSession            *ContextSession `json:"active_session,omitempty"`
 	NextSession              *ContextSession `json:"next_session,omitempty"`
 	DefaultAnalysisSession   *ContextSession `json:"default_analysis_session,omitempty"`
+	RaceHubDefaultSession    *ContextSession `json:"race_hub_default_session,omitempty"`
+	RaceHubPreSession        bool            `json:"race_hub_pre_session"`
+	RaceHubRefreshAt         string          `json:"race_hub_refresh_at,omitempty"`
 	ChampionshipRound        int             `json:"championship_round"`
 	TotalChampionshipRounds  int             `json:"total_championship_rounds"`
 }
@@ -150,7 +154,7 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 		}
 	}
 
-	var previous, next, defaultAnalysis *contextCandidate
+	var previous, next, defaultAnalysis, pending *contextCandidate
 	for i := range candidates {
 		c := &candidates[i]
 		isActive := active != nil && active.session.SessionKey != 0 && c.session.SessionKey == active.session.SessionKey
@@ -163,6 +167,10 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 		}
 		if !isActive && !c.start.IsZero() && !c.start.Before(now) && (next == nil || c.start.Before(next.start)) {
 			next = c
+		}
+		if !isActive && !c.complete && !c.start.IsZero() && !c.start.After(now) &&
+			(c.end.IsZero() || now.Before(c.end)) && (pending == nil || c.start.After(pending.start)) {
+			pending = c
 		}
 	}
 
@@ -188,7 +196,38 @@ func (s *Service) ResolveWeekendContext(evidence LiveEvidence) (WeekendContext, 
 	if out.FocusMeeting != nil {
 		out.ChampionshipRound = championshipRound(champMeetings, int(out.FocusMeeting.MeetingKey))
 	}
+	applyRaceHubDefault(&out, active, defaultAnalysis, next, pending, now)
 	return out, nil
+}
+
+// applyRaceHubDefault is deliberately distinct from TemporalPreSession. Other
+// weekend surfaces begin preparation 48 hours ahead; Race Hub remains an
+// analysis destination until the one-hour handoff before the next session.
+func applyRaceHubDefault(out *WeekendContext, active, analysis, next, pending *contextCandidate, now time.Time) {
+	if active != nil {
+		out.RaceHubDefaultSession = out.ActiveSession
+		return
+	}
+	if next != nil {
+		handoff := next.start.Add(-time.Hour)
+		if now.Before(handoff) {
+			out.RaceHubRefreshAt = handoff.Format(time.RFC3339)
+		} else if now.Before(next.start) {
+			out.RaceHubDefaultSession = out.NextSession
+			out.RaceHubPreSession = true
+			out.RaceHubRefreshAt = next.start.Format(time.RFC3339)
+			return
+		}
+	}
+	if pending != nil {
+		out.RaceHubDefaultSession = sessionRef(*pending, LiveEvidence{}, now)
+		out.RaceHubPreSession = true
+		out.RaceHubRefreshAt = now.Add(raceHubPendingPollInterval).Format(time.RFC3339)
+		return
+	}
+	if analysis != nil {
+		out.RaceHubDefaultSession = out.DefaultAnalysisSession
+	}
 }
 
 func currentLocalSeason(years []int, current int) int {

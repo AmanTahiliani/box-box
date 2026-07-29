@@ -15,6 +15,7 @@ import type {
   Session,
   TrackOutline,
   Weekend,
+  WeekendContext,
 } from './types'
 
 export async function fetchRaceHub(sessionKey: number): Promise<RaceHub> {
@@ -108,6 +109,14 @@ export async function fetchSessions(meetingKey: number, source = 'openf1'): Prom
 
 export async function fetchWeekend(meetingKey: number): Promise<Weekend> {
   const res = await fetch(`/api/v1/weekend?meeting_key=${meetingKey}`)
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+export async function fetchWeekendContext(): Promise<WeekendContext> {
+  const res = await fetch('/api/v1/weekend-context')
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText}`)
   }

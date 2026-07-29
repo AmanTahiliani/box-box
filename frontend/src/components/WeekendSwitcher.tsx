@@ -47,7 +47,7 @@ export function WeekendSwitcher({ currentMeetingKey, currentSessionKey, onClose 
   }
 
   return (
-    <div className="rh-switcher" data-testid="rh-switcher">
+    <div id="rh-weekend-switcher" className="rh-switcher" data-testid="rh-switcher">
       <div className="rh-switcher-head">
         <span className="sec-title">Switch Weekend</span>
         <div className="rh-switcher-years">

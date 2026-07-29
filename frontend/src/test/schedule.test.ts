@@ -5,8 +5,10 @@ import {
   focusMeetingKind,
   focusMeetingLabel,
   formatCountdown,
+  MAX_BROWSER_TIMEOUT,
   nextUpcomingMeeting,
   pickFocusMeeting,
+  refreshDeadlineDelay,
 } from '../lib/schedule'
 import type { Meeting, Session } from '../types'
 
@@ -77,5 +79,16 @@ describe('schedule helpers', () => {
     const now = new Date('2025-05-25T12:00:00+00:00')
     const target = new Date('2025-05-25T13:00:00+00:00')
     expect(formatCountdown(target, now)).toBe('0d 01h 00m 00s')
+  })
+
+  it('uses the server refresh deadline without local timezone conversion', () => {
+    expect(refreshDeadlineDelay('2025-05-25T13:00:00Z', Date.parse('2025-05-25T12:59:30Z'))).toBe(30_000)
+    expect(refreshDeadlineDelay(undefined)).toBeNull()
+  })
+
+  it('caps a refresh deadline beyond the browser timer maximum', () => {
+    const now = Date.parse('2025-05-25T12:00:00Z')
+    const deadline = new Date(now + MAX_BROWSER_TIMEOUT + 1_000).toISOString()
+    expect(refreshDeadlineDelay(deadline, now)).toBe(MAX_BROWSER_TIMEOUT)
   })
 })

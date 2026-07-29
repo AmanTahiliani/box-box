@@ -217,6 +217,41 @@ export interface Weekend {
   default_session_key?: number
 }
 
+export interface ContextAvailability {
+  source: string
+  schedule: string
+  live_transport: string
+  live_session: string
+  archive: string
+  local_analysis: string
+  freshness: string
+  observed_at?: string
+  limitations: string[]
+}
+
+export interface ContextSession {
+  session: Session
+  meeting?: Meeting
+  availability: ContextAvailability
+}
+
+export interface WeekendContext {
+  season?: number
+  temporal_state: string
+  previous_meeting?: Meeting
+  focus_meeting?: Meeting
+  next_meeting?: Meeting
+  previous_completed_session?: ContextSession
+  active_session?: ContextSession
+  next_session?: ContextSession
+  default_analysis_session?: ContextSession
+  race_hub_default_session?: ContextSession
+  race_hub_pre_session: boolean
+  race_hub_refresh_at?: string
+  championship_round: number
+  total_championship_rounds: number
+}
+
 export interface LiveStateResponse {
   is_live: boolean
   data: LiveStreamData | null
