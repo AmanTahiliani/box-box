@@ -47,6 +47,19 @@ func TestWeekendContextHandlerWithoutStoreReturnsNoSeason(t *testing.T) {
 	if got.TemporalState != query.TemporalNoSeason {
 		t.Fatalf("state = %s", got.TemporalState)
 	}
+	if rr.Header().Get(dataSourceHeader) != "none" || rr.Header().Get(dataFreshnessHeader) != "limited" {
+		t.Fatalf("missing context metadata = %q/%q", rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader))
+	}
+}
+
+func TestWeekendContextHandlerEmptyStoreReportsLimited(t *testing.T) {
+	st := openContextStore(t)
+	s := NewServer(nil, 0, st)
+	rr := httptest.NewRecorder()
+	s.handleWeekendContext(rr, httptest.NewRequest(http.MethodGet, "/api/v1/weekend-context", nil))
+	if rr.Code != http.StatusOK || rr.Header().Get(dataSourceHeader) != "none" || rr.Header().Get(dataFreshnessHeader) != "limited" {
+		t.Fatalf("empty context = %d %q/%q body=%s", rr.Code, rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader), rr.Body.String())
+	}
 }
 
 func TestWeekendContextHandlerUsesLiveHubIdentityWithoutOpenF1(t *testing.T) {
@@ -76,6 +89,12 @@ func TestWeekendContextHandlerUsesLiveHubIdentityWithoutOpenF1(t *testing.T) {
 	if got.ActiveSession.Availability.LiveTransport != "connected" || got.ActiveSession.Availability.LiveSession != "active" {
 		t.Fatalf("availability = %+v", got.ActiveSession.Availability)
 	}
+	if got.ActiveSession.Availability.Source != "mixed" || got.ActiveSession.Availability.Freshness != "live" {
+		t.Fatalf("live source/freshness = %+v", got.ActiveSession.Availability)
+	}
+	if rr.Header().Get(dataSourceHeader) != "mixed" || rr.Header().Get(dataFreshnessHeader) != "live" {
+		t.Fatalf("response source/freshness = %q/%q", rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader))
+	}
 }
 
 func TestWeekendContextHandlerUsesTerminalArchiveAsCompletionEvidence(t *testing.T) {
@@ -94,8 +113,45 @@ func TestWeekendContextHandlerUsesTerminalArchiveAsCompletionEvidence(t *testing
 	if got.PreviousCompletedSession == nil || got.PreviousCompletedSession.Availability.Archive != "available" {
 		t.Fatalf("archive context = %+v", got)
 	}
+	if got.PreviousCompletedSession.Availability.Source != "mixed" || got.PreviousCompletedSession.Availability.Freshness != "archive" {
+		t.Fatalf("archive source/freshness = %+v", got.PreviousCompletedSession.Availability)
+	}
+	if rr.Header().Get(dataSourceHeader) != "mixed" || rr.Header().Get(dataFreshnessHeader) != "archive" {
+		t.Fatalf("archive response source/freshness = %q/%q", rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader))
+	}
 	if got.DefaultAnalysisSession != nil {
 		t.Fatal("archive-only session must not become local default analysis")
+	}
+}
+
+func TestWeekendContextMetadataFollowsUpcomingFocusNotTerminalPrevious(t *testing.T) {
+	st := openContextStore(t)
+	seedContextHandler(t, st)
+	if err := st.UpsertMeeting(store.Meeting{MeetingKey: 2, MeetingName: "Belgian Grand Prix", CircuitShortName: "Spa", Year: 2026, DateStart: "2026-07-10T09:00:00Z", DateEnd: "2026-07-12T16:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertSession(store.Session{SessionKey: 21, MeetingKey: 2, SessionName: "Practice 1", SessionType: "Practice", DateStart: "2026-07-10T09:00:00Z", DateEnd: "2026-07-10T10:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := time.Parse(time.RFC3339, "2026-07-05T16:05:00Z")
+	s := NewServer(nil, 0, st)
+	s.query = query.NewServiceWithClock(st, func() time.Time { return now })
+	s.hub.applySnapshot(live.LiveStreamData{SessionStatus: "Finished", Session: live.LiveSessionMeta{MeetingName: "British Grand Prix", CircuitName: "Silverstone", SessionName: "Race", SessionType: "Race"}}, now)
+
+	rr := httptest.NewRecorder()
+	s.handleWeekendContext(rr, httptest.NewRequest(http.MethodGet, "/api/v1/weekend-context", nil))
+	var got query.WeekendContext
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.FocusMeeting == nil || got.FocusMeeting.MeetingKey != 2 || got.NextSession == nil {
+		t.Fatalf("focus context = %+v", got)
+	}
+	if got.PreviousCompletedSession == nil || got.PreviousCompletedSession.Availability.Freshness != "archive" {
+		t.Fatalf("terminal previous missing = %+v", got.PreviousCompletedSession)
+	}
+	if rr.Header().Get(dataSourceHeader) != "local" || rr.Header().Get(dataFreshnessHeader) != "local" {
+		t.Fatalf("focus metadata was overridden by archive = %q/%q", rr.Header().Get(dataSourceHeader), rr.Header().Get(dataFreshnessHeader))
 	}
 }
 

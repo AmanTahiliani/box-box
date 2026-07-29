@@ -160,6 +160,54 @@ func TestResolveWeekendContextPassedTimeDoesNotCompleteSession(t *testing.T) {
 	}
 }
 
+func TestResolveWeekendContextAvailabilityUsesTruthfulSources(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2026-07-05T18:00:00Z")
+	svc := contextService(t, now)
+	addContextMeeting(t, svc, 1, "British Grand Prix", "2026-07-03T00:00:00Z", "2026-07-05T16:00:00Z", false)
+	addContextSession(t, svc, 11, 1, "Race", "2026-07-05T14:00:00Z", "2026-07-05T16:00:00Z", false)
+	// Results without laps/stints/positions are meaningful but incomplete local
+	// analysis, so they must not be labelled universally fresh.
+	completeContextSession(t, svc, 11, 1)
+	addContextMeeting(t, svc, 2, "Belgian Grand Prix", "2026-07-17T00:00:00Z", "2026-07-19T16:00:00Z", false)
+	addContextSession(t, svc, 21, 2, "Practice 1", "2026-07-17T09:00:00Z", "2026-07-17T10:00:00Z", false)
+	addContextSession(t, svc, 22, 2, "Race", "2026-07-19T14:00:00Z", "2026-07-19T16:00:00Z", false)
+
+	local, err := svc.ResolveWeekendContext(LiveEvidence{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := local.PreviousCompletedSession.Availability; got.Source != "local" || got.Freshness != "partial" || got.LocalAnalysis != "partial" {
+		t.Fatalf("partial local availability = %+v", got)
+	}
+	if got := local.NextSession.Availability; got.Source != "local" || got.Freshness != "local" {
+		t.Fatalf("future local availability = %+v", got)
+	}
+
+	liveContext, err := svc.ResolveWeekendContext(LiveEvidence{Active: true, MeetingName: "Belgian Grand Prix", CircuitName: "Belgian Grand Prix", SessionName: "Practice 1", SessionType: "Practice 1", ObservedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := liveContext.ActiveSession.Availability; got.Source != "mixed" || got.Freshness != "live" || got.LiveSession != "active" {
+		t.Fatalf("FIA + local availability = %+v", got)
+	}
+
+	archiveContext, err := svc.ResolveWeekendContext(LiveEvidence{Final: true, MeetingName: "British Grand Prix", CircuitName: "British Grand Prix", SessionName: "Race", SessionType: "Race", ObservedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := archiveContext.PreviousCompletedSession.Availability; got.Source != "mixed" || got.Freshness != "archive" || got.Archive != "available" {
+		t.Fatalf("FIA archive + local availability = %+v", got)
+	}
+
+	synthetic, err := svc.ResolveWeekendContext(LiveEvidence{Active: true, MeetingName: "Unscheduled Grand Prix", SessionName: "Race", SessionType: "Race", ObservedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := synthetic.ActiveSession.Availability; got.Source != "fia" || got.Freshness != "live" || got.Schedule != "unavailable" {
+		t.Fatalf("synthetic FIA availability = %+v", got)
+	}
+}
+
 func TestResolveWeekendContextNeverUsesFutureAnalysis(t *testing.T) {
 	now, _ := time.Parse(time.RFC3339, "2026-07-01T12:00:00Z")
 	svc := contextService(t, now)

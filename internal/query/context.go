@@ -40,6 +40,7 @@ type LiveEvidence struct {
 
 // ContextAvailability is structured source state for a referenced session.
 type ContextAvailability struct {
+	Source        string   `json:"source"`
 	Schedule      string   `json:"schedule"`
 	LiveTransport string   `json:"live_transport"`
 	LiveSession   string   `json:"live_session"`
@@ -298,21 +299,28 @@ func meetingModelByKey(meetings []store.Meeting, key int) *models.Meeting {
 func sessionRef(c contextCandidate, evidence LiveEvidence, now time.Time) *ContextSession {
 	session := sessionToModel(c.session)
 	meeting := meetingToModel(c.meeting)
-	availability := ContextAvailability{Schedule: "available", LiveSession: "inactive", Archive: "unavailable", Freshness: "fresh", Limitations: []string{}}
+	// Schedule and analysis are domain-store facts. Without an ingestion
+	// timestamp the resolver cannot honestly call them network-fresh, so local
+	// is the baseline freshness vocabulary exposed to clients.
+	availability := ContextAvailability{Source: "local", Schedule: "available", LiveSession: "inactive", Archive: "unavailable", Freshness: "local", Limitations: []string{}}
 	availability.LiveTransport = "unknown"
 	if c.session.SessionKey == 0 {
 		availability.Schedule = "unavailable"
 		availability.Limitations = append(availability.Limitations, "schedule_identity_unmatched")
 	}
 	if evidence.Active && liveMatches(evidence, c.meeting, c.session) {
+		availability.Source = "mixed"
 		availability.LiveTransport = "connected"
 		availability.LiveSession = "active"
+		availability.Freshness = "live"
 		if !evidence.ObservedAt.IsZero() {
 			availability.ObservedAt = evidence.ObservedAt.Format(time.RFC3339)
 		}
 	}
 	if c.archived {
+		availability.Source = "mixed"
 		availability.Archive = "available"
+		availability.Freshness = "archive"
 		if !evidence.ObservedAt.IsZero() {
 			availability.ObservedAt = evidence.ObservedAt.Format(time.RFC3339)
 		}
@@ -325,6 +333,12 @@ func sessionRef(c contextCandidate, evidence LiveEvidence, now time.Time) *Conte
 		availability.LocalAnalysis = "not_applicable"
 	} else {
 		availability.LocalAnalysis = "pending"
+	}
+	if availability.LocalAnalysis == "partial" && availability.Freshness == "local" {
+		availability.Freshness = "partial"
+	}
+	if c.session.SessionKey == 0 && availability.LiveSession == "active" {
+		availability.Source = "fia"
 	}
 	return &ContextSession{Session: session, Meeting: &meeting, Availability: availability}
 }

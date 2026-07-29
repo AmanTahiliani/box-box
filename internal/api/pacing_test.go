@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,6 +49,70 @@ func TestRequestPacerSpacesConcurrentCallers(t *testing.T) {
 func TestRequestPacerNilSafe(t *testing.T) {
 	var p *requestPacer
 	p.wait() // must not panic
+}
+
+func TestRequestPacerCancellationDoesNotCollideReservedWaiters(t *testing.T) {
+	const interval = 80 * time.Millisecond
+	p := &requestPacer{interval: interval}
+	if err := p.waitContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	initialNext := p.next
+	p.mu.Unlock()
+
+	waitForReservation := func(want time.Time) {
+		t.Helper()
+		deadline := time.Now().Add(250 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			p.mu.Lock()
+			got := p.next
+			p.mu.Unlock()
+			if got.Equal(want) {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Fatalf("reservation did not reach %v", want)
+	}
+
+	ctxB, cancelB := context.WithCancel(context.Background())
+	bDone := make(chan error, 1)
+	go func() { bDone <- p.waitContext(ctxB) }()
+	waitForReservation(initialNext.Add(interval))
+
+	cDone := make(chan time.Time, 1)
+	go func() {
+		_ = p.waitContext(context.Background())
+		cDone <- time.Now()
+	}()
+	waitForReservation(initialNext.Add(2 * interval))
+
+	cancelStarted := time.Now()
+	cancelB()
+	select {
+	case err := <-bDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("B error = %v, want context.Canceled", err)
+		}
+		if elapsed := time.Since(cancelStarted); elapsed > 30*time.Millisecond {
+			t.Fatalf("B cancellation took %v", elapsed)
+		}
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("B did not return promptly after cancellation")
+	}
+
+	dDone := make(chan time.Time, 1)
+	go func() {
+		_ = p.waitContext(context.Background())
+		dDone <- time.Now()
+	}()
+	waitForReservation(initialNext.Add(3 * interval))
+
+	cAt, dAt := <-cDone, <-dDone
+	if separation := dAt.Sub(cAt); separation < interval/2 {
+		t.Fatalf("C and D collided: wake separation %v, want at least %v", separation, interval/2)
+	}
 }
 
 func TestGetRetriesOn429(t *testing.T) {

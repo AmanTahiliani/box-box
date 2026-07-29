@@ -17,6 +17,7 @@ func (s *Server) handleRaceHub(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !s.hasLocalQuery() {
+		markDataResponse(w, "none", "limited")
 		writeJSON(w, emptyRaceHub(sessionKey))
 		return
 	}
@@ -25,6 +26,14 @@ func (s *Server) handleRaceHub(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err, http.StatusInternalServerError, false)
 		return
+	}
+	switch hub.Source {
+	case query.ResponseSourceNone:
+		markDataResponse(w, "none", "limited")
+	case query.ResponseSourcePartial:
+		markLocalResponse(w, true)
+	default:
+		markLocalResponse(w, false)
 	}
 	writeJSON(w, hub)
 }
