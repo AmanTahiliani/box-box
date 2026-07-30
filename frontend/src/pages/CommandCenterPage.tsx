@@ -20,6 +20,7 @@ import {
   currentAndNextSession,
   focusMeetingKind,
   formatSessionScheduleTime,
+  meetingEndTime,
   meetingHasStarted,
   mostRecentPastMeeting,
   nextUpcomingMeeting,
@@ -34,6 +35,8 @@ const missingDatasets = Object.fromEntries(
 ) as WeekendSession['datasets']
 
 function meetingStatus(meeting: Meeting, focusKey: number | undefined, now: Date) {
+  const end = meetingEndTime(meeting)
+  if (end && now >= end) return 'past'
   if (meeting.meeting_key === focusKey) return 'focus'
   if (meetingHasStarted(meeting, now)) return 'past'
   return 'future'

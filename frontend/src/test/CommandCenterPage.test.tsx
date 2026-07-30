@@ -241,6 +241,8 @@ describe('CommandCenterPage', () => {
     })
     expect(screen.getByTestId('cc-focus')).toHaveTextContent('Live now')
     expect(screen.getByTestId('cc-session-9602')).toHaveTextContent('On track')
+    expect(screen.getByTestId('cc-calendar-1301')).toHaveTextContent('Archive')
+    expect(screen.getByTestId('cc-calendar-1302')).toHaveTextContent('Now')
     expect(screen.getByTestId('hero-live-link')).toHaveAttribute('href', '/live')
 
     vi.useRealTimers()
