@@ -163,6 +163,12 @@ export function CommandCenterPage() {
   const lastPastWeekend = lastPastMeeting ? weekendsByKey.get(lastPastMeeting.meeting_key) : undefined
   const lastRaceAnalysis = pickAnalysisSession(lastPastWeekend)
   const lastRaceSessionKey = lastRaceAnalysis?.session.session_key
+  const railSessions =
+    focusWeekendSessions.length > 0
+      ? focusWeekendSessions
+      : heroStateKind === 'between'
+        ? lastPastWeekend?.sessions ?? []
+        : []
 
   const lastRaceHubQuery = useQuery({
     queryKey: ['race-hub', lastRaceSessionKey, 'hero-podium'],
@@ -403,14 +409,14 @@ export function CommandCenterPage() {
             </section>
           )}
 
-          {focusWeekendSessions.length > 0 && (
+          {railSessions.length > 0 && (
             <section className="cc-schedule" data-testid="cc-schedule">
               <div className="sec-header">
                 <span className="sec-title">Weekend Schedule</span>
-                <span className="sec-meta mono">{focusWeekendSessions.length} sessions</span>
+                <span className="sec-meta mono">{railSessions.length} sessions</span>
               </div>
               <div className="cc-session-strip" role="list">
-                {focusWeekendSessions.map(({ session, source, datasets }) => {
+                {railSessions.map(({ session, source, datasets }) => {
                   const status = classifySessionStatus(session, nowDate)
                   const isNext = nextSession?.session_key === session.session_key
                   const isCurrent = currentSession?.session_key === session.session_key

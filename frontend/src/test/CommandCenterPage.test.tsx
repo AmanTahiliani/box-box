@@ -245,4 +245,34 @@ describe('CommandCenterPage', () => {
 
     vi.useRealTimers()
   })
+
+  it('keeps the completed local session rail available when the next weekend has no sessions', async () => {
+    const nextMeeting = {
+      ...meeting,
+      meeting_key: 1303,
+      meeting_name: 'Canada',
+      country_name: 'Canada',
+      country_code: 'CAN',
+      circuit_short_name: 'Montreal',
+      date_start: '2026-06-12T00:00:00+00:00',
+      date_end: '2026-06-14T23:59:59+00:00',
+      year: 2026,
+    }
+
+    vi.setSystemTime(new Date('2026-06-06T15:15:00Z'))
+    mockFetchSeasons.mockResolvedValue([2026])
+    mockFetchLocalMeetings.mockResolvedValue([meeting])
+    mockFetchSeasonMeetings.mockResolvedValue([meeting, nextMeeting])
+    mockFetchWeekend.mockResolvedValue(weekend)
+    mockFetchSessions.mockResolvedValue([])
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('cc-session-9472')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('cc-schedule')).toHaveTextContent('1 sessions')
+
+    vi.useRealTimers()
+  })
 })
