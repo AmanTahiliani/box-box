@@ -21,10 +21,17 @@ try {
   for (const file of required) await readFile(join(evidence, file))
   git('cat-file', '-e', `HEAD:${signoff}`)
   const text = await readFile(signoff, 'utf8')
-  const commit = git('rev-parse', 'HEAD')
+  const candidate = text.match(/^- Candidate commit: ([0-9a-f]{40})$/mi)?.[1]
+  if (!candidate) throw new Error(`${signoff} must contain a full candidate commit SHA`)
+  git('cat-file', '-e', `${candidate}^{commit}`)
+  const signoffCommit = git('log', '-1', '--format=%H', 'HEAD', '--', signoff)
+  try {
+    git('merge-base', '--is-ancestor', candidate, signoffCommit)
+  } catch {
+    throw new Error(`${signoff} must be committed after candidate ${candidate}`)
+  }
   const fields = [
     ['Version', version],
-    ['Candidate commit', commit],
     ['Reviewed by', '.+'],
     ['Reviewed on', '\\d{4}-\\d{2}-\\d{2}'],
     ['Decision', 'approved'],
@@ -34,7 +41,7 @@ try {
       throw new Error(`${signoff} must contain "- ${name}: ${value}"`)
     }
   }
-  console.log(`Release-fidelity evidence and committed owner approval verified for ${version}.`)
+  console.log(`Release-fidelity evidence and committed owner approval verified for ${version} at ${candidate}.`)
 } catch (error) {
   console.error(`Release-fidelity gate blocked: ${error.message}`)
   process.exitCode = 1
