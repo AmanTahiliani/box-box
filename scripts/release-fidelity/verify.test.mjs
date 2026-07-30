@@ -18,7 +18,7 @@ function verify(root, evidence) {
   })
 }
 
-async function approvedCandidate({ changeCodeWithSignoff = false } = {}) {
+async function approvedCandidate({ changeCodeWithSignoff = false, decision = 'approved' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'boxbox-fidelity-verify-'))
   git(root, 'init')
   git(root, 'config', 'user.email', 'test@example.com')
@@ -29,7 +29,7 @@ async function approvedCandidate({ changeCodeWithSignoff = false } = {}) {
   const candidate = git(root, 'rev-parse', 'HEAD')
 
   await mkdir(join(root, 'docs/release/owner-reviews'), { recursive: true })
-  await writeFile(join(root, 'docs/release/owner-reviews/v-test.md'), `- Version: v-test\n- Candidate commit: ${candidate}\n- Reviewed by: Owner\n- Reviewed on: 2026-07-30\n- Decision: approved\n`)
+  await writeFile(join(root, 'docs/release/owner-reviews/v-test.md'), `- Version: v-test\n- Candidate commit: ${candidate}\n- Reviewed by: Owner\n- Reviewed on: 2026-07-30\n- Decision: ${decision}\n`)
   if (changeCodeWithSignoff) await writeFile(join(root, 'candidate.txt'), 'changed with approval')
   git(root, 'add', 'docs/release/owner-reviews/v-test.md')
   if (changeCodeWithSignoff) git(root, 'add', 'candidate.txt')
@@ -67,4 +67,14 @@ test('rejects code committed after approval', async () => {
 test('rejects a sign-off commit that also changes code', async () => {
   const { evidence, root } = await approvedCandidate({ changeCodeWithSignoff: true })
   assertBlocked(root, evidence)
+})
+
+test('rejects a dirty working-tree edit that spoofs approval', async () => {
+  const { candidate, evidence, root } = await approvedCandidate({ decision: 'rejected' })
+  await writeFile(join(root, 'docs/release/owner-reviews/v-test.md'), `- Version: v-test\n- Candidate commit: ${candidate}\n- Reviewed by: Owner\n- Reviewed on: 2026-07-30\n- Decision: approved\n`)
+
+  assert.throws(() => verify(root, evidence), (error) => {
+    assert.match(String(error.stderr), /Decision: approved/)
+    return true
+  })
 })

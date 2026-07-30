@@ -20,7 +20,7 @@ const required = ['index.html', 'summary.md']
 try {
   for (const file of required) await readFile(join(evidence, file))
   git('cat-file', '-e', `HEAD:${signoff}`)
-  const text = await readFile(signoff, 'utf8')
+  const text = git('show', `HEAD:${signoff}`)
   const candidate = text.match(/^- Candidate commit: ([0-9a-f]{40})$/mi)?.[1]
   if (!candidate) throw new Error(`${signoff} must contain a full candidate commit SHA`)
   git('cat-file', '-e', `${candidate}^{commit}`)
