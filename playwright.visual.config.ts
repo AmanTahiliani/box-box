@@ -7,10 +7,11 @@ const WEB_PORT = process.env.BOXBOX_WEB_PORT ?? '15173'
 
 export default defineConfig({
   testDir: './tests/visual',
-  fullyParallel: true,
+  // All projects share one seeded SQLite database behind the same Go server.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   reporter: process.env.CI ? 'github' : 'html',
   snapshotPathTemplate: '{testDir}/{testFileDir}/__snapshots__/{projectName}/{arg}{ext}',
   expect: {
