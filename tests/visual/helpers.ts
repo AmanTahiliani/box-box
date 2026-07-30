@@ -8,6 +8,20 @@ export const VIEWPORTS = {
 
 export const FULL_SESSION = 9472
 
+async function routeSeededSeasonCalendar(page: Page): Promise<void> {
+  await page.route(/\/api\/v1\/meetings(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url())
+    if (url.searchParams.get('year') !== '2025' || url.searchParams.get('source') !== 'openf1') {
+      await route.continue()
+      return
+    }
+
+    url.searchParams.set('source', 'local')
+    const response = await route.fetch({ url: url.toString() })
+    await route.fulfill({ response })
+  })
+}
+
 /** Wait for web fonts and layout to settle before screenshots. */
 export async function waitForScreenshotReady(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready)
@@ -15,15 +29,11 @@ export async function waitForScreenshotReady(page: Page): Promise<void> {
 }
 
 export async function gotoCommandCenterReady(page: Page): Promise<void> {
+  await routeSeededSeasonCalendar(page)
   await page.goto('/')
   await expect(page.getByTestId('command-center')).toBeVisible()
   await expect(page.getByTestId('cc-focus')).toBeVisible()
-  await expect(page.getByTestId('cc-session-9472')).toBeVisible()
-  // The e2e stack runs with an unreachable OpenF1 base URL, so wait for the
-  // season-calendar query to settle on its local fallback before screenshotting.
-  await expect(
-    page.getByText('Using local meetings because the full calendar could not load.'),
-  ).toBeVisible()
+  await expect(page.getByTestId('cc-calendar-1229')).toBeVisible({ timeout: 15_000 })
   await waitForScreenshotReady(page)
 }
 

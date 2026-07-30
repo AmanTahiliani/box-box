@@ -11,7 +11,12 @@
     "test:visual": "playwright test --config playwright.visual.config.ts",
     "test:visual:prod": "playwright test --config playwright.visual.prod.config.ts",
     "test:visual:update": "playwright test --config playwright.visual.config.ts --update-snapshots",
-    "test:visual:prod:update": "playwright test --config playwright.visual.prod.config.ts --update-snapshots"
+    "test:visual:prod:update": "playwright test --config playwright.visual.prod.config.ts --update-snapshots",
+    "release:fidelity:capture": "playwright test --config playwright.fidelity.config.ts",
+    "release:fidelity:packet": "node scripts/release-fidelity/generate.mjs",
+    "release:fidelity:verify": "node scripts/release-fidelity/verify.mjs",
+    "release:fidelity:gate": "npm run test:visual:prod && npm run release:fidelity:capture && npm run release:fidelity:packet && npm run release:fidelity:verify",
+    "test:release-fidelity": "node --test scripts/release-fidelity/*.test.mjs"
   },
   "type": "commonjs",
   "devDependencies": {
