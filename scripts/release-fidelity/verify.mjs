@@ -24,11 +24,13 @@ try {
   const candidate = text.match(/^- Candidate commit: ([0-9a-f]{40})$/mi)?.[1]
   if (!candidate) throw new Error(`${signoff} must contain a full candidate commit SHA`)
   git('cat-file', '-e', `${candidate}^{commit}`)
-  const signoffCommit = git('log', '-1', '--format=%H', 'HEAD', '--', signoff)
-  try {
-    git('merge-base', '--is-ancestor', candidate, signoffCommit)
-  } catch {
-    throw new Error(`${signoff} must be committed after candidate ${candidate}`)
+  const parent = git('rev-parse', 'HEAD^')
+  const changed = git('diff', '--name-only', 'HEAD^', 'HEAD').split('\n').filter(Boolean)
+  if (changed.length !== 1 || changed[0] !== signoff) {
+    throw new Error(`HEAD must contain only the sign-off file change: ${signoff}`)
+  }
+  if (candidate.toLowerCase() !== parent.toLowerCase()) {
+    throw new Error(`${signoff} candidate must equal HEAD^ (${parent})`)
   }
   const fields = [
     ['Version', version],

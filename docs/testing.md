@@ -88,7 +88,7 @@ Do not create the file or use `approved` until the owner has reviewed the packet
 npm run release:fidelity:verify
 ```
 
-The verifier checks that the packet exists, the sign-off exists in `HEAD`, and its full candidate SHA names a commit that is an ancestor of the sign-off commit. It also requires the owner, date, and approved decision fields. It intentionally cannot assess visual fidelity or create approval.
+The verifier requires the sign-off commit to be `HEAD` and to change only `docs/release/owner-reviews/<version>.md`. Its full candidate SHA must equal `HEAD^`; any code change after approval requires a new owner sign-off. It also requires the owner, date, and approved decision fields. It intentionally cannot assess visual fidelity or create approval.
 
 For a release candidate, `npm run release:fidelity:gate` runs production visual regression first, then capture, packet generation, and owner-evidence verification in that order. It will remain red until the owner has committed the sign-off.
 
