@@ -4764,3 +4764,137 @@ a { color: inherit; text-decoration: none; }
   background: #f82f34;
   transform: translateY(-1px);
 }
+
+/* Weekend recut: put the active circuit and season journey ahead of data plumbing. */
+.cc-context {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(84px, 0.3fr) minmax(0, 1fr) auto;
+  gap: var(--s5);
+  align-items: center;
+  min-height: 112px;
+  padding: var(--s5) var(--s6);
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--gp-accent) 9%, transparent), transparent 46%),
+    var(--surface);
+}
+
+.cc-context-decal {
+  color: color-mix(in srgb, var(--gp-accent) 58%, var(--text));
+  font-size: clamp(38px, 6vw, 72px);
+  font-weight: 800;
+  letter-spacing: -0.08em;
+  line-height: 0.75;
+  opacity: 0.72;
+}
+
+.cc-context-copy h2 {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.cc-context-kicker {
+  display: block;
+  margin-bottom: var(--s2);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.cc-context-copy p {
+  max-width: 64ch;
+  margin-top: var(--s2);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.cc-context-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s2);
+  color: var(--text-3);
+  font-size: 10px;
+  text-align: right;
+}
+
+.cc-context-preview {
+  margin-top: var(--s2);
+  color: var(--text-2);
+  font-weight: 700;
+}
+.cc-context-preview:hover { color: var(--text); }
+
+.cc-calendar-grid {
+  display: flex;
+  gap: 0;
+  padding: var(--s3) 0 var(--s4);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.cc-calendar-card {
+  min-width: 112px;
+  min-height: 138px;
+  flex: 1 0 112px;
+  padding: var(--s3) var(--s4);
+  border-radius: 0;
+  border-width: 1px 1px 1px 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.cc-calendar-card:first-child { border-left-width: 1px; }
+.cc-calendar-card:hover { transform: none; box-shadow: inset 0 -2px 0 var(--gp-card-accent); }
+.cc-calendar-card::before { display: none; }
+.cc-calendar-accent { top: auto; bottom: 0; height: 2px; opacity: 0.65; }
+.cc-calendar-past { filter: none; opacity: 0.62; }
+.cc-calendar-past:hover { filter: none; opacity: 1; }
+.cc-calendar-focus { background: color-mix(in srgb, var(--gp-card-accent) 10%, transparent); }
+.cc-calendar-decal { font-size: 60px; bottom: -5px; }
+.cc-calendar-status {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.cc-calendar-status-focus { color: var(--gp-card-accent); }
+.cc-calendar-status-future { color: var(--text-2); }
+
+.cc-data-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+@media (max-width: 899px) {
+  .cc-dashboard-grid { gap: var(--s5); }
+  .cc-dashboard-sidebar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s5); }
+  .cc-briefing, .cc-data-note { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+  .cc-context { grid-template-columns: 1fr auto; gap: var(--s4); padding: var(--s4); }
+  .cc-context-decal { display: none; }
+  .cc-context-meta { align-items: flex-start; grid-column: 1 / -1; text-align: left; }
+  .cc-context-copy h2 { font-size: 17px; }
+  .cc-context-copy p { font-size: 11px; }
+  .cc-dashboard-sidebar { display: flex; }
+  .cc-calendar-grid { margin: 0 calc(var(--s4) * -1); padding-left: var(--s4); padding-right: var(--s4); }
+  .cc-calendar-card { min-width: 104px; flex-basis: 104px; }
+  .cc-calendar-circuit { display: none; }
+  .cc-champ-snapshot { order: 2; }
+  .cc-schedule { order: 1; }
+  .cc-briefing { order: 3; margin-top: var(--s4); }
+  .cc-data-note { order: 4; }
+}

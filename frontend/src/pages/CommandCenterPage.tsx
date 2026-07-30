@@ -178,6 +178,16 @@ export function CommandCenterPage() {
 
   const lastRacePodium = lastRaceHubQuery.data?.results ?? []
   const lastRaceName = champHub?.last_race ?? lastPastMeeting?.meeting_name ?? ''
+  const focusNarrative =
+    heroStateKind === 'between'
+      ? lastRaceName
+        ? `${lastRaceName} is in the archive. The next chapter begins at ${focusMeeting?.circuit_short_name || focusMeeting?.meeting_name || 'the next round'}.`
+        : 'The season is between race weekends. Use the timeline to revisit a completed round or look ahead.'
+      : currentSession
+        ? `${currentSession.session_name} is the active chapter of this weekend. Session detail remains available as it lands locally.`
+        : nextSession
+          ? `${nextSession.session_name} is next on the timetable. The weekend rail keeps every session and its local analysis in reach.`
+          : 'The weekend timetable is ready to explore.'
 
   if (seasonsQuery.isLoading) {
     return <div className="page loading-state">loading command center…</div>
@@ -226,7 +236,7 @@ export function CommandCenterPage() {
       <div className="cc-topbar">
         <span className="cc-topbar-label mono">box-box · command center</span>
         <span className="cc-topbar-meta mono">
-          {latestSeason} season · {meetingStats.full}/{meetingStats.total || 0} weekends full
+          {latestSeason} season · weekend desk
         </span>
         <span className="cc-live-pill" data-testid="cc-live-status">
           <span className={`cc-live-dot ${liveActive ? 'live' : ''}`} />
@@ -260,6 +270,26 @@ export function CommandCenterPage() {
           lastRaceSessionKey={lastRaceSessionKey}
           nextMeeting={nextMeetingForHero}
         />
+      )}
+
+      {focusMeeting && (
+        <section className="cc-context" data-testid="cc-circuit-context">
+          <div className="cc-context-decal mono" aria-hidden="true">
+            {countryDecal(focusMeeting)}
+          </div>
+          <div className="cc-context-copy">
+            <span className="cc-context-kicker mono">Circuit context</span>
+            <h2>{focusMeeting.circuit_short_name || focusMeeting.meeting_name}</h2>
+            <p>{focusNarrative}</p>
+          </div>
+          <div className="cc-context-meta mono">
+            <span>{focusMeeting.location || focusMeeting.country_name}</span>
+            <span>{formatGpDateRange(focusMeeting)}</span>
+            <Link to="/preview" className="cc-context-preview">
+              Weekend preview →
+            </Link>
+          </div>
+        </section>
       )}
 
       <div className="cc-dashboard-grid">
@@ -298,7 +328,9 @@ export function CommandCenterPage() {
                       <div className="cc-calendar-accent" aria-hidden="true" />
                       <div className="cc-calendar-top mono">
                         <span className="cc-calendar-round">R{String(index + 1).padStart(2, '0')}</span>
-                        <span className={`cc-cov-dot cc-cov-${weekend?.source ?? 'none'}`} aria-hidden="true" />
+                        <span className={`cc-calendar-status cc-calendar-status-${status}`}>
+                          {status === 'past' ? 'Archive' : status === 'focus' ? 'Now' : 'Ahead'}
+                        </span>
                       </div>
                       <div className="cc-calendar-id">
                         {countryFlag(meeting) && <span className="cc-calendar-flag">{countryFlag(meeting)}</span>}
@@ -404,9 +436,9 @@ export function CommandCenterPage() {
                       </div>
                       <div className="cc-session-name">{session.session_name}</div>
                       <div className="cc-session-time mono">{formatSessionScheduleTime(session.date_start)}</div>
-                      <div className="cc-session-cov mono">
+                      <div className="cc-session-cov mono" title={formatCoverageHint(datasets)}>
                         <span className={`cc-cov-dot cc-cov-${source}`} aria-hidden="true" />
-                        {formatCoverageHint(datasets)}
+                        {source === 'local' ? 'Analysis ready' : formatCoverageHint(datasets)}
                       </div>
                     </Link>
                   )
@@ -416,6 +448,10 @@ export function CommandCenterPage() {
           )}
 
           <PaddockBriefing />
+          <div className="cc-data-note mono" data-testid="cc-data-note">
+            <span className="cc-cov-dot cc-cov-local" aria-hidden="true" />
+            {meetingStats.full}/{meetingStats.total || 0} locally complete · availability is shown per session
+          </div>
         </div>
       </div>
     </div>
@@ -448,4 +484,3 @@ function FormSparkline({ form, color }: { form: number[], color: string }) {
     </svg>
   )
 }
-
