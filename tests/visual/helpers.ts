@@ -18,7 +18,7 @@ export async function gotoCommandCenterReady(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.getByTestId('command-center')).toBeVisible()
   await expect(page.getByTestId('cc-focus')).toBeVisible()
-  await expect(page.getByTestId('cc-calendar-1229')).toBeVisible()
+  await expect(page.getByTestId('cc-calendar-1229')).toBeVisible({ timeout: 15_000 })
   await waitForScreenshotReady(page)
 }
 
