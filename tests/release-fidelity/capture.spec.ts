@@ -1,9 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import {
-  gotoCommandCenterReady,
   gotoLiveEmptyReady,
+  waitForScreenshotReady,
 } from '../visual/helpers'
 
 const version = process.env.RELEASE_FIDELITY_VERSION ?? 'v0.4.0'
@@ -15,17 +15,27 @@ async function capture(page: Page, name: string, project: string): Promise<void>
   await page.screenshot({ fullPage: true, path: join(directory, `${name}.png`) })
 }
 
+async function gotoCommandCenterFidelityReady(page: Page): Promise<void> {
+  await page.goto('/')
+  await expect(page.getByTestId('command-center')).toBeVisible()
+  await expect(page.getByTestId('cc-focus')).toBeVisible()
+  // The seeded full-session card confirms the session rail has rendered.
+  await expect(page.getByTestId('cc-session-9472')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await waitForScreenshotReady(page)
+}
+
 test.describe('release-fidelity candidate captures', () => {
   test('approved screen set', async ({ page }, testInfo) => {
     const project = testInfo.project.name
 
     if (project === 'desktop') {
-      await gotoCommandCenterReady(page)
+      await gotoCommandCenterFidelityReady(page)
       await capture(page, 'weekend-between-races', project)
       await gotoLiveEmptyReady(page)
       await capture(page, 'weekend-live', project)
     } else {
-      await gotoCommandCenterReady(page)
+      await gotoCommandCenterFidelityReady(page)
       await capture(page, 'weekend-between-sessions-mobile', project)
     }
   })
