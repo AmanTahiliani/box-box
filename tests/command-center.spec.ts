@@ -12,6 +12,30 @@ test.describe('Command Center', () => {
     await expect(page.getByTestId('hero-last-race-link')).toBeVisible()
   })
 
+  test('falls back to the local calendar when season metadata fails', async ({ page }) => {
+    await page.route(/\/api\/v1\/meetings(?:\?.*)?$/, async (route) => {
+      const url = new URL(route.request().url())
+      if (url.searchParams.get('year') !== '2025' || url.searchParams.get('source') !== 'openf1') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'season calendar unavailable' }),
+      })
+    })
+
+    await page.goto('/')
+
+    await expect(page.getByTestId('command-center')).toBeVisible()
+    await expect(page.getByTestId('cc-calendar-1229')).toBeVisible()
+    await expect(
+      page.getByText('Using local meetings because the full calendar could not load.'),
+    ).toBeVisible({ timeout: 15_000 })
+  })
+
   test('nav link reaches command center from race hub', async ({ page }) => {
     await page.goto(`/race-hub?session_key=${FULL_SESSION}`)
     await page.getByRole('link', { name: 'Command' }).click()
