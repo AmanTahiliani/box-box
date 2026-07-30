@@ -18,12 +18,7 @@ export async function gotoCommandCenterReady(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.getByTestId('command-center')).toBeVisible()
   await expect(page.getByTestId('cc-focus')).toBeVisible()
-  await expect(page.getByTestId('cc-session-9472')).toBeVisible()
-  // The e2e stack runs with an unreachable OpenF1 base URL, so wait for the
-  // season-calendar query to settle on its local fallback before screenshotting.
-  await expect(
-    page.getByText('Using local meetings because the full calendar could not load.'),
-  ).toBeVisible()
+  await expect(page.getByTestId('cc-calendar-1229')).toBeVisible()
   await waitForScreenshotReady(page)
 }
 
