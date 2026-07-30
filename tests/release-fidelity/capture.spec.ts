@@ -19,8 +19,7 @@ async function gotoCommandCenterFidelityReady(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.getByTestId('command-center')).toBeVisible()
   await expect(page.getByTestId('cc-focus')).toBeVisible()
-  // The seeded full-session card confirms the session rail has rendered.
-  await expect(page.getByTestId('cc-session-9472')).toBeVisible()
+  await expect(page.getByTestId('cc-calendar-1229')).toBeVisible()
   await page.waitForLoadState('networkidle')
   await waitForScreenshotReady(page)
 }
