@@ -29,6 +29,8 @@ const SOURCE_DISPLAY: Record<string, string> = {
   'f1-youtube': 'F1 YouTube',
 }
 
+const PREVIEW_LIMIT = 10
+
 export function PaddockBriefing() {
   const now = useMemo(() => new Date(), [])
 
@@ -76,7 +78,9 @@ export function PaddockBriefing() {
   const sinceLabel = sinceLastLabel(meetings, now)
 
   const unreadCount = news?.filter((i) => !i.read_at).length ?? 0
-  const preview = sinceItems.length > 0 ? sinceItems.slice(0, 5) : (tagged.slice(0, 5))
+  // The strip flexes to the bottom of the dashboard column, so offer more than
+  // fits and let the overflow scroll rather than leaving the column short.
+  const preview = sinceItems.length > 0 ? sinceItems.slice(0, PREVIEW_LIMIT) : tagged.slice(0, PREVIEW_LIMIT)
 
   return (
     <section className="cc-briefing" data-testid="paddock-briefing">

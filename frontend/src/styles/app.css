@@ -1865,13 +1865,22 @@ a { color: inherit; text-decoration: none; }
     display: grid;
     grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
     gap: var(--s6);
-    align-items: start;
+    /* Stretch, not start: whichever column is taller sets the row height and the
+       other fills down to it, so the two never end on different baselines. */
+    align-items: stretch;
+  }
+
+  .cc-dashboard-panel {
+    flex: 1;
+    min-height: 0;
   }
 }
 
 .cc-dashboard-main {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .cc-dashboard-panel {
@@ -3360,6 +3369,8 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: var(--s3);
+  flex: 1;
+  min-height: 0;
 }
 
 .cc-briefing .sec-header {
@@ -3402,6 +3413,14 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: 1px;
+  /* Takes the column's leftover height; extra headlines scroll instead of
+     pushing the panel past the sidebar. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
 
 .cc-brief-item {
