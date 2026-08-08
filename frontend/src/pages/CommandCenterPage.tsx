@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
@@ -56,6 +56,9 @@ function pickAnalysisSession(weekend: Weekend | undefined): WeekendSession | und
 
 export function CommandCenterPage() {
   const [now, setNow] = useState(() => Date.now())
+  const calendarScrollRef = useRef<HTMLDivElement | null>(null)
+  const focusCardRef = useRef<HTMLAnchorElement | null>(null)
+  const railTakenOver = useRef(false)
 
   const seasonsQuery = useQuery({
     queryKey: ['seasons'],
@@ -198,6 +201,56 @@ export function CommandCenterPage() {
           ? `${nextSession.session_name} is next on the timetable. The weekend rail keeps every session and its local analysis in reach.`
           : 'The weekend timetable is ready to explore.'
 
+  // Park the calendar rail on the GP in focus so it lands centred, instead of
+  // making the reader scroll past every round that has already happened.
+  const focusMeetingKey = focusMeeting?.meeting_key
+  useEffect(() => {
+    railTakenOver.current = false
+  }, [focusMeetingKey])
+
+  useEffect(() => {
+    const rail = calendarScrollRef.current
+    const card = focusCardRef.current
+    if (!rail || !card) return
+
+    const sync = () => {
+      const overflows = rail.scrollWidth > rail.clientWidth + 1
+      rail.classList.toggle('is-scrollable', overflows)
+      if (!overflows || railTakenOver.current) return
+      const railBox = rail.getBoundingClientRect()
+      const cardBox = card.getBoundingClientRect()
+      const offset = rail.scrollLeft + (cardBox.left - railBox.left)
+      const target = offset - (rail.clientWidth - cardBox.width) / 2
+      rail.scrollLeft = Math.max(0, Math.min(target, rail.scrollWidth - rail.clientWidth))
+    }
+
+    sync()
+
+    const takeOver = () => {
+      railTakenOver.current = true
+    }
+    rail.addEventListener('wheel', takeOver, { passive: true })
+    rail.addEventListener('touchstart', takeOver, { passive: true })
+    rail.addEventListener('pointerdown', takeOver)
+    rail.addEventListener('keydown', takeOver)
+
+    // The strip reflows as fonts load and as the column width changes, so keep
+    // re-centring until the reader takes the rail over themselves.
+    let observer: ResizeObserver | undefined
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(sync)
+      observer.observe(rail)
+    }
+
+    return () => {
+      observer?.disconnect()
+      rail.removeEventListener('wheel', takeOver)
+      rail.removeEventListener('touchstart', takeOver)
+      rail.removeEventListener('pointerdown', takeOver)
+      rail.removeEventListener('keydown', takeOver)
+    }
+  }, [focusMeetingKey, seasonMeetings.length])
+
   if (seasonsQuery.isLoading) {
     return <div className="page loading-state">loading command center…</div>
   }
@@ -317,7 +370,7 @@ export function CommandCenterPage() {
                   {seasonMeetings.length} rounds · {meetingStats.full}/{meetingStats.total || 0} local
                 </span>
               </div>
-              <div className="cc-calendar-grid" role="list">
+              <div className="cc-calendar-grid" role="list" ref={calendarScrollRef} data-testid="cc-calendar-rail">
                 {seasonMeetings.map((meeting, index) => {
                   const weekend = weekendsByKey.get(meeting.meeting_key)
                   const target = pickAnalysisSession(weekend)
@@ -327,6 +380,7 @@ export function CommandCenterPage() {
                   return (
                     <Link
                       key={meeting.meeting_key}
+                      ref={status === 'focus' ? focusCardRef : undefined}
                       to="/race-hub"
                       search={targetKey ? { session_key: targetKey } : {}}
                       className={`cc-calendar-card cc-calendar-${status}`}
@@ -359,6 +413,7 @@ export function CommandCenterPage() {
               )}
             </section>
             )}
+            <PaddockBriefing />
           </div>
         </div>
 
@@ -456,7 +511,6 @@ export function CommandCenterPage() {
             </section>
           )}
 
-          <PaddockBriefing />
           <div className="cc-data-note mono" data-testid="cc-data-note">
             <span className="cc-cov-dot cc-cov-local" aria-hidden="true" />
             {meetingStats.full}/{meetingStats.total || 0} locally complete · availability is shown per session
