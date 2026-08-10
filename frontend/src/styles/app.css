@@ -4861,7 +4861,15 @@ a { color: inherit; text-decoration: none; }
   padding: var(--s3) 0 var(--s4);
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  /* No native scrollbar: it sits inside the edge mask below, so it renders as a
+     half-faded light slab on the dark panel. The strip opens centred on the
+     current GP and the fades mark the overflow, so nothing is lost by hiding it. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.cc-calendar-grid::-webkit-scrollbar {
+  display: none;
 }
 
 /* The strip opens centred on the GP in focus, so rounds run off both edges —
