@@ -125,6 +125,42 @@ func TestDetectDecisiveSwingPersistsToFinish(t *testing.T) {
 	}
 }
 
+func TestDetectSafetyCarTrimmedForFinishRewritesTitle(t *testing.T) {
+	rcs := []RaceControl{
+		rc(3, models.CategorySafetyCar, "", "SAFETY CAR DEPLOYED"),
+		rc(72, models.CategoryFlag, models.FlagChequered, "CHEQUERED FLAG"),
+	}
+
+	got := Detect(rcs, nil, testLaps(72, nil), 72)
+
+	sc := findKind(got, KindSafetyCar)
+	if sc == nil {
+		t.Fatalf("chapters = %+v, want safety car", got)
+	}
+	if sc.StartLap != 3 || sc.EndLap != 70 || sc.Title != "Safety Car (L3-L70)" {
+		t.Fatalf("safety car = %+v, want StartLap=3 EndLap=70 Title=%q", *sc, "Safety Car (L3-L70)")
+	}
+	if wantEnd := lapTime(71); sc.EndTime != wantEnd {
+		t.Fatalf("safety car EndTime = %q, want lap-index end of L70 (%q)", sc.EndTime, wantEnd)
+	}
+
+	fin := findKind(got, KindFinish)
+	if fin == nil || fin.StartLap != 71 || fin.EndLap != 72 {
+		t.Fatalf("finish = %+v, want L71-L72", got)
+	}
+
+	for i := 1; i < len(got); i++ {
+		if got[i].StartLap <= got[i-1].EndLap {
+			t.Fatalf("chapters overlap at %d: %+v then %+v", i, got[i-1], got[i])
+		}
+	}
+
+	headed := ApplyHeadlines(got, nil, rcs, 0)
+	if scH := findKind(headed, KindSafetyCar); scH == nil || scH.Headline != "Safety Car (L3-L70)" {
+		t.Fatalf("headline = %+v, want fallback to resolved title Safety Car (L3-L70)", headed)
+	}
+}
+
 func TestDetectFlagPeriodsWinOverConflictingChapters(t *testing.T) {
 	pitOuts := map[int][]int{
 		12: {1, 2},
