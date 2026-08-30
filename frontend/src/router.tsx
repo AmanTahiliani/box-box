@@ -21,7 +21,9 @@ const rootRoute = createRootRoute({
   component: () => (
     <>
       <Nav />
-      <Outlet />
+      <main>
+        <Outlet />
+      </main>
     </>
   ),
 })
