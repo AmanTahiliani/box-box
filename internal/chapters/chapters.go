@@ -72,7 +72,7 @@ func Detect(rc []RaceControl, positions []PositionSample, laps []Lap, totalLaps 
 	chapters = append(chapters, detectDecisiveSwings(positions, lapIndex, totalLaps)...)
 	chapters = append(chapters, detectFinish(rc, lapIndex, totalLaps))
 
-	return resolveConflicts(chapters)
+	return resolveConflicts(chapters, lapIndex)
 }
 
 func normalizeTotalLaps(totalLaps int, laps []Lap, rc []RaceControl) int {
@@ -321,7 +321,7 @@ func detectPitPhases(laps []Lap, idx lapIndex) []Chapter {
 		}
 		ch := Chapter{
 			Kind:          KindPitPhase,
-			Title:         fmt.Sprintf("Pit phase (L%d-L%d)", start, end),
+			Title:         pitPhaseTitle(start, end),
 			StartLap:      start,
 			EndLap:        end,
 			StartTime:     idx.lapStart(start),
@@ -339,7 +339,7 @@ func detectPitPhases(laps []Lap, idx lapIndex) []Chapter {
 				drivers[driver] = true
 			}
 			last.DriverNumbers = sortedDriverNumbers(drivers)
-			last.Title = fmt.Sprintf("Pit phase (L%d-L%d)", last.StartLap, last.EndLap)
+			last.Title = pitPhaseTitle(last.StartLap, last.EndLap)
 			continue
 		}
 		windows = append(windows, ch)
@@ -479,7 +479,7 @@ func detectFinish(rc []RaceControl, idx lapIndex, totalLaps int) Chapter {
 	}
 	return Chapter{
 		Kind:      KindFinish,
-		Title:     fmt.Sprintf("Finish (L%d-L%d)", startLap, finishLap),
+		Title:     finishTitle(startLap, finishLap),
 		StartLap:  startLap,
 		EndLap:    finishLap,
 		StartTime: idx.lapStart(startLap),
@@ -487,7 +487,31 @@ func detectFinish(rc []RaceControl, idx lapIndex, totalLaps int) Chapter {
 	}
 }
 
-func resolveConflicts(chapters []Chapter) []Chapter {
+func pitPhaseTitle(startLap, endLap int) string {
+	return fmt.Sprintf("Pit phase (L%d-L%d)", startLap, endLap)
+}
+
+func finishTitle(startLap, endLap int) string {
+	return fmt.Sprintf("Finish (L%d-L%d)", startLap, endLap)
+}
+
+// titleForResolved rebuilds range-bearing titles from the final StartLap/EndLap
+// after conflict resolution. Flag and pit-phase formatters are reused so stale
+// pre-trim strings are never parsed.
+func titleForResolved(ch Chapter) string {
+	switch ch.Kind {
+	case KindSafetyCar, KindVirtualSafetyCar, KindRedFlag:
+		return flagTitle(ch.Kind, ch.StartLap, ch.EndLap)
+	case KindPitPhase:
+		return pitPhaseTitle(ch.StartLap, ch.EndLap)
+	case KindFinish:
+		return finishTitle(ch.StartLap, ch.EndLap)
+	default:
+		return ch.Title
+	}
+}
+
+func resolveConflicts(chapters []Chapter, idx lapIndex) []Chapter {
 	normalized := make([]Chapter, 0, len(chapters))
 	for _, ch := range chapters {
 		if ch.StartLap <= 0 {
@@ -528,6 +552,7 @@ func resolveConflicts(chapters []Chapter) []Chapter {
 		if priority(ch.Kind) > priority(last.Kind) {
 			if last.StartLap < ch.StartLap {
 				last.EndLap = ch.StartLap - 1
+				last.EndTime = idx.lapEnd(last.EndLap)
 				out = append(out, ch)
 			} else {
 				*last = ch
@@ -540,6 +565,9 @@ func resolveConflicts(chapters []Chapter) []Chapter {
 				out = append(out, ch)
 			}
 		}
+	}
+	for i := range out {
+		out[i].Title = titleForResolved(out[i])
 	}
 	return out
 }
