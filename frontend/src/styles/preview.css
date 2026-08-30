@@ -203,6 +203,47 @@
   stroke-linejoin: round;
 }
 
+.preview-track-fallback {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--s2);
+  min-height: 180px;
+  padding: var(--s5);
+}
+
+.preview-track-fallback-glyph {
+  width: 88px;
+  height: 52px;
+  margin-bottom: var(--s2);
+  border: 2px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 42% 50% 46% 54%;
+}
+
+.preview-track-fallback-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.preview-track-fallback-place {
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.preview-track-fallback-hint {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-3);
+  max-width: 22rem;
+  margin: var(--s2) 0 0;
+}
+
 .preview-podium {
   display: flex;
   flex-direction: column;
