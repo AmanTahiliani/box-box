@@ -58,35 +58,67 @@ function SectionState({
   return <>{children}</>
 }
 
+function circuitIdentity(meeting: Meeting): { name: string; place: string } {
+  const name = meeting.circuit_short_name?.trim() || meeting.meeting_name
+  const location = meeting.location?.trim() ?? ''
+  const country = meeting.country_name?.trim() ?? ''
+  const parts: string[] = []
+  if (location) parts.push(location)
+  if (country && country !== location) parts.push(country)
+  return { name, place: parts.join(' · ') }
+}
+
 function TrackOutlineCard({
+  meeting,
   outline,
   loading,
   error,
   accent,
 }: {
+  meeting: Meeting
   outline: TrackOutline | null | undefined
   loading: boolean
   error: Error | null
   accent: string
 }) {
   const outlinePath = useMemo(() => buildOutlinePath(outline?.points ?? []), [outline])
+  const identity = circuitIdentity(meeting)
+
+  let body: ReactNode
+  if (loading) {
+    body = <div className="preview-section-state">Loading…</div>
+  } else if (error) {
+    body = (
+      <div className="preview-section-state error">
+        {error instanceof Error ? error.message : 'Failed to load'}
+      </div>
+    )
+  } else if (outlinePath) {
+    body = (
+      <div className="preview-track-stage" style={{ ['--preview-accent' as string]: accent }}>
+        <svg className="preview-track-svg" viewBox="0 0 100 100" role="img" aria-label="Circuit outline">
+          <path className="preview-track-shadow" d={outlinePath} />
+          <path className="preview-track-outline" d={outlinePath} />
+        </svg>
+      </div>
+    )
+  } else {
+    body = (
+      <div className="preview-track-fallback" data-testid="preview-track-fallback">
+        <div className="preview-track-fallback-glyph" aria-hidden />
+        <p className="preview-track-fallback-name">{identity.name}</p>
+        {identity.place && <p className="preview-track-fallback-place">{identity.place}</p>}
+        <p className="preview-track-fallback-hint">
+          A GPS track outline is not available in the local cache.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <section className="preview-card" data-testid="preview-track-card">
       <h2 className="preview-card-title">Circuit</h2>
-      <SectionState
-        loading={loading}
-        error={error}
-        empty={!outline || !outlinePath}
-        emptyMessage="Track outline unavailable for this circuit"
-      >
-        <div className="preview-track-stage" style={{ ['--preview-accent' as string]: accent }}>
-          <svg className="preview-track-svg" viewBox="0 0 100 100" role="img" aria-label="Circuit outline">
-            <path className="preview-track-shadow" d={outlinePath} />
-            <path className="preview-track-outline" d={outlinePath} />
-          </svg>
-        </div>
-      </SectionState>
+      {body}
     </section>
   )
 }
@@ -408,6 +440,7 @@ export function RacePreviewPage() {
 
       <div className="preview-grid">
         <TrackOutlineCard
+          meeting={previewMeeting}
           outline={trackOutlineQuery.data}
           loading={trackOutlineQuery.isLoading}
           error={trackOutlineQuery.isError ? (trackOutlineQuery.error as Error) : null}

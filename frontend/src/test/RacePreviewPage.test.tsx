@@ -223,6 +223,8 @@ describe('RacePreviewPage', () => {
     expect(screen.getByTestId('preview-header')).toHaveTextContent('Monaco')
     expect(screen.getByTestId('preview-schedule')).toHaveTextContent('FP1')
     expect(screen.getByTestId('preview-track-card')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Circuit outline' })).toBeInTheDocument()
+    expect(screen.queryByTestId('preview-track-fallback')).not.toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByTestId('preview-last-year-card')).toHaveTextContent('VER')
@@ -273,5 +275,75 @@ describe('RacePreviewPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('preview-last-year-card')).toHaveTextContent('First time on the calendar')
     })
+
+    const fallback = screen.getByTestId('preview-track-fallback')
+    expect(screen.getByTestId('preview-track-card')).toContainElement(fallback)
+    expect(fallback).toHaveTextContent('Monaco')
+    expect(fallback).toHaveTextContent('A GPS track outline is not available in the local cache.')
+    expect(screen.queryByRole('img', { name: 'Circuit outline' })).not.toBeInTheDocument()
+  })
+
+  it('shows a designed circuit fallback when the track outline is unavailable', async () => {
+    const italianGp: Meeting = {
+      ...upcomingMeeting,
+      meeting_name: 'Italian Grand Prix',
+      meeting_official_name: 'Formula 1 Pirelli Gran Premio d\'Italia',
+      location: 'Monza',
+      country_name: 'Italy',
+      country_code: 'ITA',
+      circuit_short_name: 'Monza',
+    }
+
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2099) return [italianGp]
+      if (year === 2098) return [{ ...italianGp, meeting_key: 90, year: 2098 }]
+      return []
+    })
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) return sessions
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchTrackOutline.mockResolvedValue(null)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-track-fallback')).toBeInTheDocument()
+    })
+
+    const card = screen.getByTestId('preview-track-card')
+    const fallback = screen.getByTestId('preview-track-fallback')
+    expect(card).toContainElement(fallback)
+    expect(card).toHaveTextContent('Circuit')
+    expect(fallback).toHaveTextContent('Monza')
+    expect(fallback).toHaveTextContent('Italy')
+    expect(fallback).toHaveTextContent('A GPS track outline is not available in the local cache.')
+    expect(fallback).not.toHaveTextContent(/unknown/i)
+    expect(screen.queryByRole('img', { name: 'Circuit outline' })).not.toBeInTheDocument()
+    expect(card).not.toHaveTextContent('Track outline unavailable for this circuit')
+  })
+
+  it('keeps a thrown outline request distinct from the designed unavailable state', async () => {
+    mockFetchMeetings.mockImplementation(async (year: number) => {
+      if (year === 2099) return [upcomingMeeting]
+      if (year === 2098) return [priorMeeting]
+      return []
+    })
+    mockFetchSessions.mockImplementation(async (meetingKey: number) => {
+      if (meetingKey === 100) return sessions
+      if (meetingKey === 90) return [priorRaceSession]
+      return []
+    })
+    mockFetchTrackOutline.mockRejectedValue(new Error('outline request failed'))
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-track-card')).toHaveTextContent('outline request failed')
+    })
+
+    expect(screen.queryByTestId('preview-track-fallback')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Circuit outline' })).not.toBeInTheDocument()
   })
 })
