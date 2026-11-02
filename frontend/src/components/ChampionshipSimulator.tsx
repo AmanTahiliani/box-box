@@ -10,6 +10,7 @@ import {
   projectStandings,
 } from '../lib/simulator'
 import type { Scenario } from '../lib/simulator'
+import { maxPointsLeft } from '../lib/titleMath'
 
 const STORAGE_PREFIX = 'box-box.champ.sim'
 
@@ -60,8 +61,8 @@ export function ChampionshipSimulator({ hub }: { hub: ChampionshipHub }) {
   }, [hub.season, scenario])
 
   const projected = useMemo(
-    () => projectStandings(hub.drivers, scenario, hub.rounds_left),
-    [hub.drivers, scenario, hub.rounds_left],
+    () => projectStandings(hub.drivers, scenario, hub.rounds_left, maxPointsLeft(hub)),
+    [hub, scenario],
   )
 
   if (hub.rounds_left <= 0 || hub.drivers.length === 0 || scenario.length === 0) {

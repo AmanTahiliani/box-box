@@ -10,6 +10,7 @@ import { Meaning } from '../components/Meaning'
 import { TeammateH2H } from '../components/TeammateH2H'
 import { teammatePairs } from '../lib/h2h'
 import { pointsGapMeaning } from '../lib/meaning'
+import { decidedChampion, maxPointsLeft } from '../lib/titleMath'
 
 type View = 'drivers' | 'constructors' | 'progression' | 'rivalry' | 'simulator'
 
@@ -130,7 +131,9 @@ interface BodyProps {
 function ChampionshipBody({ hub, view, setView }: BodyProps) {
   const { drivers, teams } = hub
   const leader = drivers[0]
-  const remaining = hub.rounds_left * 25
+  const remaining = maxPointsLeft(hub)
+  const champion = decidedChampion(drivers, remaining)
+  const sprintsLeft = hub.sprints_left ?? 0
 
   const enriched = useMemo<EnrichedDriver[]>(
     () =>
@@ -149,21 +152,31 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           spark: sparkPoints(d.form),
           h2h: `${d.teammate_wins}–${d.teammate_losses}`,
           h2hWin: d.teammate_wins >= d.teammate_losses,
-          aliveLabel: i === 0 ? 'LEADS' : alive ? 'ALIVE' : 'OUT',
-          aliveColor: i === 0 ? GOLD : alive ? 'var(--green)' : 'var(--text-3)',
+          aliveLabel: i === 0 ? (champion ? 'CHAMPION' : 'LEADS') : alive && !champion ? 'ALIVE' : 'OUT',
+          aliveColor: i === 0 ? GOLD : alive && !champion ? 'var(--green)' : 'var(--text-3)',
         }
       }),
-    [drivers, leader, remaining],
+    [drivers, leader, remaining, champion],
   )
 
   const aliveCount = enriched.filter((e) => e.aliveLabel === 'ALIVE' || e.aliveLabel === 'LEADS').length
 
-  const titleMath =
-    `${aliveCount} driver${aliveCount === 1 ? '' : 's'} can still mathematically win the title. ` +
-    `With ${hub.rounds_left} round${hub.rounds_left === 1 ? '' : 's'} left (max ${remaining} pts), ` +
-    `${leader.name_acronym} leads ` +
+  const roundsLeftText = `${hub.rounds_left} round${hub.rounds_left === 1 ? '' : 's'}`
+  const sprintsLeftText = sprintsLeft > 0 ? ` + ${sprintsLeft} sprint${sprintsLeft === 1 ? '' : 's'}` : ''
+  const leadText =
     (drivers[1] ? `${drivers[1].name_acronym} by ${fmtPts(leader.points - drivers[1].points)}` : 'the field') +
-    (drivers[2] ? ` and ${drivers[2].name_acronym} by ${fmtPts(leader.points - drivers[2].points)}.` : '.')
+    (drivers[2] ? ` and ${drivers[2].name_acronym} by ${fmtPts(leader.points - drivers[2].points)}` : '')
+
+  const titleMath = champion
+    ? hub.rounds_left > 0
+      ? `${champion.full_name || champion.name_acronym} has clinched the ${hub.season} Drivers' Championship. ` +
+        `${champion.name_acronym} leads ${leadText} with only ${fmtPts(remaining)} pts left ` +
+        `(${roundsLeftText}${sprintsLeftText}).`
+      : `${champion.full_name || champion.name_acronym} is the ${hub.season} World Champion, ` +
+        `finishing ahead of ${leadText}.`
+    : `${aliveCount} driver${aliveCount === 1 ? '' : 's'} can still mathematically win the title. ` +
+      `With ${roundsLeftText}${sprintsLeftText} left (max ${fmtPts(remaining)} pts), ` +
+      `${leader.name_acronym} leads ${leadText}.`
 
   const topTeam = teams[0]
   const teamGap = teams[1] ? topTeam.points - teams[1].points : 0
@@ -177,7 +190,9 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
       sub: teams[1] ? `+${fmtPts(teamGap)} ahead` : 'Sole entry',
       color: '#fff',
     },
-    { label: 'Title Fight', value: `${aliveCount} alive`, sub: `${hub.rounds_left} rounds remain`, color: 'var(--red)' },
+    champion
+      ? { label: 'Champion', value: champion.name_acronym, sub: hub.rounds_left > 0 ? `Clinched · ${roundsLeftText} to spare` : 'Season complete', color: GOLD }
+      : { label: 'Title Fight', value: `${aliveCount} alive`, sub: `${roundsLeftText} remain`, color: 'var(--red)' },
     { label: 'Season Progress', value: `${seasonPct}%`, sub: `Round ${hub.round}/${hub.total_rounds}`, color: '#fff' },
   ]
 
@@ -254,6 +269,7 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
           leaderPoints={leader.points}
           titleMath={titleMath}
           roundsLeft={hub.rounds_left}
+          maxPointsLeft={remaining}
           drivers={drivers}
           season={hub.season}
         />
@@ -286,6 +302,7 @@ function DriversView({
   leaderPoints,
   titleMath,
   roundsLeft,
+  maxPointsLeft,
   drivers,
   season,
 }: {
@@ -293,6 +310,7 @@ function DriversView({
   leaderPoints: number
   titleMath: string
   roundsLeft: number
+  maxPointsLeft: number
   drivers: ChampHubDriver[]
   season: number
 }) {
@@ -423,7 +441,7 @@ function DriversView({
                 <td className="r mono champ-td-muted">{e.gapLeader}</td>
                 <td className="r mono champ-td-dim">
                   {(() => {
-                    const gapAnnotation = pointsGapMeaning(e.gapAheadNum, roundsLeft, e.driverAhead)
+                    const gapAnnotation = pointsGapMeaning(e.gapAheadNum, roundsLeft, e.driverAhead, maxPointsLeft)
                     return (
                       <Meaning
                         value={e.gapAhead}

@@ -697,14 +697,19 @@ type champHubTeam struct {
 }
 
 type champHubResponse struct {
-	Season      int              `json:"season"`
-	Round       int              `json:"round"`
-	TotalRounds int              `json:"total_rounds"`
-	RoundsLeft  int              `json:"rounds_left"`
-	LastRace    string           `json:"last_race"`
-	RoundLabels []string         `json:"round_labels"`
-	Drivers     []champHubDriver `json:"drivers"`
-	Teams       []champHubTeam   `json:"teams"`
+	Season      int `json:"season"`
+	Round       int `json:"round"`
+	TotalRounds int `json:"total_rounds"`
+	RoundsLeft  int `json:"rounds_left"`
+	// SprintsLeft counts sprint sessions still to run in the remaining rounds.
+	SprintsLeft int `json:"sprints_left"`
+	// MaxPointsLeft is the most points any one driver can still score
+	// (race wins plus sprint wins). It is the bound for title math.
+	MaxPointsLeft float64          `json:"max_points_left"`
+	LastRace      string           `json:"last_race"`
+	RoundLabels   []string         `json:"round_labels"`
+	Drivers       []champHubDriver `json:"drivers"`
+	Teams         []champHubTeam   `json:"teams"`
 }
 
 // meetingRace bundles a GP meeting with its (already-fetched) race results and grid.
@@ -713,7 +718,16 @@ type meetingRace struct {
 	RaceSessionKey int
 	Results        []models.SessionResult
 	Grid           []models.StartingGrid
+	HasSprint      bool // meeting has a non-cancelled Sprint session
+	SprintDone     bool // that sprint already has results
 }
+
+// Maximum points one driver can score per race / sprint under the current
+// (2025+) regulations — no fastest-lap point.
+const (
+	maxRacePoints   = 25
+	maxSprintPoints = 8
+)
 
 // champHubWorkers bounds the concurrent per-meeting fetches for the hub.
 const champHubWorkers = 5
@@ -880,6 +894,8 @@ func (s *Server) localChampionshipHub(year int) (champHubResponse, bool, error) 
 			RaceSessionKey: race.RaceSessionKey,
 			Results:        race.Results,
 			Grid:           race.Grid,
+			HasSprint:      race.HasSprint,
+			SprintDone:     race.SprintDone,
 		})
 	}
 	return aggregateChampionshipHub(year, races, inputs.Champ, inputs.Teams, inputs.DriverMap), true, nil
@@ -943,6 +959,14 @@ func fetchSeasonRaces(client *api.OpenF1Client, year int) (races []meetingRace, 
 		return nil, false, err
 	}
 	sort.Slice(meetings, func(i, j int) bool { return meetings[i].DateStart < meetings[j].DateStart })
+	active := meetings[:0:0]
+	for _, m := range meetings {
+		// Cancelled meetings are not championship rounds.
+		if !m.IsCancelled {
+			active = append(active, m)
+		}
+	}
+	meetings = active
 
 	var failed atomic.Bool
 	races = fetchMeetingRaces(meetings, champHubWorkers, func(m models.Meeting) (meetingRace, bool) {
@@ -952,10 +976,15 @@ func fetchSeasonRaces(client *api.OpenF1Client, year int) (races []meetingRace, 
 			return meetingRace{}, false
 		}
 		raceKey := 0
+		sprintKey := 0
 		for _, sess := range sessions {
-			if strings.EqualFold(sess.SessionName, "Race") {
+			if sess.IsCancelled {
+				continue
+			}
+			if strings.EqualFold(sess.SessionName, "Race") && raceKey == 0 {
 				raceKey = sess.SessionKey
-				break
+			} else if strings.EqualFold(sess.SessionName, "Sprint") && sprintKey == 0 {
+				sprintKey = sess.SessionKey
 			}
 		}
 		if raceKey == 0 {
@@ -973,7 +1002,19 @@ func fetchSeasonRaces(client *api.OpenF1Client, year int) (races []meetingRace, 
 		if rerr != nil || gerr != nil {
 			failed.Store(true)
 		}
-		return meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}, true
+		mr := meetingRace{Meeting: m, RaceSessionKey: raceKey, Results: results, Grid: grid}
+		if sprintKey != 0 {
+			mr.HasSprint = true
+			if len(results) > 0 {
+				// The sprint always runs before the race.
+				mr.SprintDone = true
+			} else if sprint, serr := client.GetSessionResult(sprintKey); serr == nil {
+				mr.SprintDone = len(sprint) > 0
+			}
+			// On error leave SprintDone false: overstating the points still
+			// available keeps title math conservative (never a false clinch).
+		}
+		return mr, true
 	})
 	return races, failed.Load(), nil
 }
@@ -1027,11 +1068,15 @@ func aggregateChampionshipHub(
 	}
 
 	completed := 0
+	sprintsLeft := 0
 	lastRace := ""
 	roundPoints := []map[int]float64{} // per completed round: driver -> race points
 
 	for _, mr := range races {
 		if len(mr.Results) == 0 {
+			if mr.HasSprint && !mr.SprintDone {
+				sprintsLeft++
+			}
 			continue // round not completed yet
 		}
 		completed++
@@ -1177,15 +1222,18 @@ func aggregateChampionshipHub(
 	}
 
 	totalRounds := len(races)
+	roundsLeft := totalRounds - completed
 	return champHubResponse{
-		Season:      year,
-		Round:       completed,
-		TotalRounds: totalRounds,
-		RoundsLeft:  totalRounds - completed,
-		LastRace:    lastRace,
-		RoundLabels: roundLabels,
-		Drivers:     drivers,
-		Teams:       teamsOut,
+		Season:        year,
+		Round:         completed,
+		TotalRounds:   totalRounds,
+		RoundsLeft:    roundsLeft,
+		SprintsLeft:   sprintsLeft,
+		MaxPointsLeft: float64(maxRacePoints*roundsLeft + maxSprintPoints*sprintsLeft),
+		LastRace:      lastRace,
+		RoundLabels:   roundLabels,
+		Drivers:       drivers,
+		Teams:         teamsOut,
 	}
 }
 

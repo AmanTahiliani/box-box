@@ -428,3 +428,41 @@ func TestGetChampionshipInputsIncludesSprintPoints(t *testing.T) {
 		t.Fatalf("Teams = %+v, want Red Bull 33", inputs.Teams)
 	}
 }
+
+func TestGetChampionshipInputsSkipsCancelledAndFlagsPendingSprint(t *testing.T) {
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	upsert := func(m store.Meeting, sessions ...store.Session) {
+		t.Helper()
+		if err := svc.store.UpsertMeeting(m); err != nil {
+			t.Fatalf("UpsertMeeting() error = %v", err)
+		}
+		for _, s := range sessions {
+			if err := svc.store.UpsertSession(s); err != nil {
+				t.Fatalf("UpsertSession() error = %v", err)
+			}
+		}
+	}
+	upsert(store.Meeting{MeetingKey: 1230, MeetingName: "Cancelled GP", Year: 2025, DateStart: "2025-06-01T00:00:00+00:00", IsCancelled: true},
+		store.Session{SessionKey: 9480, MeetingKey: 1230, SessionName: "Race", SessionType: "Race", DateStart: "2025-06-01T13:00:00+00:00", IsCancelled: true})
+	upsert(store.Meeting{MeetingKey: 1231, MeetingName: "Sprint GP", Year: 2025, DateStart: "2025-07-01T00:00:00+00:00"},
+		store.Session{SessionKey: 9490, MeetingKey: 1231, SessionName: "Sprint", SessionType: "Race", DateStart: "2025-07-02T13:00:00+00:00"},
+		store.Session{SessionKey: 9491, MeetingKey: 1231, SessionName: "Race", SessionType: "Race", DateStart: "2025-07-03T13:00:00+00:00"})
+
+	inputs, err := svc.GetChampionshipInputs(2025)
+	if err != nil {
+		t.Fatalf("GetChampionshipInputs() error = %v", err)
+	}
+	if len(inputs.Races) != 2 {
+		t.Fatalf("Races = %d, want 2 (cancelled meeting skipped)", len(inputs.Races))
+	}
+	for _, r := range inputs.Races {
+		if r.Meeting.IsCancelled {
+			t.Fatalf("cancelled meeting %q counted as a round", r.Meeting.MeetingName)
+		}
+	}
+	if sprint := inputs.Races[1]; !sprint.HasSprint || sprint.SprintDone {
+		t.Fatalf("sprint round = HasSprint %v SprintDone %v, want true/false", sprint.HasSprint, sprint.SprintDone)
+	}
+}

@@ -118,6 +118,31 @@ describe('ChampionshipPage', () => {
     expect(screen.getAllByText('~10 pts/round').length).toBeGreaterThan(0)
   })
 
+  it('declares the champion once the gap exceeds the points left', async () => {
+    // VER leads NOR by 40 with one round (25 pts) left and no sprints.
+    mockFetchHub.mockResolvedValue({ ...hub, round: 9, rounds_left: 1, sprints_left: 0, max_points_left: 25 })
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship')).toBeInTheDocument())
+
+    const titleMath = screen.getByTestId('champ-titlemath')
+    expect(titleMath).toHaveTextContent('Max Verstappen has clinched the 2025 Drivers\' Championship')
+    expect(titleMath).not.toHaveTextContent('can still mathematically win')
+    expect(screen.getByText('CHAMPION')).toBeInTheDocument()
+    expect(screen.queryByText('ALIVE')).not.toBeInTheDocument()
+  })
+
+  it('keeps the title open while sprint points can still close the gap', async () => {
+    // 40-pt gap vs two rounds + a sprint (58 pts max): still open.
+    mockFetchHub.mockResolvedValue({ ...hub, round: 8, rounds_left: 2, sprints_left: 1, max_points_left: 58 })
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('championship')).toBeInTheDocument())
+
+    expect(screen.getByTestId('champ-titlemath')).toHaveTextContent('2 rounds + 1 sprint left (max 58 pts)')
+    expect(screen.queryByText('CHAMPION')).not.toBeInTheDocument()
+  })
+
   it('switches to constructors and progression views', async () => {
     renderPage()
 

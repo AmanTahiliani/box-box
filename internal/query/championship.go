@@ -15,6 +15,11 @@ type ChampionshipRace struct {
 	RaceSessionKey int
 	Results        []models.SessionResult
 	Grid           []models.StartingGrid
+	// HasSprint reports whether the meeting has a (non-cancelled) Sprint
+	// session; SprintDone whether that sprint already has results. Together
+	// they let the hub count the sprint points still available.
+	HasSprint  bool
+	SprintDone bool
 }
 
 // ChampionshipInputs are local-first inputs for the championship hub aggregation.
@@ -54,6 +59,12 @@ func (s *Service) GetChampionshipInputs(year int) (ChampionshipInputs, error) {
 	latestMeetingKey := 0
 
 	for _, meeting := range meetings {
+		// Cancelled meetings (e.g. 2026 Bahrain/Saudi) are not championship
+		// rounds: counting them inflates total/remaining rounds and the
+		// title-math "max points left" bound.
+		if meeting.IsCancelled {
+			continue
+		}
 		sessions, err := s.ListSessionsByMeeting(int(meeting.MeetingKey))
 		if err != nil {
 			return ChampionshipInputs{}, err
@@ -62,6 +73,9 @@ func (s *Service) GetChampionshipInputs(year int) (ChampionshipInputs, error) {
 		raceKey := 0
 		sprintKey := 0
 		for _, sess := range sessions {
+			if sess.IsCancelled {
+				continue
+			}
 			if strings.EqualFold(sess.SessionName, "Race") {
 				raceKey = sess.SessionKey
 			} else if strings.EqualFold(sess.SessionName, "Sprint") {
@@ -97,6 +111,14 @@ func (s *Service) GetChampionshipInputs(year int) (ChampionshipInputs, error) {
 			}
 			for _, entry := range grid {
 				race.Grid = append(race.Grid, gridToModel(entry))
+			}
+			if sprintKey != 0 {
+				race.HasSprint = true
+				sprintResults, err := s.store.ListSessionResults(sprintKey)
+				if err != nil {
+					return ChampionshipInputs{}, err
+				}
+				race.SprintDone = len(sprintResults) > 0
 			}
 			inputs.Races = append(inputs.Races, race)
 			raceResults = race.Results

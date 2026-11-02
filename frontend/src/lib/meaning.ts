@@ -122,11 +122,14 @@ export function pointsGapMeaning(
   gapToAhead: number | null | undefined,
   roundsLeft: number,
   driverAhead?: string | null,
+  maxPointsLeft?: number,
 ): MeaningAnnotation | null {
   if (gapToAhead == null || !Number.isFinite(gapToAhead) || gapToAhead <= 0) return null
   if (!Number.isFinite(roundsLeft) || roundsLeft <= 0) return null
 
-  const maxCatchable = roundsLeft * MAX_POINTS_PER_ROUND
+  // Prefer the sprint-aware ceiling when the caller has it.
+  const maxCatchable =
+    maxPointsLeft != null && Number.isFinite(maxPointsLeft) ? maxPointsLeft : roundsLeft * MAX_POINTS_PER_ROUND
   const ahead = driverAhead?.trim() || 'ahead'
 
   if (gapToAhead > maxCatchable) {

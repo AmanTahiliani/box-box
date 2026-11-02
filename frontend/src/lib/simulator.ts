@@ -127,6 +127,8 @@ export function projectStandings(
   drivers: ReadonlyArray<ChampHubDriver>,
   scenario: Scenario,
   roundsLeft: number,
+  /** Sprint-aware points ceiling; defaults to race wins only. */
+  maxPointsLeft?: number,
 ): ProjectedDriver[] {
   if (drivers.length === 0) return []
 
@@ -134,7 +136,10 @@ export function projectStandings(
   const ordered = championshipOrder(drivers)
   const leader = ordered[0]
   const leaderProjected = leader.points + (extras.get(leader.driver_number) ?? 0)
-  const maxRemaining = MAX_POINTS_PER_ROUND * Math.max(0, roundsLeft)
+  const maxRemaining =
+    maxPointsLeft != null && Number.isFinite(maxPointsLeft)
+      ? Math.max(0, maxPointsLeft)
+      : MAX_POINTS_PER_ROUND * Math.max(0, roundsLeft)
 
   const rows = ordered.map((driver, i) => {
     const simPoints = extras.get(driver.driver_number) ?? 0
