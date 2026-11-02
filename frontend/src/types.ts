@@ -444,6 +444,10 @@ export interface ChampionshipHub {
   round: number
   total_rounds: number
   rounds_left: number
+  /** Sprint sessions still to run (absent on older servers). */
+  sprints_left?: number
+  /** Most points one driver can still score, races + sprints (absent on older servers). */
+  max_points_left?: number
   last_race: string
   round_labels: string[]
   drivers: ChampHubDriver[]

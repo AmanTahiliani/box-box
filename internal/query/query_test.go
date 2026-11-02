@@ -428,3 +428,64 @@ func TestGetChampionshipInputsIncludesSprintPoints(t *testing.T) {
 		t.Fatalf("Teams = %+v, want Red Bull 33", inputs.Teams)
 	}
 }
+
+func TestGetChampionshipInputsSkipsCancelledAndFlagsPendingSprint(t *testing.T) {
+	svc := openTestService(t)
+	seedRaceHubData(t, svc.store)
+
+	upsert := func(m store.Meeting, sessions ...store.Session) {
+		t.Helper()
+		if err := svc.store.UpsertMeeting(m); err != nil {
+			t.Fatalf("UpsertMeeting() error = %v", err)
+		}
+		for _, s := range sessions {
+			if err := svc.store.UpsertSession(s); err != nil {
+				t.Fatalf("UpsertSession() error = %v", err)
+			}
+		}
+	}
+	upsert(store.Meeting{MeetingKey: 1230, MeetingName: "Cancelled GP", Year: 2025, DateStart: "2025-06-01T00:00:00+00:00", IsCancelled: true},
+		store.Session{SessionKey: 9480, MeetingKey: 1230, SessionName: "Race", SessionType: "Race", DateStart: "2025-06-01T13:00:00+00:00", IsCancelled: true})
+	upsert(store.Meeting{MeetingKey: 1231, MeetingName: "Sprint GP", Year: 2025, DateStart: "2025-07-01T00:00:00+00:00"},
+		store.Session{SessionKey: 9490, MeetingKey: 1231, SessionName: "Sprint", SessionType: "Race", DateStart: "2025-07-02T13:00:00+00:00"},
+		store.Session{SessionKey: 9491, MeetingKey: 1231, SessionName: "Race", SessionType: "Race", DateStart: "2025-07-03T13:00:00+00:00"})
+
+	inputs, err := svc.GetChampionshipInputs(2025)
+	if err != nil {
+		t.Fatalf("GetChampionshipInputs() error = %v", err)
+	}
+	if len(inputs.Races) != 2 {
+		t.Fatalf("Races = %d, want 2 (cancelled meeting skipped)", len(inputs.Races))
+	}
+	for _, r := range inputs.Races {
+		if r.Meeting.IsCancelled {
+			t.Fatalf("cancelled meeting %q counted as a round", r.Meeting.MeetingName)
+		}
+	}
+	if sprint := inputs.Races[1]; !sprint.HasSprint || sprint.SprintDone {
+		t.Fatalf("sprint round = HasSprint %v SprintDone %v, want true/false", sprint.HasSprint, sprint.SprintDone)
+	}
+}
+
+func TestDerivedDriverStandingsBreaksTiesOnCountback(t *testing.T) {
+	// VER #1 and ANT #12 level on points; ANT has more wins, so ANT leads
+	// despite the higher driver number.
+	points := map[int]float64{1: 400, 12: 400, 44: 300}
+	finishes := map[int]map[int]int{
+		1:  {1: 5, 2: 10},
+		12: {1: 6, 2: 2},
+		44: {1: 1},
+	}
+	got := derivedDriverStandings(points, finishes, 0, 0)
+	if got[0].DriverNumber != 12 || got[1].DriverNumber != 1 || got[2].DriverNumber != 44 {
+		t.Fatalf("order = %d,%d,%d, want 12,1,44", got[0].DriverNumber, got[1].DriverNumber, got[2].DriverNumber)
+	}
+	if got[0].PositionCurrent != 1 || got[1].PositionCurrent != 2 {
+		t.Fatalf("positions = %d,%d, want 1,2", got[0].PositionCurrent, got[1].PositionCurrent)
+	}
+	// Equal on wins: decided by P2 count.
+	got = derivedDriverStandings(map[int]float64{1: 50, 12: 50}, map[int]map[int]int{1: {1: 1, 2: 2}, 12: {1: 1, 2: 1}}, 0, 0)
+	if got[0].DriverNumber != 1 {
+		t.Fatalf("P2 countback leader = %d, want 1", got[0].DriverNumber)
+	}
+}

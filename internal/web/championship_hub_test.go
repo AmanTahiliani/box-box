@@ -406,3 +406,75 @@ func TestChampHubCache(t *testing.T) {
 		t.Error("incomplete entry should expire after champHubIncompleteTTL")
 	}
 }
+
+func TestFetchSeasonRacesSkipsCancelledMeetings(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/meetings":
+			_, _ = w.Write([]byte(`[{"meeting_key":1,"meeting_name":"Run GP","date_start":"2026-03-01"},{"meeting_key":2,"meeting_name":"Cancelled GP","date_start":"2026-04-01","is_cancelled":true},{"meeting_key":3,"meeting_name":"Sprint GP","date_start":"2026-05-01"}]`))
+		case "/v1/sessions":
+			switch r.URL.Query().Get("meeting_key") {
+			case "2":
+				_, _ = w.Write([]byte(`[{"session_key":20,"meeting_key":2,"session_name":"Race","is_cancelled":true}]`))
+			case "3":
+				_, _ = w.Write([]byte(`[{"session_key":30,"meeting_key":3,"session_name":"Sprint"},{"session_key":31,"meeting_key":3,"session_name":"Race"}]`))
+			default:
+				_, _ = w.Write([]byte(`[{"session_key":10,"meeting_key":1,"session_name":"Race"}]`))
+			}
+		case "/v1/session_result":
+			if r.URL.Query().Get("session_key") == "10" {
+				_, _ = w.Write([]byte(`[{"driver_number":1,"position":1,"points":25}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[]`))
+		case "/v1/starting_grid":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+	client := api.NewOpenF1Client(upstream.URL, 2*time.Second)
+	defer client.Close()
+
+	races, _, err := fetchSeasonRaces(client.Scoped(), 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(races) != 2 {
+		t.Fatalf("races = %d, want 2 (cancelled meeting must be skipped)", len(races))
+	}
+	for _, mr := range races {
+		if mr.Meeting.MeetingName == "Cancelled GP" {
+			t.Fatal("cancelled meeting was counted as a round")
+		}
+	}
+	if !races[1].HasSprint || races[1].SprintDone {
+		t.Fatalf("sprint meeting = HasSprint %v SprintDone %v, want true/false", races[1].HasSprint, races[1].SprintDone)
+	}
+}
+
+func TestAggregateChampionshipHubMaxPointsLeftIncludesSprints(t *testing.T) {
+	champ := []models.ChampionshipDriver{
+		{DriverNumber: 12, PointsCurrent: 380, PositionCurrent: 1},
+		{DriverNumber: 1, PointsCurrent: 261, PositionCurrent: 2},
+	}
+	done := []models.SessionResult{raceResult(12, 1, 25), raceResult(1, 2, 18)}
+	races := []meetingRace{
+		{Meeting: models.Meeting{MeetingName: "Done GP"}, Results: done, HasSprint: true, SprintDone: true},
+		{Meeting: models.Meeting{MeetingName: "Sprint Done Race Pending GP"}, HasSprint: true, SprintDone: true},
+		{Meeting: models.Meeting{MeetingName: "Sprint GP"}, HasSprint: true},
+		{Meeting: models.Meeting{MeetingName: "Plain GP"}},
+	}
+
+	resp := aggregateChampionshipHub(2026, races, champ, nil, map[int]models.Driver{})
+	if resp.TotalRounds != 4 || resp.RoundsLeft != 3 {
+		t.Fatalf("rounds = %d/%d left, want 4 total / 3 left", resp.TotalRounds, resp.RoundsLeft)
+	}
+	if resp.SprintsLeft != 1 {
+		t.Errorf("sprints left = %d, want 1", resp.SprintsLeft)
+	}
+	if resp.MaxPointsLeft != 3*25+8 {
+		t.Errorf("max points left = %v, want %d", resp.MaxPointsLeft, 3*25+8)
+	}
+}
