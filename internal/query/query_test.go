@@ -466,3 +466,26 @@ func TestGetChampionshipInputsSkipsCancelledAndFlagsPendingSprint(t *testing.T) 
 		t.Fatalf("sprint round = HasSprint %v SprintDone %v, want true/false", sprint.HasSprint, sprint.SprintDone)
 	}
 }
+
+func TestDerivedDriverStandingsBreaksTiesOnCountback(t *testing.T) {
+	// VER #1 and ANT #12 level on points; ANT has more wins, so ANT leads
+	// despite the higher driver number.
+	points := map[int]float64{1: 400, 12: 400, 44: 300}
+	finishes := map[int]map[int]int{
+		1:  {1: 5, 2: 10},
+		12: {1: 6, 2: 2},
+		44: {1: 1},
+	}
+	got := derivedDriverStandings(points, finishes, 0, 0)
+	if got[0].DriverNumber != 12 || got[1].DriverNumber != 1 || got[2].DriverNumber != 44 {
+		t.Fatalf("order = %d,%d,%d, want 12,1,44", got[0].DriverNumber, got[1].DriverNumber, got[2].DriverNumber)
+	}
+	if got[0].PositionCurrent != 1 || got[1].PositionCurrent != 2 {
+		t.Fatalf("positions = %d,%d, want 1,2", got[0].PositionCurrent, got[1].PositionCurrent)
+	}
+	// Equal on wins: decided by P2 count.
+	got = derivedDriverStandings(map[int]float64{1: 50, 12: 50}, map[int]map[int]int{1: {1: 1, 2: 2}, 12: {1: 1, 2: 1}}, 0, 0)
+	if got[0].DriverNumber != 1 {
+		t.Fatalf("P2 countback leader = %d, want 1", got[0].DriverNumber)
+	}
+}

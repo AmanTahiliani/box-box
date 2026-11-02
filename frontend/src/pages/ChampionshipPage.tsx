@@ -132,7 +132,7 @@ function ChampionshipBody({ hub, view, setView }: BodyProps) {
   const { drivers, teams } = hub
   const leader = drivers[0]
   const remaining = maxPointsLeft(hub)
-  const champion = decidedChampion(drivers, remaining)
+  const champion = decidedChampion(drivers, remaining, hub.rounds_left)
   const sprintsLeft = hub.sprints_left ?? 0
 
   const enriched = useMemo<EnrichedDriver[]>(

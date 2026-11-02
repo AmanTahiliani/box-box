@@ -54,6 +54,8 @@ func (s *Service) GetChampionshipInputs(year int) (ChampionshipInputs, error) {
 	}
 
 	pointsByDriver := map[int]float64{}
+	// Grand Prix finishing-position counts per driver, for countback.
+	finishesByDriver := map[int]map[int]int{}
 	pointsByTeam := map[string]float64{}
 	latestSessionKey := 0
 	latestMeetingKey := 0
@@ -135,6 +137,12 @@ func (s *Service) GetChampionshipInputs(year int) (ChampionshipInputs, error) {
 				}
 				for _, result := range results {
 					pointsByDriver[result.DriverNumber] += result.Points
+					if result.Position > 0 {
+						if finishesByDriver[result.DriverNumber] == nil {
+							finishesByDriver[result.DriverNumber] = map[int]int{}
+						}
+						finishesByDriver[result.DriverNumber][result.Position]++
+					}
 					team := inputs.DriverMap[result.DriverNumber].TeamName
 					if team != "" {
 						pointsByTeam[team] += result.Points
@@ -179,7 +187,7 @@ func (s *Service) GetChampionshipInputs(year int) (ChampionshipInputs, error) {
 		_ = raceGrid
 	}
 
-	inputs.Champ = derivedDriverStandings(pointsByDriver, latestMeetingKey, latestSessionKey)
+	inputs.Champ = derivedDriverStandings(pointsByDriver, finishesByDriver, latestMeetingKey, latestSessionKey)
 	inputs.Teams = derivedTeamStandings(pointsByTeam, latestMeetingKey, latestSessionKey)
 	return inputs, nil
 }
@@ -204,7 +212,10 @@ func (s *Service) driversForSession(sessionKey int) ([]models.Driver, error) {
 	return drivers, nil
 }
 
-func derivedDriverStandings(points map[int]float64, meetingKey, sessionKey int) []models.ChampionshipDriver {
+// derivedDriverStandings orders drivers by points, breaking ties with the
+// FIA countback (most Grand Prix wins, then most P2s, and so on), then by
+// driver number for a stable order when countback cannot separate them.
+func derivedDriverStandings(points map[int]float64, finishes map[int]map[int]int, meetingKey, sessionKey int) []models.ChampionshipDriver {
 	drivers := make([]models.ChampionshipDriver, 0, len(points))
 	for num, pts := range points {
 		drivers = append(drivers, models.ChampionshipDriver{
@@ -216,6 +227,9 @@ func derivedDriverStandings(points map[int]float64, meetingKey, sessionKey int) 
 	}
 	sort.Slice(drivers, func(i, j int) bool {
 		if drivers[i].PointsCurrent == drivers[j].PointsCurrent {
+			if c := countbackCompare(finishes[drivers[i].DriverNumber], finishes[drivers[j].DriverNumber]); c != 0 {
+				return c > 0
+			}
 			return drivers[i].DriverNumber < drivers[j].DriverNumber
 		}
 		return drivers[i].PointsCurrent > drivers[j].PointsCurrent
@@ -224,6 +238,24 @@ func derivedDriverStandings(points map[int]float64, meetingKey, sessionKey int) 
 		drivers[i].PositionCurrent = i + 1
 	}
 	return drivers
+}
+
+// countbackCompare returns >0 if a beats b on countback, <0 if b beats a and
+// 0 if their finishing records are identical.
+func countbackCompare(a, b map[int]int) int {
+	maxPos := 0
+	for p := range a {
+		maxPos = max(maxPos, p)
+	}
+	for p := range b {
+		maxPos = max(maxPos, p)
+	}
+	for p := 1; p <= maxPos; p++ {
+		if a[p] != b[p] {
+			return a[p] - b[p]
+		}
+	}
+	return 0
 }
 
 func derivedTeamStandings(points map[string]float64, meetingKey, sessionKey int) []models.ChampionshipTeam {
